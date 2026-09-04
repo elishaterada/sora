@@ -4,6 +4,7 @@ import Foundation
 @MainActor
 final class AskSession: ObservableObject {
     @Published var draft = ""
+    @Published private(set) var webpage: WebpageAttachment?
     @Published private(set) var selectedProvider: AIBackendID
     @Published var model: String {
         didSet { defaults.set(model, forKey: "ai.model.\(selectedProvider.rawValue)") }
@@ -25,6 +26,7 @@ final class AskSession: ObservableObject {
     private var credentials: any AICredentialStore { backends[selectedProvider]!.credentials }
     private var conversations: any AIConversationStore { backends[selectedProvider]!.conversations }
     private var drafts: [AIBackendID: String] = [:]
+    private var webpages: [AIBackendID: WebpageAttachment] = [:]
     private let defaults: UserDefaults
     private var task: Task<Void, Never>?
     private var generation: UUID?
@@ -53,11 +55,13 @@ final class AskSession: ObservableObject {
         guard id != selectedProvider, backends[id] != nil else { return }
         stop()
         drafts[selectedProvider] = draft
+        webpages[selectedProvider] = webpage
         selectedProvider = id
         defaults.set(id.rawValue, forKey: "ai.provider")
         model = defaults.string(forKey: "ai.model.\(id.rawValue)")
             ?? (id == .openai ? defaults.string(forKey: "ai.model") : nil) ?? id.defaultModel
         draft = drafts[id] ?? ""
+        webpage = webpages[id]
         messages = []
         loaded = false
         loadFailed = false
@@ -95,6 +99,11 @@ final class AskSession: ObservableObject {
         }
     }
 
+    func attachWebpage(_ page: WebpageAttachment?) {
+        guard !isSending else { return }
+        webpage = page
+    }
+
     func removeKey() {
         guard selectedProvider.needsKey else { return }
         stop()
@@ -127,14 +136,18 @@ final class AskSession: ObservableObject {
                 guard index > 0, messages[index - 1].role == .user else { continue }
                 context.append(contentsOf: [messages[index - 1], messages[index]])
             }
-            let user = AIMessage(role: .user, text: question)
+            let user = AIMessage(role: .user, text: question, webpage: webpage)
             context.append(user)
-            guard context.reduce(0, { $0 + $1.text.utf8.count }) <= 100_000 else { throw AIError.contextTooLarge }
+            guard try context.reduce(0, { $0 + (try $1.contentForProvider()).utf8.count }) <= 100_000 else {
+                throw AIError.contextTooLarge
+            }
             let response = AIMessage(role: .assistant, text: "", status: .streaming)
             let updated = messages + [user, response]
             try conversations.save(updated)
             messages = updated
             draft = ""
+            webpage = nil
+            webpages[selectedProvider] = nil
             errorMessage = nil
             isSending = true
             let token = UUID()
@@ -186,6 +199,8 @@ final class AskSession: ObservableObject {
         do {
             try conversations.save([])
             messages = []
+            webpage = nil
+            webpages[selectedProvider] = nil
             loadFailed = false
             loaded = true
             errorMessage = nil

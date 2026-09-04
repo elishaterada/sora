@@ -200,7 +200,11 @@ final class AskSessionTests: XCTestCase {
         first.emit(.text("partial"))
         await waitFor { session.messages.last?.text == "partial" }
         session.draft = "OpenAI draft"
+        let page = WebpageAttachment(url: URL(string: "https://example.com")!, title: "Example", text: "Private page snapshot", fetchedAt: Date(), isExcerpt: false)
+        session.stop()
+        session.attachWebpage(page)
         session.selectProvider(.anthropic)
+        XCTAssertNil(session.webpage)
         XCTAssertFalse(session.isSending)
         XCTAssertEqual(firstStore.messages.last?.status, .stopped)
         XCTAssertTrue(session.messages.isEmpty)
@@ -217,6 +221,7 @@ final class AskSessionTests: XCTestCase {
         first.finish()
         session.selectProvider(.openai)
         XCTAssertEqual(session.draft, "OpenAI draft")
+        XCTAssertEqual(session.webpage, page)
         XCTAssertEqual(session.model, "openai-model")
         XCTAssertEqual(session.messages.last?.text, "partial")
     }
@@ -240,8 +245,13 @@ final class AskSessionTests: XCTestCase {
         let session = makeSession(provider, store: store)
         session.enabled = true
         session.draft = "Explain pwd"
+        let page = WebpageAttachment(url: URL(string: "https://example.com")!, title: "Example", text: "Reference text", fetchedAt: Date(), isExcerpt: false)
+        session.attachWebpage(page)
+        XCTAssertTrue(provider.requests.isEmpty)
         session.send()
         await waitFor { provider.requests.count == 1 }
+        XCTAssertNil(session.webpage)
+        XCTAssertEqual(provider.requests.first?.messages.first?.webpage, page)
         provider.emit(.text("Prints "))
         provider.emit(.text("the directory."))
         provider.emit(.completed)
@@ -249,10 +259,12 @@ final class AskSessionTests: XCTestCase {
         await waitFor { !session.isSending }
         XCTAssertEqual(session.messages.last?.text, "Prints the directory.")
         XCTAssertEqual(store.messages.last?.status, .complete)
+        XCTAssertEqual(store.messages.first?.webpage, page)
         session.draft = "And ls?"
         session.send()
         await waitFor { provider.requests.count == 2 }
         XCTAssertEqual(provider.requests.last?.messages.map(\.text), ["Explain pwd", "Prints the directory.", "And ls?"])
+        XCTAssertEqual(provider.requests.last?.messages.first?.webpage, page)
         session.stop()
     }
 
@@ -299,10 +311,26 @@ final class AskSessionTests: XCTestCase {
         let session = makeSession(provider, store: store)
         session.enabled = true
         session.draft = "keep this"
+        let page = WebpageAttachment(url: URL(string: "https://example.com")!, title: "Example", text: "Reference text", fetchedAt: Date(), isExcerpt: false)
+        session.attachWebpage(page)
         session.send()
         XCTAssertTrue(provider.requests.isEmpty)
         XCTAssertEqual(session.draft, "keep this")
+        XCTAssertEqual(session.webpage, page)
         XCTAssertNotNil(session.errorMessage)
+    }
+
+    func testAttachmentCountsTowardContextLimit() {
+        let provider = ControlledProvider()
+        let session = makeSession(provider)
+        session.enabled = true
+        session.draft = "Summarize"
+        let page = WebpageAttachment(url: URL(string: "https://example.com")!, title: "Large", text: String(repeating: "a", count: 100_000), fetchedAt: Date(), isExcerpt: false)
+        session.attachWebpage(page)
+        session.send()
+        XCTAssertEqual(session.errorMessage, AIError.contextTooLarge.localizedDescription)
+        XCTAssertTrue(provider.requests.isEmpty)
+        XCTAssertEqual(session.webpage, page)
     }
 
     private func waitFor(_ condition: () -> Bool, file: StaticString = #filePath, line: UInt = #line) async {

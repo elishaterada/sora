@@ -44,7 +44,7 @@ struct CodexProvider: AIProvider {
     }
 
     static func prompt(_ request: AIRequest) throws -> String {
-        let messages = request.messages.map { ["role": $0.role.rawValue, "content": $0.text] }
+        let messages = try request.messages.map { ["role": $0.role.rawValue, "content": try $0.contentForProvider()] }
         return String(decoding: try JSONSerialization.data(withJSONObject: messages), as: UTF8.self)
     }
 

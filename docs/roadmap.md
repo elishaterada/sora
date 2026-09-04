@@ -103,6 +103,11 @@ are in the tree. Only explicit Ask messages are sent. Tool registry, tool permis
 autonomous execution remain deferred; Phase 6 as a whole is not complete.
 See [`ai-ask.md`](ai-ask.md).
 
+**Context slice (2026-09-04):** users can fetch and review a bounded static text
+snapshot from a public HTTPS HTML/text page, attach it to one Ask message, and
+inspect the saved source and text in conversation history. Pages are never
+rendered or executed. Terminal output attachment remains future work.
+
 ## Phase 7: agent mode and provider expansion
 
 - multi-step agent loop

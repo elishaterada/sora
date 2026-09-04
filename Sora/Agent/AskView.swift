@@ -6,6 +6,7 @@ struct AskView: View {
     @StateObject private var codexLogin = CodexLogin()
     @State private var showingSetup = false
     @State private var keyDraft = ""
+    @State private var showingWebpage = false
     @FocusState private var composerFocused: Bool
 
     var body: some View {
@@ -73,6 +74,18 @@ struct AskView: View {
             }
             Divider()
             VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Button(session.webpage == nil ? "Attach webpage" : "Review webpage", systemImage: "link") {
+                        showingWebpage = true
+                    }
+                    .disabled(session.isSending)
+                    if let page = session.webpage {
+                        Text(page.url.host ?? page.title).font(.caption).lineLimit(1)
+                        Spacer()
+                        Button("Remove", systemImage: "xmark") { session.attachWebpage(nil) }
+                            .disabled(session.isSending)
+                    }
+                }
                 TextField("Ask about a command or paste an error…", text: $session.draft, axis: .vertical)
                     .lineLimit(2...6)
                     .textFieldStyle(.plain)
@@ -95,6 +108,11 @@ struct AskView: View {
         }
         .frame(minWidth: 540, minHeight: 560)
         .preferredColorScheme(.dark)
+        .sheet(isPresented: $showingWebpage) {
+            WebpageAttachmentView(page: session.webpage, providerName: session.selectedProvider.name) {
+                session.attachWebpage($0)
+            }
+        }
         .onAppear {
             session.load()
             if !session.enabled { showingSetup = true }
@@ -103,8 +121,12 @@ struct AskView: View {
             keyDraft = ""
             codexLogin.cancel()
             showingSetup = true
+            showingWebpage = false
         }
-        .onDisappear { session.stop(); codexLogin.cancel(); keyDraft = "" }
+        .onChange(of: session.enabled) { enabled in
+            if !enabled { showingWebpage = false }
+        }
+        .onDisappear { session.stop(); codexLogin.cancel(); keyDraft = ""; showingWebpage = false }
     }
 
     private var setup: some View {
@@ -164,6 +186,15 @@ struct AskView: View {
             } else {
                 Text(message.text).textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            if let page = message.webpage {
+                DisclosureGroup("Webpage: \(page.title)") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(page.url.absoluteString).font(.caption).textSelection(.enabled)
+                        if page.isExcerpt { Text("Excerpt from page").font(.caption).foregroundStyle(.secondary) }
+                        Text(page.text).font(.callout).textSelection(.enabled)
+                    }
+                }
             }
             if message.status == .stopped || message.status == .failed {
                 Text(message.status == .stopped ? "Stopped — partial answer" : "Answer incomplete")
