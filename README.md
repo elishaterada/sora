@@ -75,4 +75,4 @@ Open **Window → Command History** after running a command to confirm structure
 
 ## Current status
 
-Phase 5 next-command prediction is in the tree. Session chrome uses a native split view, 18pt type, and Ghostty macOS glass. AI is not implemented.
+Phase 5 next-command prediction is in the tree. Session chrome uses a native split view, 18pt type, and Ghostty macOS glass. The first optional AI Ask slice is implemented. Open **AI → Ask Sora** (Cmd+Shift+A), enable AI in Setup, save an OpenAI API key to Keychain, and choose a model ID. Cmd+Return sends; Stop cancels. Only the Ask conversation is sent, and generated commands are never executed. See [`docs/ai-ask.md`](docs/ai-ask.md).

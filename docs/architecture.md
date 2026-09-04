@@ -44,7 +44,7 @@ Sora/
 
 Only create directories required by the current phase. Phase 5 creates
 `Application/`, `Terminal/`, `Workspace/`, `Commands/`, `Storage/`,
-`Completion/`, and `Intelligence/`.
+`Completion/`, and `Intelligence/`. The first Phase 6 slice adds `Agent/` and `Providers/`.
 
 ## Responsibilities
 
@@ -93,6 +93,15 @@ The host does not implement VT parsing, glyph rendering, or PTY spawn.
 - next-command prediction on an empty prompt after a successful command, shown as accent `→` text in the sticky prompt footer under the grid (not as an overlay on scrollback). Esc or Up/Down/Left dismisses it until the next successful command. Prefix ghost text stays on-grid only while the live prompt is visible; scrolling away hides the overlay and mirrors the line in the footer.
 
 ### Agent, Providers, and Tools
+
+The first Phase 6 slice uses `AskSession` for main-actor conversation state and
+request cancellation, `AIProvider`/`AIRequest`/`AIEvent` for provider-neutral text
+streaming, and `OpenAIProvider` for URLSession transport and Responses event
+translation. `AskView` is a native SwiftUI window opened from AI → Ask Sora.
+Storage is injected; credentials use Keychain, and the current conversation is
+saved locally. No tool interface is exposed in this slice. See [AI Ask](ai-ask.md).
+
+The remaining target responsibilities are:
 
 - application-owned agent loop
 - provider-neutral request and event model

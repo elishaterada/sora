@@ -3,6 +3,11 @@ import SwiftUI
 @main
 struct SoraApp: App {
     @StateObject private var runtime: GhosttyRuntime
+    @StateObject private var ask = AskSession(
+        provider: OpenAIProvider(),
+        credentials: KeychainAICredentialStore(),
+        conversations: FileAIConversationStore()
+    )
 
     init() {
         do {
@@ -28,15 +33,16 @@ struct SoraApp: App {
             WorkspaceCommands()
             SidebarCommands()
             HistoryCommands()
-            CommandGroup(replacing: .pasteboard) {
-                Button("Copy") { runtime.copyFromActiveSurface() }
-                    .keyboardShortcut("c", modifiers: .command)
-                Button("Paste") { runtime.pasteIntoActiveSurface() }
-                    .keyboardShortcut("v", modifiers: .command)
-                Button("Select All") { runtime.selectAllOnActiveSurface() }
-                    .keyboardShortcut("a", modifiers: .command)
-            }
+            AskCommands()
+            // Standard Edit commands follow the first responder, including
+            // SecureField and the Ask composer. GhosttySurfaceView implements
+            // the same copy/paste/selectAll actions for terminal focus.
         }
+
+        Window("Ask Sora", id: "ask-sora") {
+            AskView(session: ask)
+        }
+        .defaultSize(width: 640, height: 720)
 
         Window("History", id: "command-history") {
             CommandHistoryView(store: runtime.history)
@@ -53,6 +59,17 @@ private struct HistoryCommands: Commands {
             Button("Command History") {
                 openWindow(id: "command-history")
             }
+        }
+    }
+}
+
+private struct AskCommands: Commands {
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some Commands {
+        CommandMenu("AI") {
+            Button("Ask Sora") { openWindow(id: "ask-sora") }
+                .keyboardShortcut("a", modifiers: [.command, .shift])
         }
     }
 }
