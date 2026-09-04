@@ -1,4 +1,5 @@
 import AppKit
+import CoreText
 
 enum GhosttyInput {
     /// Matches `GHOSTTY_MODS_*` in ghostty.h. `command` is `GHOSTTY_MODS_SUPER`.
@@ -46,21 +47,27 @@ enum GhosttyInput {
         NSPoint(x: viewPoint.x, y: viewHeight - viewPoint.y)
     }
 
-    /// `ghostty_surface_ime_point` is top-left origin. `x` is the caret's
-    /// leading edge (bar cursor), `y` is the cell bottom. AppKit overlays
-    /// use bottom-left origin.
+    /// `ghostty_surface_ime_point` is top-left origin. `x` is the cursor
+    /// cell midpoint; `y` is the cell bottom. Ghost text starts at the
+    /// cell's leading edge. AppKit overlays use bottom-left origin.
     static func ghostTextOrigin(
         imeX: CGFloat,
         imeY: CGFloat,
-        viewHeight: CGFloat
+        viewHeight: CGFloat,
+        cellWidth: CGFloat
     ) -> NSPoint {
-        NSPoint(x: imeX, y: viewHeight - imeY)
+        NSPoint(x: imeX - cellWidth / 2, y: viewHeight - imeY)
     }
 
-    /// Baseline inside an unflipped cell, matching Ghostty's vertically
-    /// centered glyphs when `adjust-cell-height` adds extra leading.
-    static func ghostTextBaseline(cellHeight: CGFloat, font: NSFont) -> CGFloat {
-        let extra = cellHeight - font.ascender + font.descender
-        return -font.descender + extra / 2
+    /// Baseline from the bottom of an unflipped cell. Matches Ghostty's
+    /// `cell_baseline`: face baseline plus half of any `adjust-cell-height`
+    /// growth so glyphs stay vertically centered in the taller cell.
+    static func ghostTextBaseline(cellHeight: CGFloat, font: CTFont) -> CGFloat {
+        let ascent = CTFontGetAscent(font)
+        let descent = CTFontGetDescent(font)
+        let leading = CTFontGetLeading(font)
+        let faceHeight = ascent + descent + leading
+        let faceBaseline = descent + leading / 2
+        return faceBaseline + (cellHeight - faceHeight) / 2
     }
 }

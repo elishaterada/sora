@@ -1,4 +1,5 @@
 import AppKit
+import CoreText
 import XCTest
 
 final class GhosttyInputTests: XCTestCase {
@@ -30,22 +31,28 @@ final class GhosttyInputTests: XCTestCase {
     }
 
     func testGhostTextOriginConvertsIMETopLeftToAppKit() {
+        // ime_point x is the cell midpoint; ghost text starts at the leading edge.
         let origin = GhosttyInput.ghostTextOrigin(
             imeX: 20,
             imeY: 40,
-            viewHeight: 500
+            viewHeight: 500,
+            cellWidth: 8
         )
-        XCTAssertEqual(origin.x, 20)
+        XCTAssertEqual(origin.x, 16)
         XCTAssertEqual(origin.y, 460)
     }
 
-    func testGhostTextBaselineCentersFontInCell() {
-        let font = NSFont.monospacedSystemFont(ofSize: 18, weight: .regular)
-        let cellHeight: CGFloat = 24
+    func testGhostTextBaselineCentersFaceInCell() {
+        let font = CTFontCreateWithName("SFMono-Regular" as CFString, 18, nil)
+        let ascent = CTFontGetAscent(font)
+        let descent = CTFontGetDescent(font)
+        let leading = CTFontGetLeading(font)
+        let faceHeight = ascent + descent + leading
+        let cellHeight = faceHeight * 1.12
         let baseline = GhosttyInput.ghostTextBaseline(cellHeight: cellHeight, font: font)
+        let expected = descent + leading / 2 + (cellHeight - faceHeight) / 2
+        XCTAssertEqual(baseline, expected, accuracy: 0.001)
         XCTAssertGreaterThan(baseline, 0)
         XCTAssertLessThan(baseline, cellHeight)
-        let extra = cellHeight - font.ascender + font.descender
-        XCTAssertEqual(baseline, -font.descender + extra / 2)
     }
 }
