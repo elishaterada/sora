@@ -24,6 +24,10 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     private(set) var cellSize = NSSize(width: 8, height: 16)
     private let completion = CompletionSession()
     private let ghostText = GhostTextView()
+    private weak var stickyBar: StickyPromptBar?
+    private var scrollbarTotal: UInt64 = 0
+    private var scrollbarOffset: UInt64 = 0
+    private var scrollbarLen: UInt64 = 0
     private var swallowedKeyCodes: Set<UInt16> = []
 
     override var isOpaque: Bool { false }
@@ -37,6 +41,11 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         // Do not set wantsLayer or install a CAMetalLayer. libghostty assigns the layer.
         ghostText.isHidden = true
         addSubview(ghostText)
+    }
+
+    func attachStickyPromptBar(_ bar: StickyPromptBar) {
+        stickyBar = bar
+        refreshStickyBar()
     }
 
     @available(*, unavailable)
@@ -271,6 +280,16 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
             deltaY,
             GhosttyInput.scrollMods(precision: event.hasPreciseScrollingDeltas)
         )
+        // Scrollbar action arrives async; refresh after the tick so overlays
+        // hide while the live prompt is off-screen.
+        scheduleCompletionRefresh()
+    }
+
+    func applyScrollbar(total: UInt64, offset: UInt64, len: UInt64) {
+        scrollbarTotal = total
+        scrollbarOffset = offset
+        scrollbarLen = len
+        refreshCompletion()
     }
 
     // MARK: - Lifecycle
@@ -361,6 +380,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     func applyWorkingDirectory(_ path: String) {
         let url = URL(fileURLWithPath: path)
         lastWorkingDirectory = url
+        refreshStickyBar()
         delegate?.surface(self, didChangeWorkingDirectory: url)
     }
 
@@ -464,7 +484,20 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
             ?? initialWorkingDirectory
             ?? FileManager.default.homeDirectoryForCurrentUser
         completion.refresh(cwd: cwd, history: runtime.history)
-        guard let suggestion = completion.suggestion, let surface else {
+        refreshStickyBar()
+
+        let atLivePrompt = StickyPromptBarModel.isViewingLivePrompt(
+            total: scrollbarTotal,
+            offset: scrollbarOffset,
+            len: scrollbarLen
+        )
+        guard let suggestion = completion.suggestion, let surface, atLivePrompt else {
+            ghostText.hide()
+            return
+        }
+        // Next-command prediction lives in the sticky footer so scrollback
+        // never paints through it.
+        if suggestion.source == .prediction {
             ghostText.hide()
             return
         }
@@ -500,8 +533,62 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
             cellWidth: cellWidth,
             cellHeight: cellHeight,
             font: font,
-            predicted: suggestion.source == .prediction
+            predicted: false
         )
+    }
+
+    private func refreshStickyBar() {
+        guard let stickyBar else { return }
+        let cwd = lastWorkingDirectory
+            ?? currentWorkingDirectory()
+            ?? initialWorkingDirectory
+        let path = StickyPromptBarModel.displayPath(for: cwd)
+        let branch = cwd.flatMap { GitRepository.branchName(containing: $0) }
+        let atLivePrompt = StickyPromptBarModel.isViewingLivePrompt(
+            total: scrollbarTotal,
+            offset: scrollbarOffset,
+            len: scrollbarLen
+        )
+        let suggestion = completion.suggestion
+        let line: String?
+        let predicted: Bool
+        if let suggestion, suggestion.source == .prediction {
+            line = suggestion.displayText
+            predicted = true
+        } else if !atLivePrompt {
+            let buffer = completion.buffer.text
+            if buffer.isEmpty, suggestion == nil {
+                line = nil
+                predicted = false
+            } else {
+                let suffix = suggestion?.displayText ?? ""
+                line = buffer + suffix
+                predicted = suggestion?.source == .prediction
+            }
+        } else {
+            line = nil
+            predicted = false
+        }
+        stickyBar.update(
+            path: path,
+            branch: branch,
+            line: line,
+            predicted: predicted
+        )
+    }
+
+    func acceptStickyPrediction() {
+        switch completion.handleKeyDown(
+            keyCode: PromptEvent.rightArrow,
+            characters: "",
+            modifiers: []
+        ) {
+        case .accept(let suffix):
+            insertText(suffix)
+            scheduleCompletionRefresh()
+        case .passThrough:
+            break
+        }
     }
 
     private func quicklookFont() -> CTFont? {

@@ -223,6 +223,12 @@ final class GhosttyRuntime: ObservableObject {
                 view?.applyCellSize(backingWidth: size.width, backingHeight: size.height)
             }
             return true
+        case GHOSTTY_ACTION_SCROLLBAR:
+            let bar = action.action.scrollbar
+            DispatchQueue.main.async {
+                view?.applyScrollbar(total: bar.total, offset: bar.offset, len: bar.len)
+            }
+            return true
         case GHOSTTY_ACTION_COMMAND_FINISHED:
             let finished = action.action.command_finished
             DispatchQueue.main.async {

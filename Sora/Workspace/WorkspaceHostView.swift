@@ -15,9 +15,10 @@ struct WorkspaceHostRepresentable: NSViewRepresentable {
     }
 }
 
-/// Hosts Ghostty surfaces. Window frost lives on `ContentView`; this view stays square.
+/// Hosts terminal panes (Ghostty grid + sticky prompt). Window frost lives on
+/// `ContentView`; this view stays square.
 final class WorkspaceHostView: NSView {
-    private var attachedIDs: Set<UUID> = []
+    private var panes: [UUID: TerminalPaneView] = [:]
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -34,30 +35,38 @@ final class WorkspaceHostView: NSView {
     }
 
     func sync(workspace: WorkspaceController) {
-        for id in workspace.closedIDs(relativeTo: attachedIDs) {
-            attachedIDs.remove(id)
+        let liveIDs = Set(workspace.tabs.map(\.id))
+        for id in panes.keys where !liveIDs.contains(id) {
+            panes[id]?.removeFromSuperview()
+            panes[id] = nil
         }
 
         for tab in workspace.tabs {
             let surface = workspace.surface(for: tab.id)
-            if surface.superview !== self {
-                addSubview(surface)
+            let pane: TerminalPaneView
+            if let existing = panes[tab.id] {
+                pane = existing
+            } else {
+                pane = TerminalPaneView(surface: surface)
+                panes[tab.id] = pane
+                addSubview(pane)
             }
-            surface.autoresizingMask = [.width, .height]
-            surface.setActive(tab.id == workspace.selectedID)
-            attachedIDs.insert(tab.id)
+            if pane.superview !== self {
+                addSubview(pane)
+            }
+            pane.setActive(tab.id == workspace.selectedID)
         }
-        layoutSurfaces()
+        layoutPanes()
     }
 
     override func layout() {
         super.layout()
-        layoutSurfaces()
+        layoutPanes()
     }
 
-    private func layoutSurfaces() {
-        for subview in subviews {
-            subview.frame = bounds
+    private func layoutPanes() {
+        for pane in panes.values {
+            pane.frame = bounds
         }
     }
 }
