@@ -177,6 +177,11 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         guard event.type == .keyDown else { return false }
         let chars = event.charactersIgnoringModifiers ?? ""
+        // Let SwiftUI's AI menu handle Ask before terminal key forwarding.
+        if chars.lowercased() == "a",
+           event.modifierFlags.intersection([.command, .shift, .option, .control]) == [.command, .shift] {
+            return false
+        }
         if event.modifierFlags.contains(.command) {
             switch chars {
             case "c":
