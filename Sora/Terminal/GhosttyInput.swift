@@ -48,19 +48,33 @@ enum GhosttyInput {
     }
 
     /// Cell width in the same point space as `ghostty_surface_ime_point`.
-    /// Prefer Ghostty's CELL_SIZE (rescaled into IME-height space) so the
-    /// half-cell IME offset and per-column pitch match the rendered grid.
+    /// Prefer Ghostty's CELL_SIZE when its height already matches the IME
+    /// height. Rescale only when the units differ, and fall back to the font
+    /// advance if rescale looks like a points/pixels mix-up (~2×) — that
+    /// shift hides a leading space under the last typed character.
     static func ghostTextCellWidth(
         imeHeight: CGFloat,
         cellSize: NSSize,
         font: CTFont
     ) -> CGFloat {
+        let advance = monospaceAdvance(font: font)
+        let roundedAdvance = advance > 0 ? advance.rounded() : 0
+
         if imeHeight > 0, cellSize.width > 0, cellSize.height > 0 {
-            return cellSize.width * (imeHeight / cellSize.height)
+            let heightDelta = abs(cellSize.height - imeHeight)
+            if heightDelta <= max(1, imeHeight * 0.15) {
+                return cellSize.width
+            }
+            let rescaled = cellSize.width * (imeHeight / cellSize.height)
+            if roundedAdvance > 0 {
+                let error = abs(rescaled - roundedAdvance) / roundedAdvance
+                if error <= 0.2 { return rescaled }
+                return roundedAdvance
+            }
+            return rescaled
         }
         if cellSize.width > 0 { return cellSize.width }
-        let advance = monospaceAdvance(font: font)
-        return advance > 0 ? advance.rounded() : 8
+        return roundedAdvance > 0 ? roundedAdvance : 8
     }
 
     /// `ghostty_surface_ime_point` is top-left origin. `x` is the cursor
