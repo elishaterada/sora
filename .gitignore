@@ -1,0 +1,41 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Xcode
+xcuserdata/
+*.xcuserstate
+*.xccheckout
+*.xcscmblueprint
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM
+*.dSYM.zip
+DerivedData/
+.derivedData/
+timeline.xctimeline
+playground.xcworkspace
+
+# Swift / SPM
+.build/
+.swiftpm/
+
+# Secrets and local env (never commit)
+.env
+.env.*
+*.pem
+*.p12
+*.mobileprovision
+credentials.json
+
+# Local SQLite copies accidentally dropped in the tree
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+
+# Ghostty clone and GhosttyKit build artifacts.
+# Rebuild with ./Scripts/build-ghosttykit.sh
+Vendor/ghostty/
