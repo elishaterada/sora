@@ -97,7 +97,7 @@ Exit: providers can be swapped without changing tool or permission behavior.
 
 **Status (2026-09-04):** first Ask vertical slice implemented, per explicit user
 request to start AI. Native Ask supports OpenAI API, Codex through its official
-app-server, Anthropic API, and Vercel AI Gateway. Streaming and cancellation,
+app-server, Anthropic API, Vercel AI Gateway, and Grok (xAI). Streaming and cancellation,
 Keychain credentials, Codex ChatGPT sign-in, and isolated local conversations
 are in the tree. Only explicit Ask messages are sent. Tool registry, tool permissions, and
 autonomous execution remain deferred; Phase 6 as a whole is not complete.

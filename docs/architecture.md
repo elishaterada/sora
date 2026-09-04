@@ -96,9 +96,9 @@ The host does not implement VT parsing, glyph rendering, or PTY spawn.
 
 The first Phase 6 slice uses `AskSession` for main-actor conversation state and
 request cancellation, `AIProvider`/`AIRequest`/`AIEvent` for provider-neutral text
-streaming, and `AIBackend` for the four available providers. `HTTPAIProvider`
+streaming, and `AIBackend` for the five available providers. `HTTPAIProvider`
 shares URLSession transport across OpenAI Responses, Anthropic Messages, and
-Vercel Chat Completions; adapters translate their distinct event schemas.
+Vercel and xAI Chat Completions; adapters translate their distinct event schemas.
 `CodexProvider` uses `CodexConnection` to run the installed official app-server
 over stdio with an ephemeral, text-only thread. `CodexLogin` owns sign-in setup.
 `AskView` is a native SwiftUI window opened from AI → Ask Sora. Storage is

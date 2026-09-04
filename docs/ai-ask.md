@@ -1,7 +1,7 @@
 # Native Ask: optional AI providers
 
 Authorized on 2026-09-04 by the user's requests to implement AI with OpenAI API,
-Codex, Anthropic API, and Vercel AI Gateway. This supersedes the earlier no-AI
+Codex, Anthropic API, Vercel AI Gateway, and Grok (xAI). This supersedes the earlier no-AI
 scope restriction for this slice. Accounts, sync, a hosted backend, and
 an autonomous command runner remain deferred.
 
@@ -16,6 +16,7 @@ open Setup, enable AI, and configure credentials and a model:
 | Codex | Installed Codex CLI/app, ChatGPT sign-in | Account default (blank model field) |
 | Anthropic API | Anthropic API key | `claude-sonnet-4-6` |
 | Vercel AI Gateway | Vercel AI Gateway key | `openai/gpt-5.4` |
+| Grok (xAI) | xAI API key | `grok-4.6` |
 
 Model IDs are editable; Gateway uses `provider/model` IDs. API keys are saved
 from secure fields to Keychain. **Cmd+Return** sends a question. **Stop**,
@@ -65,13 +66,13 @@ without waiting for a full pipe buffer. Stderr and raw RPC errors are not logged
 - `Providers/CodexConnection.swift`, `CodexProvider.swift`, and `CodexLogin.swift`:
   local process transport, ephemeral Ask requests, and explicit browser sign-in.
 - `Storage/AICredentialStore.swift`: non-synchronizing generic-password Keychain
-  service `dev.sora.app.ai`, accounts `openai`, `anthropic`, and `gateway`.
+  service `dev.sora.app.ai`, accounts `openai`, `anthropic`, `gateway`, and `grok`.
   Codex manages its own Keychain credentials. Saving updates an existing item;
   removing a key cancels any request. No secrets in UserDefaults, JSON, SQLite,
   or source control.
 - `Storage/AIConversationStore.swift`: one conversation per provider under
   `~/Library/Application Support/Sora/`. OpenAI preserves `ask.json`; others use
-  `ask-codex.json`, `ask-anthropic.json`, and `ask-gateway.json`. Writes are
+  `ask-codex.json`, `ask-anthropic.json`, `ask-gateway.json`, and `ask-grok.json`. Writes are
   atomic with 0600 permissions. These are local plaintext files. Clear
   Conversation empties the selected provider's conversation. Interrupted
   streaming messages load as stopped. Corrupt files produce a visible error
@@ -90,7 +91,7 @@ and stopped turns remain visible but are excluded from later provider context.
 
 ## Verification and remaining work
 
-81 tests pass, including provider isolation, keys/models/drafts, disabled and
+83 tests pass, including provider isolation, keys/models/drafts, disabled and
 missing-key behavior, streaming completion and cancellation, stale events,
 partial-turn exclusion, persistence errors, request serialization, Unicode SSE,
 HTTP auth/rate errors, truncation, and Codex RPC pipe handling and configuration.
@@ -107,7 +108,14 @@ no Keychain sign-in.
 The UI displays selectable plain text, including Markdown source. There is one
 conversation per provider and no transcript browser. Explicit context attachments,
 command cards, tools, permissions, and agent loops are future slices.
-No external dependency was added.
+Grok connects directly to `https://api.x.ai/v1/chat/completions` using Bearer
+authentication. This supported legacy endpoint reuses the existing stateless
+Chat Completions transport for this text-only slice. xAI recommends Responses
+for newer capabilities; adopting those is separate work. The Grok timeout is
+3,600 seconds to allow reasoning before the first token; Stop remains available.
+Grok streaming, Unicode, authentication/rate failures, and truncated responses
+are verified with local HTTP fixtures. A live Grok response still needs an xAI
+key. No external dependency was added.
 
 ## Official references
 
@@ -119,3 +127,6 @@ No external dependency was added.
 - [Anthropic streaming](https://platform.claude.com/docs/en/build-with-claude/streaming)
 - [Vercel Chat Completions](https://vercel.com/docs/ai-gateway/sdks-and-apis/openai-chat-completions/rest-api)
 - [Vercel model catalog](https://ai-gateway.vercel.sh/v1/models)
+
+- [xAI Chat Completions](https://docs.x.ai/developers/model-capabilities/legacy/chat-completions)
+- [xAI streaming](https://docs.x.ai/developers/model-capabilities/text/streaming)

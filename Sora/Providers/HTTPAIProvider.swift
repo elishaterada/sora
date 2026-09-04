@@ -1,6 +1,6 @@
 import Foundation
 
-/// The three HTTP providers share transport/cancellation, not wire schemas.
+/// HTTP providers share transport/cancellation, not wire schemas.
 struct HTTPAIProvider: AIProvider {
     let kind: AIBackendID
     var session: URLSession = URLSession(configuration: .ephemeral)
@@ -34,11 +34,17 @@ struct HTTPAIProvider: AIProvider {
 
     static func urlRequest(kind: AIBackendID, request: AIRequest, credential: String) throws -> URLRequest {
         if kind == .openai { return try OpenAIProvider.urlRequest(request, credential: credential) }
-        guard kind == .anthropic || kind == .gateway else { throw AIError.malformedResponse }
-        let endpoint = kind == .anthropic ? "https://api.anthropic.com/v1/messages" : "https://ai-gateway.vercel.sh/v1/chat/completions"
+        let endpoint: String
+        switch kind {
+        case .anthropic: endpoint = "https://api.anthropic.com/v1/messages"
+        case .gateway: endpoint = "https://ai-gateway.vercel.sh/v1/chat/completions"
+        case .grok: endpoint = "https://api.x.ai/v1/chat/completions"
+        default: throw AIError.malformedResponse
+        }
         var result = URLRequest(url: URL(string: endpoint)!)
         result.httpMethod = "POST"
-        result.timeoutInterval = 60
+        // xAI recommends a longer timeout for reasoning before the first token.
+        result.timeoutInterval = kind == .grok ? 3600 : 60
         result.setValue("application/json", forHTTPHeaderField: "Content-Type")
         result.setValue("text/event-stream", forHTTPHeaderField: "Accept")
         var messages = request.messages.map { ["role": $0.role.rawValue, "content": $0.text] }
@@ -68,7 +74,7 @@ struct ProviderStreamDecoder {
         guard line.hasPrefix("data:") else { return [] }
         let data = line.dropFirst(5).trimmingCharacters(in: .whitespaces)
         if data == "[DONE]" {
-            guard kind == .gateway, endedNormally else { throw AIError.incompleteStream }
+            guard kind == .gateway || kind == .grok, endedNormally else { throw AIError.incompleteStream }
             return [.completed]
         }
         guard let object = try? JSONSerialization.jsonObject(with: Data(data.utf8)) as? [String: Any] else {
