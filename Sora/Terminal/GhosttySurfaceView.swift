@@ -476,7 +476,8 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         ghostty_surface_ime_point(surface, &x, &y, &width, &height)
         _ = width
         let font = quicklookFont() ?? SoraTheme.terminalCTFont
-        // IME height is content-scaled points; rescale CELL_SIZE into that space.
+        // IME height is content-scaled points; rescale CELL_SIZE into that space
+        // so the half-cell origin and per-column pitch share one grid.
         let cellHeight: CGFloat = height > 0
             ? CGFloat(height)
             : (cellSize.height > 0 ? cellSize.height : 16)
@@ -496,6 +497,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         ghostText.show(
             text: suggestion.displayText,
             origin: origin,
+            cellWidth: cellWidth,
             cellHeight: cellHeight,
             font: font,
             predicted: suggestion.source == .prediction
