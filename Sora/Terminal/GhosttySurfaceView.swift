@@ -119,6 +119,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     // MARK: - Input
 
     override func keyDown(with event: NSEvent) {
+        ghostText.hide()
         let characters = event.characters ?? ""
         switch completion.handleKeyDown(
             keyCode: event.keyCode,
@@ -218,6 +219,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     func pasteFromPasteboard() {
         guard let surface else { return }
         guard let value = GhosttyClipboard.plainText(from: .general), !value.isEmpty else { return }
+        ghostText.hide()
         completion.handlePaste(value)
         insertText(value)
         refreshCompletion()
@@ -444,6 +446,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     }
 
     private func destroySurface() {
+        ghostText.hide()
         guard let surface else { return }
         if runtime.activeSurface === self {
             runtime.activeSurface = nil
@@ -497,7 +500,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
             offset: scrollbarOffset,
             len: scrollbarLen
         )
-        guard let suggestion = completion.suggestion, let surface, atLivePrompt else {
+        guard let suggestion = completion.suggestion, let surface, atLivePrompt, window != nil, !isHidden else {
             ghostText.hide()
             return
         }
@@ -540,7 +543,17 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
             cellWidth: cellWidth,
             cellHeight: cellHeight,
             font: font,
-            predicted: false
+            predicted: false,
+            cursorOrigin: { [weak self] in
+                guard let self, let surface = self.surface,
+                      self.window != nil, !self.isHidden else { return nil }
+                var x = 0.0, y = 0.0, width = 0.0, height = 0.0
+                ghostty_surface_ime_point(surface, &x, &y, &width, &height)
+                return GhosttyInput.ghostTextOrigin(
+                    imeX: x, imeY: y, viewHeight: self.bounds.height,
+                    cellWidth: self.cellSize.width
+                )
+            }
         )
     }
 
