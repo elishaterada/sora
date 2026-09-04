@@ -19,9 +19,21 @@ final class TerminalPaneView: NSView {
         layer?.backgroundColor = SoraTheme.nsClear.cgColor
         addSubview(surface)
         addSubview(stickyBar)
-        agentHost = NSHostingView(rootView: AskView(session: ask, inline: true, onClose: { [weak self] in
-            self?.hideAgent()
-        }))
+        agentHost = NSHostingView(rootView: AskView(
+            session: ask,
+            inline: true,
+            onClose: { [weak self] in self?.hideAgent() },
+            onRunCommand: { [weak self, weak ask] messageID in
+                guard let self, let ask else { return }
+                guard surface.canRunAgentCommand else {
+                    ask.reportCommandUnavailable()
+                    return
+                }
+                guard let proposal = ask.approveCommand(messageID: messageID) else { return }
+                hideAgent()
+                _ = surface.runApprovedCommand(proposal.command)
+            }
+        ))
         agentHost.isHidden = true
         addSubview(agentHost)
         surface.autoresizingMask = []

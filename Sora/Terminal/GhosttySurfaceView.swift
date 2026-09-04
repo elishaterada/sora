@@ -139,8 +139,10 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
             switch PromptIntentClassifier.submission(for: completion.buffer.text, forceShell: forceShell) {
             case .agent(let question) where !question.isEmpty:
                 swallowedKeyCodes.insert(event.keyCode)
-                // Remove the locally echoed line from zsh without submitting it.
-                clearPromptLine()
+                // Cancel zsh's entire edit buffer before opening AI. A kill-line
+                // widget depends on ZLE's transient cursor during redraw and can
+                // leave a suffix behind; terminal interrupt cannot submit it.
+                cancelPromptLine()
                 completion.reset()
                 ghostTextAnchor = nil
                 isShellPromptReady = true
@@ -149,7 +151,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
                 return
             case .shell where forceShell:
                 swallowedKeyCodes.insert(event.keyCode)
-                sendUnmodifiedReturn(from: event)
+                sendUnmodifiedReturn(keyCode: event.keyCode)
                 completion.reset()
                 ghostTextAnchor = nil
                 isShellPromptReady = false
@@ -468,6 +470,23 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         scheduleCompletionRefresh()
     }
 
+    var canRunAgentCommand: Bool {
+        isShellPromptReady && completion.buffer.isTracking && completion.buffer.text.isEmpty
+    }
+
+    @discardableResult
+    func runApprovedCommand(_ command: String) -> Bool {
+        guard canRunAgentCommand, AgentCommandProposal.isValidCommand(command) else { return false }
+        insertText(command)
+        completion.reset()
+        ghostTextAnchor = nil
+        promptIntent = nil
+        isShellPromptReady = false
+        refreshCompletion()
+        sendUnmodifiedReturn(keyCode: PromptEvent.returnKey)
+        return true
+    }
+
     func applyCellSize(backingWidth: UInt32, backingHeight: UInt32) {
         let backing = NSSize(width: CGFloat(backingWidth), height: CGFloat(backingHeight))
         let converted = convertFromBacking(backing)
@@ -532,15 +551,15 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         }
     }
 
-    /// Send an actual Control-U key event. `ghostty_surface_text` is for text
+    /// Send an actual Control-C key event. `ghostty_surface_text` is for text
     /// input and intentionally does not encode C0 control bytes for zsh.
-    private func clearPromptLine() {
+    private func cancelPromptLine() {
         guard let surface else { return }
         var key = ghostty_input_key_s()
-        key.keycode = 32 // macOS hardware keycode for U
+        key.keycode = 8 // macOS hardware keycode for C
         key.mods = GHOSTTY_MODS_CTRL
         key.consumed_mods = GHOSTTY_MODS_NONE
-        key.unshifted_codepoint = UnicodeScalar("u").value
+        key.unshifted_codepoint = UnicodeScalar("c").value
         key.composing = false
         key.text = nil
         key.action = GHOSTTY_ACTION_PRESS
@@ -552,11 +571,15 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
 
     /// Command-Return is an app-level routing override. Submit the line to the
     /// shell as a plain Return so zsh does not receive the Command modifier.
-    private func sendUnmodifiedReturn(from event: NSEvent) {
+    private func sendUnmodifiedReturn(keyCode: UInt16) {
         guard let surface else { return }
-        var key = GhosttyInput.keyEvent(from: event, action: GHOSTTY_ACTION_PRESS)
+        var key = ghostty_input_key_s()
+        key.action = GHOSTTY_ACTION_PRESS
+        key.keycode = UInt32(keyCode)
         key.mods = GHOSTTY_MODS_NONE
         key.consumed_mods = GHOSTTY_MODS_NONE
+        key.unshifted_codepoint = 13
+        key.composing = false
         key.text = nil
         _ = ghostty_surface_key(surface, key)
         key.action = GHOSTTY_ACTION_RELEASE
