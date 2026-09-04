@@ -24,6 +24,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     private(set) var cellSize = NSSize(width: 8, height: 16)
     private let completion = CompletionSession()
     private let ghostText = GhostTextView()
+    private var ghostTextAnchor: GhostTextAnchor?
     private weak var stickyBar: StickyPromptBar?
     private var scrollbarTotal: UInt64 = 0
     private var scrollbarOffset: UInt64 = 0
@@ -85,6 +86,12 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     }
 
     override func setFrameSize(_ newSize: NSSize) {
+        if let anchor = ghostTextAnchor {
+            ghostTextAnchor = GhostTextAnchor(
+                origin: NSPoint(x: anchor.origin.x, y: anchor.origin.y + newSize.height - frame.height),
+                cellWidth: anchor.cellWidth
+            )
+        }
         super.setFrameSize(newSize)
         updateSurfaceMetrics()
     }
@@ -119,7 +126,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     // MARK: - Input
 
     override func keyDown(with event: NSEvent) {
-        ghostText.hide()
+        captureGhostTextAnchor()
         let characters = event.characters ?? ""
         switch completion.handleKeyDown(
             keyCode: event.keyCode,
@@ -128,10 +135,17 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         ) {
         case .accept(let suffix):
             swallowedKeyCodes.insert(event.keyCode)
+            refreshCompletion()
             insertText(suffix)
             scheduleCompletionRefresh()
             return
         case .passThrough:
+            if let edit = PromptEvent.from(keyCode: event.keyCode, characters: characters,
+                                           modifiers: event.modifierFlags),
+               edit == .reset || edit == .stopTracking {
+                ghostTextAnchor = nil
+            }
+            refreshCompletion()
             sendKey(event, action: event.isARepeat ? GHOSTTY_ACTION_REPEAT : GHOSTTY_ACTION_PRESS)
             scheduleCompletionRefresh()
         }
@@ -219,10 +233,12 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     func pasteFromPasteboard() {
         guard let surface else { return }
         guard let value = GhosttyClipboard.plainText(from: .general), !value.isEmpty else { return }
-        ghostText.hide()
+        captureGhostTextAnchor()
         completion.handlePaste(value)
-        insertText(value)
+        if value.contains(where: { $0 == "\n" || $0 == "\r" }) { ghostTextAnchor = nil }
         refreshCompletion()
+        insertText(value)
+        scheduleCompletionRefresh()
     }
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
@@ -240,6 +256,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
         completion.stopTracking()
+        ghostTextAnchor = nil
         ghostText.hide()
         sendMousePosition(event)
         sendMouseButton(event, state: GHOSTTY_MOUSE_PRESS, button: GHOSTTY_MOUSE_LEFT)
@@ -395,6 +412,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
             durationNanos: durationNanos
         )
         completion.reset()
+        ghostTextAnchor = nil
         if let run, run.exitCode == 0 {
             if let previous = completion.lastSuccessfulCommand {
                 runtime.recordTransition(
@@ -530,30 +548,32 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
                 cellSize: cellSize,
                 font: font
             )
-        let origin = GhosttyInput.ghostTextOrigin(
-            imeX: x,
-            imeY: y,
-            viewHeight: bounds.height,
-            cellWidth: cellWidth
-        )
-        addSubview(ghostText)
+        guard let origin = ghostTextAnchor?.position(
+            for: completion.buffer, viewWidth: bounds.width
+        ) else {
+            ghostText.hide()
+            return
+        }
         ghostText.show(
             text: suggestion.displayText,
             origin: origin,
             cellWidth: cellWidth,
             cellHeight: cellHeight,
             font: font,
-            predicted: false,
-            cursorOrigin: { [weak self] in
-                guard let self, let surface = self.surface,
-                      self.window != nil, !self.isHidden else { return nil }
-                var x = 0.0, y = 0.0, width = 0.0, height = 0.0
-                ghostty_surface_ime_point(surface, &x, &y, &width, &height)
-                return GhosttyInput.ghostTextOrigin(
-                    imeX: x, imeY: y, viewHeight: self.bounds.height,
-                    cellWidth: self.cellSize.width
-                )
-            }
+            predicted: false
+        )
+    }
+
+    private func captureGhostTextAnchor() {
+        guard completion.buffer.isTracking, completion.buffer.text.isEmpty,
+              ghostTextAnchor == nil, let surface else { return }
+        var x = 0.0, y = 0.0, width = 0.0, height = 0.0
+        ghostty_surface_ime_point(surface, &x, &y, &width, &height)
+        ghostTextAnchor = GhostTextAnchor(
+            origin: GhosttyInput.ghostTextOrigin(
+                imeX: x, imeY: y, viewHeight: bounds.height, cellWidth: cellSize.width
+            ),
+            cellWidth: cellSize.width
         )
     }
 
