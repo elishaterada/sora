@@ -22,10 +22,12 @@ struct SoraApp: App {
         WindowGroup {
             ContentView(runtime: runtime)
         }
+        .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 980, height: 620)
         .windowResizability(.contentMinSize)
         .commands {
             WorkspaceCommands()
+            SidebarCommands()
             HistoryCommands()
             CommandGroup(replacing: .pasteboard) {
                 Button("Copy") { runtime.copyFromActiveSurface() }

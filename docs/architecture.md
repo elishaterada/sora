@@ -62,7 +62,7 @@ Only create directories required by the current phase. Phase 5 creates
 - keyboard and pointer forwarding
 - resize and backing-scale propagation
 - clipboard: Cmd+C/V and Edit menu copy/paste via `ghostty_surface_read_selection` / `ghostty_surface_text`; OSC 52 via Ghostty runtime callbacks plus `NSPasteboard`
-- session chrome: flush two-column `HStack` (sidebar | terminal), hidden window title/toolbar. No `NavigationSplitView` (Tahoe draws that as floating rounded cards). Window frost is a square `NSGlassEffectView` behind both columns.
+- session chrome: flush two-column `HStack` (sidebar | terminal). Hidden title bar with `fullSizeContentView` so traffic lights sit in the sidebar (not a reserved header strip). Titlebar hit-testing is clipped to the sidebar width so the terminal's first line stays clickable. No `NavigationSplitView` (Tahoe draws that as floating rounded cards). Window frost is a square `NSGlassEffectView` behind both columns.
 - shell presentation: `~/.hushlogin` suppresses `login(1)` "Last login"; a Sora `ZDOTDIR` sources Ghostty's zsh integration, replaces the stock macOS `user@host` prompt, and colors the input line (command/flags/paths/strings) unless the user already has zsh-syntax-highlighting.
 
 Unit tests must not link GhosttyKit. `GhosttyInput.swift` and `GhosttyClipboard.swift` stay Ghostty-free; `GhosttyInputKit.swift` and `GhosttyClipboardKit.swift` are app-only.
