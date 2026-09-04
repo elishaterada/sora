@@ -475,11 +475,16 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         var height: Double = 0
         ghostty_surface_ime_point(surface, &x, &y, &width, &height)
         _ = width
-        let cellWidth = cellSize.width > 0 ? cellSize.width : 8
-        // Prefer the IME cell height; it matches the row Ghostty just measured.
+        let font = quicklookFont() ?? SoraTheme.terminalCTFont
+        // IME height is content-scaled points; rescale CELL_SIZE into that space.
         let cellHeight: CGFloat = height > 0
             ? CGFloat(height)
             : (cellSize.height > 0 ? cellSize.height : 16)
+        let cellWidth = GhosttyInput.ghostTextCellWidth(
+            imeHeight: cellHeight,
+            cellSize: cellSize,
+            font: font
+        )
         // ime_point x is the cursor cell midpoint; y is the cell bottom.
         let origin = GhosttyInput.ghostTextOrigin(
             imeX: x,
@@ -487,12 +492,11 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
             viewHeight: bounds.height,
             cellWidth: cellWidth
         )
-        let font = quicklookFont() ?? SoraTheme.terminalCTFont
         addSubview(ghostText)
         ghostText.show(
             text: suggestion.displayText,
             origin: origin,
-            cellSize: NSSize(width: cellWidth, height: cellHeight),
+            cellHeight: cellHeight,
             font: font,
             predicted: suggestion.source == .prediction
         )
@@ -503,10 +507,21 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
               let fontRaw = ghostty_surface_quicklook_font(surface)
         else { return nil }
         // Ghostty returns a +1 CTFont; takeUnretainedValue + release matches
-        // Ghostty's own AppKit surface view.
+        // Ghostty's own AppKit surface view. Embedded builds may hand back a
+        // content-scaled size; pin to the configured terminal size so advance
+        // and baseline match the grid.
         let font = Unmanaged<CTFont>.fromOpaque(fontRaw)
         let value = font.takeUnretainedValue()
         font.release()
+        let size = CTFontGetSize(value)
+        if abs(size - SoraTheme.terminalFontSize) > 0.25 {
+            return CTFontCreateCopyWithAttributes(
+                value,
+                SoraTheme.terminalFontSize,
+                nil,
+                nil
+            )
+        }
         return value
     }
 

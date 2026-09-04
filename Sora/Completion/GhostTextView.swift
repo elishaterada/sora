@@ -12,7 +12,6 @@ final class GhostTextView: NSView {
     }
 
     private var predicted = false
-    private var cellWidth: CGFloat = 8
     private var cellHeight: CGFloat = 16
     private var baseline: CGFloat = 0
     private var ctFont: CTFont = SoraTheme.terminalCTFont
@@ -25,45 +24,38 @@ final class GhostTextView: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        guard !text.isEmpty, let context = NSGraphicsContext.current?.cgContext else { return }
+        guard !text.isEmpty else { return }
         let color = predicted
             ? NSColor.controlAccentColor.withAlphaComponent(0.55)
             : NSColor.secondaryLabelColor.withAlphaComponent(0.55)
-
-        for (index, character) in text.enumerated() {
-            let attrs: [NSAttributedString.Key: Any] = [
-                .font: ctFont as Any,
-                .foregroundColor: color,
-            ]
-            let run = NSAttributedString(string: String(character), attributes: attrs)
-            let line = CTLineCreateWithAttributedString(run)
-            let x = CGFloat(index) * cellWidth
-            let advance = CTLineGetTypographicBounds(line, nil, nil, nil)
-            let glyphX = x + max((cellWidth - CGFloat(advance)) / 2, 0)
-            context.textMatrix = .identity
-            context.textPosition = CGPoint(x: glyphX, y: baseline)
-            CTLineDraw(line, context)
-        }
+        // NSString drawing follows AppKit's view coordinates; CTLineDraw can
+        // disagree with the NSView CTM and shift the baseline.
+        let font = ctFont as NSFont
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: color,
+        ]
+        (text as NSString).draw(at: NSPoint(x: 0, y: baseline), withAttributes: attrs)
     }
 
     func show(
         text: String,
         origin: NSPoint,
-        cellSize: NSSize,
+        cellHeight: CGFloat,
         font: CTFont,
         predicted: Bool = false
     ) {
         self.ctFont = font
         self.predicted = predicted
-        self.cellWidth = cellSize.width > 0 ? cellSize.width : 8
-        self.cellHeight = cellSize.height > 0 ? cellSize.height : 16
+        self.cellHeight = cellHeight > 0 ? cellHeight : 16
         self.baseline = GhosttyInput.ghostTextBaseline(cellHeight: self.cellHeight, font: font)
         self.text = text
-        let columns = CGFloat(max(text.count, 1))
+        let attrs: [NSAttributedString.Key: Any] = [.font: font as Any]
+        let width = (text as NSString).size(withAttributes: attrs).width
         frame = NSRect(
             x: origin.x,
             y: origin.y,
-            width: ceil(self.cellWidth * columns) + 1,
+            width: ceil(width) + 2,
             height: self.cellHeight
         )
         isHidden = false
