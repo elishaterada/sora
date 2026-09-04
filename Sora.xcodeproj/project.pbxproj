@@ -76,6 +76,7 @@
 		AA00000000000000000000A5 /* SoraZshBootstrap.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000191 /* SoraZshBootstrap.swift */; };
 		AA00000000000000000000A6 /* HushLoginTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000193 /* HushLoginTests.swift */; };
 		AA00000000000000000000A7 /* SoraZshBootstrapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000194 /* SoraZshBootstrapTests.swift */; };
+		AA00000000000000000000A8 /* ShellHighlightTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000195 /* ShellHighlightTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -107,6 +108,7 @@
 		AA0000000000000000000192 /* zsh */ = {isa = PBXFileReference; lastKnownFileType = folder; path = zsh; sourceTree = "<group>"; };
 		AA0000000000000000000193 /* HushLoginTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HushLoginTests.swift; sourceTree = "<group>"; };
 		AA0000000000000000000194 /* SoraZshBootstrapTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoraZshBootstrapTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000195 /* ShellHighlightTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellHighlightTests.swift; sourceTree = "<group>"; };
 		AA0000000000000000000110 /* GhosttyInputTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyInputTests.swift; sourceTree = "<group>"; };
 		AA0000000000000000000111 /* GhosttyClipboardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyClipboardTests.swift; sourceTree = "<group>"; };
 		AA0000000000000000000120 /* WorkspaceSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceSnapshot.swift; sourceTree = "<group>"; };
@@ -299,6 +301,7 @@
 				AA0000000000000000000181 /* NextCommandEngineTests.swift */,
 				AA0000000000000000000193 /* HushLoginTests.swift */,
 				AA0000000000000000000194 /* SoraZshBootstrapTests.swift */,
+				AA0000000000000000000195 /* ShellHighlightTests.swift */,
 			);
 			path = SoraTests;
 			sourceTree = "<group>";
@@ -468,6 +471,7 @@
 				AA00000000000000000000A5 /* SoraZshBootstrap.swift in Sources */,
 				AA00000000000000000000A6 /* HushLoginTests.swift in Sources */,
 				AA00000000000000000000A7 /* SoraZshBootstrapTests.swift in Sources */,
+				AA00000000000000000000A8 /* ShellHighlightTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

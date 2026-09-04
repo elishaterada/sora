@@ -9,10 +9,22 @@ final class SoraZshBootstrapTests: XCTestCase {
 
         let source = root.appendingPathComponent("zshenv")
         try "# sora\n".write(to: source, atomically: true, encoding: .utf8)
+        try "# highlight\n".write(
+            to: root.appendingPathComponent("highlight.zsh"),
+            atomically: true,
+            encoding: .utf8
+        )
         let zdot = root.appendingPathComponent("zdot", isDirectory: true)
         let installed = try SoraZshBootstrap.install(into: zdot, source: source)
         let dest = installed.appendingPathComponent(".zshenv")
         XCTAssertEqual(try String(contentsOf: dest, encoding: .utf8), "# sora\n")
+        XCTAssertEqual(
+            try String(
+                contentsOf: installed.appendingPathComponent("highlight.zsh"),
+                encoding: .utf8
+            ),
+            "# highlight\n"
+        )
 
         try "# sora-2\n".write(to: source, atomically: true, encoding: .utf8)
         _ = try SoraZshBootstrap.install(into: zdot, source: source)

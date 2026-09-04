@@ -8,7 +8,7 @@ enum SoraZshBootstrap {
         case writeFailed
     }
 
-    /// Copies the bundled `zshenv` to `directory/.zshenv`.
+    /// Copies bundled zsh startup files into `directory`.
     @discardableResult
     static func install(
         into directory: URL,
@@ -16,7 +16,27 @@ enum SoraZshBootstrap {
         fileManager: FileManager = .default
     ) throws -> URL {
         try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
-        let destination = directory.appendingPathComponent(".zshenv")
+        try copyIfChanged(
+            from: source,
+            to: directory.appendingPathComponent(".zshenv"),
+            fileManager: fileManager
+        )
+        let highlight = source.deletingLastPathComponent().appendingPathComponent("highlight.zsh")
+        if fileManager.fileExists(atPath: highlight.path) {
+            try copyIfChanged(
+                from: highlight,
+                to: directory.appendingPathComponent("highlight.zsh"),
+                fileManager: fileManager
+            )
+        }
+        return directory
+    }
+
+    private static func copyIfChanged(
+        from source: URL,
+        to destination: URL,
+        fileManager: FileManager
+    ) throws {
         let data = try Data(contentsOf: source)
         if (try? Data(contentsOf: destination)) != data {
             do {
@@ -25,7 +45,6 @@ enum SoraZshBootstrap {
                 throw Error.writeFailed
             }
         }
-        return directory
     }
 
     static func bundledSource(bundle: Bundle = .main) -> URL? {
