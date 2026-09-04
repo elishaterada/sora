@@ -199,6 +199,12 @@ final class GhosttyRuntime: ObservableObject {
                 view?.requestGotoTab(raw)
             }
             return true
+        case GHOSTTY_ACTION_CELL_SIZE:
+            let size = action.action.cell_size
+            DispatchQueue.main.async {
+                view?.applyCellSize(backingWidth: size.width, backingHeight: size.height)
+            }
+            return true
         case GHOSTTY_ACTION_COMMAND_FINISHED:
             let finished = action.action.command_finished
             DispatchQueue.main.async {

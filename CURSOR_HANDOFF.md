@@ -43,8 +43,8 @@ Time-box research. The goal is enough confidence to build a vertical slice, not 
 - No Electron, Tauri, Flutter, Qt, or webview interface.
 - Do not build a terminal emulator.
 - Do not introduce Rust for our own application logic.
-- Do not implement tabs until the single-session vertical slice is reliable. **Phase 0–2 are complete. Phase 3 is in progress.**
-- Do not implement AI, providers, agents, autocomplete, semantic history, or prediction.
+- Do not implement tabs until the single-session vertical slice is reliable. **Phase 0–3 are complete. Phase 4 is local completion.**
+- Do not implement AI, providers, agents, or next-command prediction until Phase 5.
 - Do not copy code from Warp.
 - Keep the implementation intentionally small and understandable.
 
@@ -65,7 +65,7 @@ If the environment prevents interactive verification, complete all safe build ch
 
 ## Stop condition
 
-Stop after the current approved phase is working or after documenting a concrete blocker. Phase 0–2 are complete. Phase 3 is shell semantics. Do not continue into completion or AI until that phase is approved.
+Stop after the current approved phase is working or after documenting a concrete blocker. Phase 0–3 are complete. Phase 4 is local completion. Do not continue into next-command prediction or AI until that phase is approved.
 
 Provide a final summary containing:
 

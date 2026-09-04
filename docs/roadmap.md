@@ -52,11 +52,8 @@ directory inheritance.
 
 Exit: commands are represented as structured records without parsing the rendered screen.
 
-**Status (2026-09-03):** implemented. Ghostty zsh shell integration (bundled
-resources + default `shell-integration=detect`) emits OSC 133. `GHOSTTY_ACTION_COMMAND_FINISHED`
-supplies exit code and duration. Command text is the OSC 2 title Ghostty's zsh
-preexec writes. Records persist in `~/Library/Application Support/Sora/history.sqlite`.
-Window menu → Command History.
+**Status (2026-09-03):** complete. Human checks passed: commands appear in
+Window → Command History with working directory and exit status.
 
 ## Phase 4: local completion
 
@@ -67,6 +64,12 @@ Window menu → Command History.
 - accept suggestion using Tab or Right Arrow
 
 Exit: useful completion works offline and does not call an LLM per keystroke.
+
+**Status (2026-09-03):** implemented. Prefix completion is local and offline:
+history (cwd/repo/frequency/recency) plus filesystem paths. Ghost text sits at
+`ghostty_surface_ime_point`; Tab or Right Arrow inserts the suffix through
+`ghostty_surface_text` and does not send those keys to the PTY. Unmodified Tab
+still reaches zsh when there is no suggestion. Human check remaining.
 
 ## Phase 5: next-command prediction
 

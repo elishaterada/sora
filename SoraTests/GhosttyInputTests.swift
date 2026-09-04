@@ -1,25 +1,23 @@
 import AppKit
-import GhosttyKit
 import XCTest
 
 final class GhosttyInputTests: XCTestCase {
     func testModsMapShiftControlOptionCommand() {
         let flags: NSEvent.ModifierFlags = [.shift, .control, .option, .command]
-        let mods = GhosttyInput.mods(from: flags)
-        XCTAssertNotEqual(mods.rawValue & GHOSTTY_MODS_SHIFT.rawValue, 0)
-        XCTAssertNotEqual(mods.rawValue & GHOSTTY_MODS_CTRL.rawValue, 0)
-        XCTAssertNotEqual(mods.rawValue & GHOSTTY_MODS_ALT.rawValue, 0)
-        XCTAssertNotEqual(mods.rawValue & GHOSTTY_MODS_SUPER.rawValue, 0)
+        let mods = GhosttyInput.modBits(from: flags)
+        XCTAssertNotEqual(mods & GhosttyInput.Mods.shift, 0)
+        XCTAssertNotEqual(mods & GhosttyInput.Mods.ctrl, 0)
+        XCTAssertNotEqual(mods & GhosttyInput.Mods.alt, 0)
+        XCTAssertNotEqual(mods & GhosttyInput.Mods.command, 0)
     }
 
     func testModsMapEmpty() {
-        let mods = GhosttyInput.mods(from: [])
-        XCTAssertEqual(mods.rawValue, GHOSTTY_MODS_NONE.rawValue)
+        XCTAssertEqual(GhosttyInput.modBits(from: []), GhosttyInput.Mods.none)
     }
 
-    func testScrollModsPrecisionBit() {
-        XCTAssertEqual(GhosttyInput.scrollMods(precision: true), 1)
-        XCTAssertEqual(GhosttyInput.scrollMods(precision: false), 0)
+    func testScrollPrecisionBit() {
+        XCTAssertEqual(GhosttyInput.scrollPrecisionBit(true), 1)
+        XCTAssertEqual(GhosttyInput.scrollPrecisionBit(false), 0)
     }
 
     func testSurfaceMousePointFlipsYToTopLeftOrigin() {
@@ -29,5 +27,16 @@ final class GhosttyInputTests: XCTestCase {
         )
         XCTAssertEqual(point.x, 10)
         XCTAssertEqual(point.y, 480)
+    }
+
+    func testGhostTextOriginConvertsIMETopLeftToAppKit() {
+        let origin = GhosttyInput.ghostTextOrigin(
+            imeX: 20,
+            imeY: 40,
+            viewHeight: 500,
+            cellWidth: 8
+        )
+        XCTAssertEqual(origin.x, 16)
+        XCTAssertEqual(origin.y, 460)
     }
 }

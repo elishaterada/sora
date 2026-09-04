@@ -20,6 +20,10 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     private var hasCreatedSurface = false
     private(set) var lastShellTitle = ""
     private(set) var lastWorkingDirectory: URL?
+    private(set) var cellSize = NSSize(width: 8, height: 16)
+    private let completion = CompletionSession()
+    private let ghostText = GhostTextView()
+    private var swallowedKeyCodes: Set<UInt16> = []
 
     override var isOpaque: Bool { true }
     override var acceptsFirstResponder: Bool { true }
@@ -30,6 +34,8 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         self.initialWorkingDirectory = workingDirectory
         super.init(frame: NSRect(x: 0, y: 0, width: 800, height: 600))
         // Do not set wantsLayer or install a CAMetalLayer. libghostty assigns the layer.
+        ghostText.isHidden = true
+        addSubview(ghostText)
     }
 
     @available(*, unavailable)
@@ -102,10 +108,27 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     // MARK: - Input
 
     override func keyDown(with event: NSEvent) {
-        sendKey(event, action: event.isARepeat ? GHOSTTY_ACTION_REPEAT : GHOSTTY_ACTION_PRESS)
+        let characters = event.characters ?? ""
+        switch completion.handleKeyDown(
+            keyCode: event.keyCode,
+            characters: characters,
+            modifiers: event.modifierFlags
+        ) {
+        case .accept(let suffix):
+            swallowedKeyCodes.insert(event.keyCode)
+            insertText(suffix)
+            scheduleCompletionRefresh()
+            return
+        case .passThrough:
+            sendKey(event, action: event.isARepeat ? GHOSTTY_ACTION_REPEAT : GHOSTTY_ACTION_PRESS)
+            scheduleCompletionRefresh()
+        }
     }
 
     override func keyUp(with event: NSEvent) {
+        if swallowedKeyCodes.remove(event.keyCode) != nil {
+            return
+        }
         sendKey(event, action: GHOSTTY_ACTION_RELEASE)
     }
 
@@ -184,9 +207,9 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     func pasteFromPasteboard() {
         guard let surface else { return }
         guard let value = GhosttyClipboard.plainText(from: .general), !value.isEmpty else { return }
-        value.withCString { pointer in
-            ghostty_surface_text(surface, pointer, UInt(value.utf8.count))
-        }
+        completion.handlePaste(value)
+        insertText(value)
+        refreshCompletion()
     }
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
@@ -203,6 +226,8 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
 
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
+        completion.stopTracking()
+        ghostText.hide()
         sendMousePosition(event)
         sendMouseButton(event, state: GHOSTTY_MOUSE_PRESS, button: GHOSTTY_MOUSE_LEFT)
     }
@@ -294,8 +319,11 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
             runtime.activeSurface = self
             updateSurfaceMetrics()
             window?.makeFirstResponder(self)
-        } else if runtime.activeSurface === self {
-            runtime.activeSurface = nil
+        } else {
+            ghostText.hide()
+            if runtime.activeSurface === self {
+                runtime.activeSurface = nil
+            }
         }
     }
 
@@ -327,6 +355,8 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     }
 
     func recordCommandFinished(exitCode: Int16, durationNanos: UInt64) {
+        completion.reset()
+        ghostText.hide()
         let cwd = lastWorkingDirectory ?? currentWorkingDirectory() ?? initialWorkingDirectory
         runtime.recordCommand(
             command: lastShellTitle,
@@ -334,6 +364,14 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
             exitCode: exitCode,
             durationNanos: durationNanos
         )
+    }
+
+    func applyCellSize(backingWidth: UInt32, backingHeight: UInt32) {
+        let backing = NSSize(width: CGFloat(backingWidth), height: CGFloat(backingHeight))
+        let converted = convertFromBacking(backing)
+        if converted.width > 0, converted.height > 0 {
+            cellSize = converted
+        }
     }
 
     func requestClose() {
@@ -382,6 +420,54 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
             let scale = Double(window.backingScaleFactor)
             ghostty_surface_set_content_scale(surface, scale, scale)
         }
+    }
+
+    private func insertText(_ value: String) {
+        guard let surface, !value.isEmpty else { return }
+        value.withCString { pointer in
+            ghostty_surface_text(surface, pointer, UInt(value.utf8.count))
+        }
+    }
+
+    private func scheduleCompletionRefresh() {
+        runtime.tick()
+        DispatchQueue.main.async { [weak self] in
+            self?.refreshCompletion()
+        }
+    }
+
+    private func refreshCompletion() {
+        runtime.tick()
+        let cwd = lastWorkingDirectory
+            ?? currentWorkingDirectory()
+            ?? initialWorkingDirectory
+            ?? FileManager.default.homeDirectoryForCurrentUser
+        completion.refresh(cwd: cwd, history: runtime.history)
+        guard let suggestion = completion.suggestion, let surface else {
+            ghostText.hide()
+            return
+        }
+
+        var x: Double = 0
+        var y: Double = 0
+        var width: Double = 0
+        var height: Double = 0
+        ghostty_surface_ime_point(surface, &x, &y, &width, &height)
+        _ = width
+        let cellWidth = cellSize.width > 0 ? cellSize.width : 8
+        let cellHeight = max(height, cellSize.height > 0 ? cellSize.height : 16)
+        // ime_point x is the midpoint of the cursor cell; y is the bottom edge
+        // in Ghostty's top-left coordinates.
+        let origin = GhosttyInput.ghostTextOrigin(
+            imeX: x,
+            imeY: y,
+            viewHeight: bounds.height,
+            cellWidth: cellWidth
+        )
+        let fontSize = min(max(cellHeight * 0.72, 11), 22)
+        let font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+        addSubview(ghostText)
+        ghostText.show(text: suggestion.insertSuffix, origin: origin, height: cellHeight, font: font)
     }
 
     private func sendKey(_ event: NSEvent, action: ghostty_input_action_e) {

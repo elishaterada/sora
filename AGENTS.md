@@ -14,8 +14,8 @@ These rules apply to every coding agent working in this repository.
 ## Scope discipline
 
 - Complete one phase or vertical slice at a time.
-- Phase 0 and Phase 1 are complete. Do not reopen them unless a regression appears.
-- Do not implement AI, autocomplete, next-command prediction, accounts, sync, or cloud services yet.
+- Phase 0 through Phase 3 are complete. Do not reopen them unless a regression appears.
+- Do not implement AI, next-command prediction, accounts, sync, or cloud services yet.
 - Do not add speculative abstractions for future cross-platform support.
 - Do not introduce Rust, Zig, UniFFI, or another application-owned FFI layer during V0.
 - Native interoperability required by `libghostty` is allowed.

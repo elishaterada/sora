@@ -13,6 +13,8 @@
 		AA0000000000000000000004 /* GhosttySurfaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000104 /* GhosttySurfaceView.swift */; };
 		AA0000000000000000000006 /* GhosttyInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000106 /* GhosttyInput.swift */; };
 		AA0000000000000000000007 /* GhosttyClipboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000107 /* GhosttyClipboard.swift */; };
+		AA0000000000000000000016 /* GhosttyInputKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000116 /* GhosttyInputKit.swift */; };
+		AA0000000000000000000017 /* GhosttyClipboardKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000117 /* GhosttyClipboardKit.swift */; };
 		AA0000000000000000000008 /* GhosttyKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000108 /* GhosttyKit.xcframework */; };
 		AA0000000000000000000009 /* terminfo in Resources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000109 /* terminfo */; };
 		AA0000000000000000000013 /* ghostty in Resources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000114 /* ghostty */; };
@@ -20,7 +22,6 @@
 		AA0000000000000000000011 /* GhosttyClipboardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000111 /* GhosttyClipboardTests.swift */; };
 		AA0000000000000000000014 /* GhosttyInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000106 /* GhosttyInput.swift */; };
 		AA0000000000000000000015 /* GhosttyClipboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000107 /* GhosttyClipboard.swift */; };
-		AA0000000000000000000012 /* GhosttyKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000108 /* GhosttyKit.xcframework */; };
 		AA0000000000000000000020 /* WorkspaceSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000120 /* WorkspaceSnapshot.swift */; };
 		AA0000000000000000000021 /* WorkspaceModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000121 /* WorkspaceModel.swift */; };
 		AA0000000000000000000022 /* WorkspaceRestore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000122 /* WorkspaceRestore.swift */; };
@@ -46,6 +47,22 @@
 		AA0000000000000000000052 /* CommandRun.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000140 /* CommandRun.swift */; };
 		AA0000000000000000000053 /* CommandRunFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000141 /* CommandRunFactory.swift */; };
 		AA0000000000000000000054 /* CommandHistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000142 /* CommandHistoryStore.swift */; };
+		AA0000000000000000000060 /* PromptBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000160 /* PromptBuffer.swift */; };
+		AA0000000000000000000061 /* GitRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000161 /* GitRepository.swift */; };
+		AA0000000000000000000062 /* PathCompleter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000162 /* PathCompleter.swift */; };
+		AA0000000000000000000063 /* CompletionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000163 /* CompletionEngine.swift */; };
+		AA0000000000000000000064 /* CompletionSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000164 /* CompletionSession.swift */; };
+		AA0000000000000000000065 /* GhostTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000165 /* GhostTextView.swift */; };
+		AA0000000000000000000070 /* PromptBufferTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000170 /* PromptBufferTests.swift */; };
+		AA0000000000000000000071 /* PathCompleterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000171 /* PathCompleterTests.swift */; };
+		AA0000000000000000000072 /* CompletionEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000172 /* CompletionEngineTests.swift */; };
+		AA0000000000000000000073 /* GitRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000173 /* GitRepositoryTests.swift */; };
+		AA0000000000000000000074 /* CompletionSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000174 /* CompletionSessionTests.swift */; };
+		AA0000000000000000000080 /* PromptBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000160 /* PromptBuffer.swift */; };
+		AA0000000000000000000081 /* GitRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000161 /* GitRepository.swift */; };
+		AA0000000000000000000082 /* PathCompleter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000162 /* PathCompleter.swift */; };
+		AA0000000000000000000083 /* CompletionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000163 /* CompletionEngine.swift */; };
+		AA0000000000000000000084 /* CompletionSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000164 /* CompletionSession.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -65,6 +82,8 @@
 		AA0000000000000000000104 /* GhosttySurfaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttySurfaceView.swift; sourceTree = "<group>"; };
 		AA0000000000000000000106 /* GhosttyInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyInput.swift; sourceTree = "<group>"; };
 		AA0000000000000000000107 /* GhosttyClipboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyClipboard.swift; sourceTree = "<group>"; };
+		AA0000000000000000000116 /* GhosttyInputKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyInputKit.swift; sourceTree = "<group>"; };
+		AA0000000000000000000117 /* GhosttyClipboardKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyClipboardKit.swift; sourceTree = "<group>"; };
 		AA0000000000000000000108 /* GhosttyKit.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = Vendor/ghostty/macos/GhosttyKit.xcframework; sourceTree = "<group>"; };
 		AA0000000000000000000109 /* terminfo */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Vendor/ghostty/zig-out/share/terminfo; sourceTree = "<group>"; };
 		AA0000000000000000000114 /* ghostty */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Vendor/ghostty/zig-out/share/ghostty; sourceTree = "<group>"; };
@@ -88,6 +107,17 @@
 		AA0000000000000000000143 /* CommandHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandHistoryView.swift; sourceTree = "<group>"; };
 		AA0000000000000000000150 /* CommandRunFactoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandRunFactoryTests.swift; sourceTree = "<group>"; };
 		AA0000000000000000000151 /* CommandHistoryStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandHistoryStoreTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000160 /* PromptBuffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptBuffer.swift; sourceTree = "<group>"; };
+		AA0000000000000000000161 /* GitRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitRepository.swift; sourceTree = "<group>"; };
+		AA0000000000000000000162 /* PathCompleter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PathCompleter.swift; sourceTree = "<group>"; };
+		AA0000000000000000000163 /* CompletionEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompletionEngine.swift; sourceTree = "<group>"; };
+		AA0000000000000000000164 /* CompletionSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompletionSession.swift; sourceTree = "<group>"; };
+		AA0000000000000000000165 /* GhostTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhostTextView.swift; sourceTree = "<group>"; };
+		AA0000000000000000000170 /* PromptBufferTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptBufferTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000171 /* PathCompleterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PathCompleterTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000172 /* CompletionEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompletionEngineTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000173 /* GitRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitRepositoryTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000174 /* CompletionSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompletionSessionTests.swift; sourceTree = "<group>"; };
 		AA0000000000000000000112 /* Sora.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Sora.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0000000000000000000113 /* SoraTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SoraTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -105,7 +135,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				AA0000000000000000000012 /* GhosttyKit.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -132,6 +161,7 @@
 				AA0000000000000000000506 /* Workspace */,
 				AA0000000000000000000507 /* Commands */,
 				AA0000000000000000000508 /* Storage */,
+				AA0000000000000000000509 /* Completion */,
 			);
 			path = Sora;
 			sourceTree = "<group>";
@@ -151,7 +181,9 @@
 				AA0000000000000000000103 /* GhosttyRuntime.swift */,
 				AA0000000000000000000104 /* GhosttySurfaceView.swift */,
 				AA0000000000000000000106 /* GhosttyInput.swift */,
+				AA0000000000000000000116 /* GhosttyInputKit.swift */,
 				AA0000000000000000000107 /* GhosttyClipboard.swift */,
+				AA0000000000000000000117 /* GhosttyClipboardKit.swift */,
 			);
 			path = Terminal;
 			sourceTree = "<group>";
@@ -189,6 +221,19 @@
 			path = Storage;
 			sourceTree = "<group>";
 		};
+		AA0000000000000000000509 /* Completion */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000160 /* PromptBuffer.swift */,
+				AA0000000000000000000161 /* GitRepository.swift */,
+				AA0000000000000000000162 /* PathCompleter.swift */,
+				AA0000000000000000000163 /* CompletionEngine.swift */,
+				AA0000000000000000000164 /* CompletionSession.swift */,
+				AA0000000000000000000165 /* GhostTextView.swift */,
+			);
+			path = Completion;
+			sourceTree = "<group>";
+		};
 		AA0000000000000000000504 /* SoraTests */ = {
 			isa = PBXGroup;
 			children = (
@@ -200,6 +245,11 @@
 				AA0000000000000000000133 /* ForegroundWorkingDirectoryTests.swift */,
 				AA0000000000000000000150 /* CommandRunFactoryTests.swift */,
 				AA0000000000000000000151 /* CommandHistoryStoreTests.swift */,
+				AA0000000000000000000170 /* PromptBufferTests.swift */,
+				AA0000000000000000000171 /* PathCompleterTests.swift */,
+				AA0000000000000000000172 /* CompletionEngineTests.swift */,
+				AA0000000000000000000173 /* GitRepositoryTests.swift */,
+				AA0000000000000000000174 /* CompletionSessionTests.swift */,
 			);
 			path = SoraTests;
 			sourceTree = "<group>";
@@ -301,7 +351,9 @@
 				AA0000000000000000000003 /* GhosttyRuntime.swift in Sources */,
 				AA0000000000000000000004 /* GhosttySurfaceView.swift in Sources */,
 				AA0000000000000000000006 /* GhosttyInput.swift in Sources */,
+				AA0000000000000000000016 /* GhosttyInputKit.swift in Sources */,
 				AA0000000000000000000007 /* GhosttyClipboard.swift in Sources */,
+				AA0000000000000000000017 /* GhosttyClipboardKit.swift in Sources */,
 				AA0000000000000000000020 /* WorkspaceSnapshot.swift in Sources */,
 				AA0000000000000000000021 /* WorkspaceModel.swift in Sources */,
 				AA0000000000000000000022 /* WorkspaceRestore.swift in Sources */,
@@ -314,6 +366,12 @@
 				AA0000000000000000000041 /* CommandRunFactory.swift in Sources */,
 				AA0000000000000000000042 /* CommandHistoryStore.swift in Sources */,
 				AA0000000000000000000043 /* CommandHistoryView.swift in Sources */,
+				AA0000000000000000000060 /* PromptBuffer.swift in Sources */,
+				AA0000000000000000000061 /* GitRepository.swift in Sources */,
+				AA0000000000000000000062 /* PathCompleter.swift in Sources */,
+				AA0000000000000000000063 /* CompletionEngine.swift in Sources */,
+				AA0000000000000000000064 /* CompletionSession.swift in Sources */,
+				AA0000000000000000000065 /* GhostTextView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -338,6 +396,16 @@
 				AA0000000000000000000052 /* CommandRun.swift in Sources */,
 				AA0000000000000000000053 /* CommandRunFactory.swift in Sources */,
 				AA0000000000000000000054 /* CommandHistoryStore.swift in Sources */,
+				AA0000000000000000000070 /* PromptBufferTests.swift in Sources */,
+				AA0000000000000000000071 /* PathCompleterTests.swift in Sources */,
+				AA0000000000000000000072 /* CompletionEngineTests.swift in Sources */,
+				AA0000000000000000000073 /* GitRepositoryTests.swift in Sources */,
+				AA0000000000000000000074 /* CompletionSessionTests.swift in Sources */,
+				AA0000000000000000000080 /* PromptBuffer.swift in Sources */,
+				AA0000000000000000000081 /* GitRepository.swift in Sources */,
+				AA0000000000000000000082 /* PathCompleter.swift in Sources */,
+				AA0000000000000000000083 /* CompletionEngine.swift in Sources */,
+				AA0000000000000000000084 /* CompletionSession.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -487,22 +555,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 0.1.0;
 				OTHER_LDFLAGS = (
-					"-lstdc++",
 					"-lsqlite3",
-					"-framework",
-					Carbon,
-					"-framework",
-					Metal,
-					"-framework",
-					MetalKit,
-					"-framework",
-					CoreText,
-					"-framework",
-					CoreGraphics,
-					"-framework",
-					QuartzCore,
-					"-framework",
-					IOSurface,
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = dev.sora.app.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -520,22 +573,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 0.1.0;
 				OTHER_LDFLAGS = (
-					"-lstdc++",
 					"-lsqlite3",
-					"-framework",
-					Carbon,
-					"-framework",
-					Metal,
-					"-framework",
-					MetalKit,
-					"-framework",
-					CoreText,
-					"-framework",
-					CoreGraphics,
-					"-framework",
-					QuartzCore,
-					"-framework",
-					IOSurface,
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = dev.sora.app.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";

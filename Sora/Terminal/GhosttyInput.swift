@@ -1,35 +1,28 @@
 import AppKit
-import GhosttyKit
 
 enum GhosttyInput {
-    static func mods(from flags: NSEvent.ModifierFlags) -> ghostty_input_mods_e {
-        var mods: UInt32 = GHOSTTY_MODS_NONE.rawValue
-        if flags.contains(.shift) { mods |= GHOSTTY_MODS_SHIFT.rawValue }
-        if flags.contains(.control) { mods |= GHOSTTY_MODS_CTRL.rawValue }
-        if flags.contains(.option) { mods |= GHOSTTY_MODS_ALT.rawValue }
-        if flags.contains(.command) { mods |= GHOSTTY_MODS_SUPER.rawValue }
-        if flags.contains(.capsLock) { mods |= GHOSTTY_MODS_CAPS.rawValue }
-        return ghostty_input_mods_e(mods)
+    /// Matches `GHOSTTY_MODS_*` in ghostty.h. `command` is `GHOSTTY_MODS_SUPER`.
+    enum Mods {
+        static let none: UInt32 = 0
+        static let shift: UInt32 = 1 << 0
+        static let ctrl: UInt32 = 1 << 1
+        static let alt: UInt32 = 1 << 2
+        static let command: UInt32 = 1 << 3
+        static let caps: UInt32 = 1 << 4
     }
 
-    static func keyEvent(
-        from event: NSEvent,
-        action: ghostty_input_action_e
-    ) -> ghostty_input_key_s {
-        var key = ghostty_input_key_s()
-        key.action = action
-        key.keycode = UInt32(event.keyCode)
-        key.text = nil
-        key.composing = false
-        key.mods = mods(from: event.modifierFlags)
-        key.consumed_mods = mods(from: event.modifierFlags.subtracting([.control, .command]))
-        key.unshifted_codepoint = 0
-        if event.type == .keyDown || event.type == .keyUp,
-           let chars = event.characters(byApplyingModifiers: []),
-           let codepoint = chars.unicodeScalars.first {
-            key.unshifted_codepoint = codepoint.value
-        }
-        return key
+    static func modBits(from flags: NSEvent.ModifierFlags) -> UInt32 {
+        var mods: UInt32 = Mods.none
+        if flags.contains(.shift) { mods |= Mods.shift }
+        if flags.contains(.control) { mods |= Mods.ctrl }
+        if flags.contains(.option) { mods |= Mods.alt }
+        if flags.contains(.command) { mods |= Mods.command }
+        if flags.contains(.capsLock) { mods |= Mods.caps }
+        return mods
+    }
+
+    static func scrollPrecisionBit(_ precision: Bool) -> UInt32 {
+        precision ? 1 : 0
     }
 
     /// Text Ghostty should encode for this key. Control characters and function-key
@@ -47,13 +40,20 @@ enum GhosttyInput {
         return characters
     }
 
-    static func scrollMods(precision: Bool) -> ghostty_input_scroll_mods_t {
-        precision ? 1 : 0
-    }
-
     /// libghostty mouse coordinates are top-left origin. AppKit view points
     /// (unflipped) are bottom-left origin.
     static func surfaceMousePoint(viewPoint: NSPoint, viewHeight: CGFloat) -> NSPoint {
         NSPoint(x: viewPoint.x, y: viewHeight - viewPoint.y)
+    }
+
+    /// `ghostty_surface_ime_point` is top-left origin with x at the cursor cell
+    /// midpoint and y at the cell bottom. AppKit overlay origin is bottom-left.
+    static func ghostTextOrigin(
+        imeX: CGFloat,
+        imeY: CGFloat,
+        viewHeight: CGFloat,
+        cellWidth: CGFloat
+    ) -> NSPoint {
+        NSPoint(x: imeX - cellWidth / 2, y: viewHeight - imeY)
     }
 }

@@ -42,8 +42,9 @@ Sora/
 └── Shared/
 ```
 
-Only create directories required by the current phase. Phase 3 creates
-`Application/`, `Terminal/`, `Workspace/`, `Commands/`, and `Storage/`.
+Only create directories required by the current phase. Phase 4 creates
+`Application/`, `Terminal/`, `Workspace/`, `Commands/`, `Storage/`, and
+`Completion/`.
 
 ## Responsibilities
 
@@ -61,7 +62,9 @@ Only create directories required by the current phase. Phase 3 creates
 - keyboard and pointer forwarding
 - resize and backing-scale propagation
 - clipboard: Cmd+C/V and Edit menu copy/paste via `ghostty_surface_read_selection` / `ghostty_surface_text`; OSC 52 via Ghostty runtime callbacks plus `NSPasteboard`
-- later: shell integration (Phase 3)
+- completion overlay: ghost text subview at `ghostty_surface_ime_point` (top-left → AppKit `y = height - y`). Do not install a `CAMetalLayer` on the host.
+
+Unit tests must not link GhosttyKit. `GhosttyInput.swift` and `GhosttyClipboard.swift` stay Ghostty-free; `GhosttyInputKit.swift` and `GhosttyClipboardKit.swift` are app-only.
 
 The host does not implement VT parsing, glyph rendering, or PTY spawn.
 
@@ -80,10 +83,12 @@ The host does not implement VT parsing, glyph rendering, or PTY spawn.
 
 ### Completion and Intelligence
 
-- offline history completion
-- filesystem and command-spec completion
-- ranking and project context
-- next-command prediction
+- prompt line tracked from keystrokes, not screen scraping
+- history prefix completion ranked by cwd, git root, frequency, and recency
+- filesystem path completion for tokens that look like paths
+- inline ghost text; Tab / Right Arrow accept without sending those keys to the PTY
+- overlay resets on Enter, Esc, arrows (except accept), Ctrl-C/U/A/E/K/W, Option, mouse down, and multiline paste. zsh Tab-complete and history recall desync the buffer until the next prompt.
+- next-command prediction (Phase 5)
 
 ### Agent, Providers, and Tools
 
