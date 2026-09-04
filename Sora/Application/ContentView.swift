@@ -15,12 +15,23 @@ struct ContentView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        HStack(spacing: 0) {
             WorkspaceTabBar(workspace: workspace)
-            Divider()
-            WorkspaceHostRepresentable(workspace: workspace)
-                .frame(minWidth: 400, minHeight: 240)
+            Rectangle()
+                .fill(SoraTheme.hairline)
+                .frame(width: 1)
+            VStack(spacing: 0) {
+                SessionHeader(workingDirectory: workspace.selected.workingDirectory)
+                WorkspaceHostRepresentable(workspace: workspace)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .padding(.horizontal, 10)
+                    .padding(.bottom, 10)
+                    .frame(minWidth: 480, minHeight: 280)
+            }
+            .background(SoraTheme.ink)
         }
+        .background(SoraTheme.sidebar)
+        .preferredColorScheme(.dark)
         .focusedSceneObject(workspace)
         .onAppear {
             runtime.markRestoreConsumed()

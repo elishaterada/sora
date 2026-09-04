@@ -54,6 +54,8 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
             // terminal under the title bar and clips the first line.
             window.styleMask.remove(.fullSizeContentView)
             window.titlebarAppearsTransparent = false
+            window.appearance = NSAppearance(named: .darkAqua)
+            window.backgroundColor = SoraTheme.nsInk
             createSurfaceIfNeeded()
             updateSurfaceMetrics()
             setOccluded(isHidden)

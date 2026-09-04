@@ -18,7 +18,7 @@ struct SoraApp: App {
         WindowGroup {
             ContentView(runtime: runtime)
         }
-        .defaultSize(width: 800, height: 500)
+        .defaultSize(width: 980, height: 620)
         .windowResizability(.contentMinSize)
         .commands {
             WorkspaceCommands()

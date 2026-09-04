@@ -75,4 +75,4 @@ Open **Window → Command History** after running a command to confirm structure
 
 ## Current status
 
-Phase 5 next-command prediction is in the tree: after a successful command, an empty prompt can show a `→` follow-up from local transitions. AI is not implemented.
+Phase 5 next-command prediction is in the tree. Session chrome (sidebar, cwd/git badges, bundled Ghostty theme) is in the tree. AI is not implemented.

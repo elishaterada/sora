@@ -36,4 +36,41 @@ enum GitRepository {
         let rootPath = root.standardizedFileURL.path
         return path == rootPath || path.hasPrefix(rootPath + "/")
     }
+
+    static func branchName(containing url: URL?, fileManager: FileManager = .default) -> String? {
+        guard let url else { return nil }
+        guard let gitDir = gitDirectory(containing: url, fileManager: fileManager) else { return nil }
+        let headURL = gitDir.appendingPathComponent("HEAD")
+        guard let raw = try? String(contentsOf: headURL, encoding: .utf8) else { return nil }
+        let head = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if head.hasPrefix("ref:") {
+            let ref = head.dropFirst(4).trimmingCharacters(in: .whitespaces)
+            return URL(fileURLWithPath: ref).lastPathComponent
+        }
+        if head.count >= 7 {
+            return String(head.prefix(7))
+        }
+        return nil
+    }
+
+    private static func gitDirectory(containing url: URL, fileManager: FileManager) -> URL? {
+        guard let root = root(containing: url, fileManager: fileManager) else { return nil }
+        let git = root.appendingPathComponent(".git")
+        var isDirectory: ObjCBool = false
+        guard fileManager.fileExists(atPath: git.path, isDirectory: &isDirectory) else { return nil }
+        if isDirectory.boolValue {
+            return git
+        }
+        guard let text = try? String(contentsOf: git, encoding: .utf8) else { return nil }
+        for line in text.split(whereSeparator: \.isNewline) {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard trimmed.hasPrefix("gitdir:") else { continue }
+            let rest = trimmed.dropFirst("gitdir:".count).trimmingCharacters(in: .whitespaces)
+            if rest.hasPrefix("/") {
+                return URL(fileURLWithPath: rest)
+            }
+            return root.appendingPathComponent(rest)
+        }
+        return nil
+    }
 }
