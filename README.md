@@ -75,4 +75,4 @@ Open **Window → Command History** after running a command to confirm structure
 
 ## Current status
 
-Phase 4 local completion is in the tree: history- and path-based ghost text, accepted with Tab or Right Arrow. AI is not implemented.
+Phase 4 local completion is complete. Human checks passed: history and path ghost text, Tab and Right Arrow accept, unmodified Tab still reaches zsh. AI is not implemented.

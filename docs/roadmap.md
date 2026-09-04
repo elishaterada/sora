@@ -65,11 +65,8 @@ Window → Command History with working directory and exit status.
 
 Exit: useful completion works offline and does not call an LLM per keystroke.
 
-**Status (2026-09-03):** implemented. Prefix completion is local and offline:
-history (cwd/repo/frequency/recency) plus filesystem paths. Ghost text sits at
-`ghostty_surface_ime_point`; Tab or Right Arrow inserts the suffix through
-`ghostty_surface_text` and does not send those keys to the PTY. Unmodified Tab
-still reaches zsh when there is no suggestion. Human check remaining.
+**Status (2026-09-03):** complete. Human checks passed: history and path ghost text,
+Tab and Right Arrow accept, unmodified Tab still reaches zsh.
 
 ## Phase 5: next-command prediction
 
