@@ -22,7 +22,7 @@ struct SoraApp: App {
         }
         .defaultSize(width: 980, height: 620)
         .windowResizability(.contentMinSize)
-        .windowToolbarStyle(.unified)
+        .windowToolbarStyle(.unifiedCompact)
         .commands {
             WorkspaceCommands()
             HistoryCommands()

@@ -17,18 +17,16 @@ struct ContentView: View {
     var body: some View {
         NavigationSplitView {
             WorkspaceTabBar(workspace: workspace)
-                .navigationSplitViewColumnWidth(min: 176, ideal: 220, max: 280)
+                .navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 260)
         } detail: {
             WorkspaceHostRepresentable(workspace: workspace)
-                .padding(12)
                 .frame(minWidth: 480, minHeight: 280)
-                .background(.clear)
+                .navigationTitle(workspace.selected.displayTitle)
                 .toolbar {
-                    ToolbarItem(placement: .principal) {
+                    ToolbarItemGroup(placement: .primaryAction) {
                         SessionHeader(workingDirectory: workspace.selected.workingDirectory)
                     }
                 }
-                .navigationTitle(workspace.selected.displayTitle)
         }
         .navigationSplitViewStyle(.balanced)
         .preferredColorScheme(.dark)

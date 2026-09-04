@@ -6,7 +6,7 @@ enum SoraTheme {
     static let muted = Color.secondary
     static let git = Color.green
     static let accent = Color.accentColor
-    static let terminalCornerRadius: CGFloat = 12
+    static let terminalCornerRadius: CGFloat = 0
 
     static var nsClear: NSColor { .clear }
 
@@ -15,19 +15,8 @@ enum SoraTheme {
         NSColor.white.withAlphaComponent(0.001)
     }
 
-    /// Dark tint so 18pt glyphs stay readable over wallpaper.
+    /// Window frost. Keep this lighter than a solid pane so the desktop shows through.
     static var nsGlassTint: NSColor {
-        NSColor(calibratedWhite: 0.08, alpha: 0.78)
-    }
-}
-
-extension View {
-    @ViewBuilder
-    func soraGlass<S: Shape>(in shape: S) -> some View {
-        if #available(macOS 26.0, *) {
-            self.glassEffect(.regular, in: shape)
-        } else {
-            self.background(.regularMaterial, in: shape)
-        }
+        NSColor(calibratedWhite: 0.10, alpha: 0.50)
     }
 }

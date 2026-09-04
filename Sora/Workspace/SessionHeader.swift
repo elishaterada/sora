@@ -4,12 +4,22 @@ struct SessionHeader: View {
     let workingDirectory: URL?
 
     var body: some View {
-        HStack(spacing: 8) {
-            badge(icon: "folder.fill", text: displayPath)
+        HStack(spacing: 5) {
+            Image(systemName: "folder")
+                .font(.system(size: 10, weight: .medium))
+            Text(displayPath)
+                .lineLimit(1)
             if let branch {
-                badge(icon: "arrow.triangle.branch", text: branch, tint: SoraTheme.git)
+                Text(branch)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
             }
         }
+        .font(.system(size: 11, weight: .medium))
+        .foregroundStyle(.secondary)
+        .controlSize(.small)
+        .help(displayPath)
+        .accessibilityElement(children: .combine)
     }
 
     private var displayPath: String {
@@ -26,21 +36,5 @@ struct SessionHeader: View {
     private var branch: String? {
         guard let workingDirectory else { return nil }
         return GitRepository.branchName(containing: workingDirectory)
-    }
-
-    private func badge(icon: String, text: String, tint: Color = SoraTheme.muted) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: icon)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(tint)
-            Text(text)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(SoraTheme.text)
-                .lineLimit(1)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
-        .soraGlass(in: Capsule())
-        .accessibilityElement(children: .combine)
     }
 }

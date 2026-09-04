@@ -1,5 +1,5 @@
 background = #000000
-background-opacity = 0.28
+background-opacity = 0.20
 background-blur = macos-glass-regular
 foreground = #f5f5f7
 cursor-color = #0a84ff
@@ -8,8 +8,8 @@ cursor-style = bar
 cursor-style-blink = false
 selection-background = #0a84ff
 selection-foreground = #ffffff
-window-padding-x = 16
-window-padding-y = 14
+window-padding-x = 14
+window-padding-y = 12
 window-padding-balance = true
 adjust-cell-height = 12%
 font-size = 18
