@@ -50,10 +50,11 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         if let window {
-            // fullSizeContentView draws the grid under the title bar and clips
-            // the first prompt. Unified toolbar stays above the terminal.
             window.styleMask.remove(.fullSizeContentView)
+            window.titleVisibility = .hidden
             window.titlebarAppearsTransparent = true
+            window.titlebarSeparatorStyle = .none
+            window.toolbar = nil
             window.isOpaque = false
             window.backgroundColor = SoraTheme.nsWindowFill
             window.appearance = NSAppearance(named: .darkAqua)

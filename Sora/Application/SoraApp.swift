@@ -9,6 +9,8 @@ struct SoraApp: App {
             let history = try CommandHistoryStore()
             try HushLogin.ensure()
             _ = try SoraZshBootstrap.prepare()
+            // App-scoped: do not change the user's global Tahoe defaults.
+            UserDefaults.standard.set(false, forKey: "NSSplitViewItemSidebarDefaultsToFloatingAppearance")
             let runtime = try GhosttyRuntime(history: history)
             _runtime = StateObject(wrappedValue: runtime)
         } catch {
@@ -22,7 +24,6 @@ struct SoraApp: App {
         }
         .defaultSize(width: 980, height: 620)
         .windowResizability(.contentMinSize)
-        .windowToolbarStyle(.unifiedCompact)
         .commands {
             WorkspaceCommands()
             HistoryCommands()

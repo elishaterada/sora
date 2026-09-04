@@ -6,7 +6,6 @@ enum SoraTheme {
     static let muted = Color.secondary
     static let git = Color.green
     static let accent = Color.accentColor
-    static let terminalCornerRadius: CGFloat = 0
 
     static var nsClear: NSColor { .clear }
 
