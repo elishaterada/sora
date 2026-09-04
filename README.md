@@ -1,0 +1,78 @@
+# Sora
+
+> Working name. Public naming and trademark clearance are not complete.
+
+Sora is a macOS-first terminal that combines a strong native terminal experience with local command intelligence and an optional built-in AI agent.
+
+The product must remain fully useful when AI is disabled. The intended progression is:
+
+1. Great terminal
+2. Smart terminal
+3. AI-assisted terminal
+4. Agentic development environment
+
+## Initial stack
+
+- Swift
+- SwiftUI with AppKit where necessary
+- Xcode
+- `libghostty` (GhosttyKit / libghostty-internal) for terminal emulation and rendering
+- SQLite for local structured history and workspace state
+- macOS Keychain for secrets when provider support is added
+
+Do not introduce Electron, Tauri, Flutter, Qt, a webview UI, or a separate Rust core during V0.
+
+## V0 goal
+
+Prove the native terminal foundation with the smallest useful vertical slice:
+
+- launch a native macOS app
+- embed a Ghostty-backed terminal surface
+- start the user's `zsh`
+- accept keyboard input
+- render terminal output
+- resize correctly
+- support copy and paste
+- manage terminal lifecycle cleanly
+- build and run reliably from Xcode
+
+AI, autocomplete, accounts, sync, cloud services, and polished styling are out of scope for V0.
+
+## Build and run
+
+Requirements:
+
+- macOS 13+ to run (building current Ghostty `main` needs Xcode 26 and the macOS 26 SDK)
+- [Zig 0.16.x](https://ziglang.org/download/) (`brew install zig`)
+- Metal Toolchain (`xcodebuild -downloadComponent MetalToolchain` if `xcrun -sdk macosx metal --version` fails)
+
+```sh
+# 1. Build GhosttyKit and terminfo (clones Ghostty at the pinned commit)
+./Scripts/build-ghosttykit.sh
+
+# 2. Build the app
+xcodebuild -project Sora.xcodeproj -scheme Sora -configuration Debug -destination 'platform=macOS' build
+
+# 3. Tests
+xcodebuild -project Sora.xcodeproj -scheme Sora -configuration Debug -destination 'platform=macOS' test
+```
+
+The first launch starts a login `zsh` in a single window. Cmd+T opens a new tab; Cmd+W closes the current tab. The app is unsandboxed and ad-hoc signed for local use.
+
+Ghostty is pinned to commit `c81f0b26871c7fbbe2fc35549fdad1f64ed29094`. See [`docs/libghostty-integration.md`](docs/libghostty-integration.md).
+
+## Documents
+
+- [`CURSOR_HANDOFF.md`](CURSOR_HANDOFF.md): first prompt and stopping point for Cursor
+- [`AGENTS.md`](AGENTS.md): persistent rules for coding agents
+- [`docs/architecture.md`](docs/architecture.md): target architecture and boundaries
+- [`docs/roadmap.md`](docs/roadmap.md): phased delivery plan
+- [`docs/libghostty-integration.md`](docs/libghostty-integration.md): integration research and decision checklist
+
+Open **Window → Command History** after running a command to confirm structured history.
+- [`docs/licensing.md`](docs/licensing.md): dependency and reference-project constraints
+- [`docs/naming.md`](docs/naming.md): working-name status
+
+## Current status
+
+Phase 3 shell semantics are in the tree: OSC 133 command boundaries persist to SQLite. AI is not implemented.
