@@ -4,8 +4,9 @@ import Foundation
 @MainActor
 final class AskSession: ObservableObject {
     @Published var draft = ""
+    @Published private(set) var selectedProvider: AIBackendID
     @Published var model: String {
-        didSet { defaults.set(model, forKey: "ai.model") }
+        didSet { defaults.set(model, forKey: "ai.model.\(selectedProvider.rawValue)") }
     }
     @Published var enabled: Bool {
         didSet {
@@ -18,23 +19,51 @@ final class AskSession: ObservableObject {
     @Published private(set) var errorMessage: String?
     @Published private(set) var setupMessage: String?
 
-    private let provider: any AIProvider
-    private let credentials: any AICredentialStore
-    private let conversations: any AIConversationStore
+    private let backends: [AIBackendID: AIBackend]
+    var availableProviders: [AIBackendID] { AIBackendID.allCases.filter { backends[$0] != nil } }
+    private var provider: any AIProvider { backends[selectedProvider]!.provider }
+    private var credentials: any AICredentialStore { backends[selectedProvider]!.credentials }
+    private var conversations: any AIConversationStore { backends[selectedProvider]!.conversations }
+    private var drafts: [AIBackendID: String] = [:]
     private let defaults: UserDefaults
     private var task: Task<Void, Never>?
     private var generation: UUID?
     private var loaded = false
     private var loadFailed = false
 
-    init(provider: any AIProvider, credentials: any AICredentialStore,
-         conversations: any AIConversationStore, defaults: UserDefaults = .standard) {
-        self.provider = provider
-        self.credentials = credentials
-        self.conversations = conversations
+    convenience init(provider: any AIProvider, credentials: any AICredentialStore,
+                     conversations: any AIConversationStore, defaults: UserDefaults = .standard) {
+        self.init(backends: [AIBackend(id: .openai, provider: provider, credentials: credentials,
+                                     conversations: conversations)], defaults: defaults)
+    }
+
+    init(backends: [AIBackend], defaults: UserDefaults = .standard) {
+        precondition(!backends.isEmpty)
+        self.backends = Dictionary(uniqueKeysWithValues: backends.map { ($0.id, $0) })
         self.defaults = defaults
+        let saved = AIBackendID(rawValue: defaults.string(forKey: "ai.provider") ?? "openai")
+        let selected = backends.first(where: { $0.id == saved })?.id ?? backends[0].id
+        self.selectedProvider = selected
         self.enabled = defaults.bool(forKey: "ai.enabled")
-        self.model = defaults.string(forKey: "ai.model") ?? "gpt-5.4-mini"
+        let legacy = selected == .openai ? defaults.string(forKey: "ai.model") : nil
+        self.model = defaults.string(forKey: "ai.model.\(selected.rawValue)") ?? legacy ?? selected.defaultModel
+    }
+
+    func selectProvider(_ id: AIBackendID) {
+        guard id != selectedProvider, backends[id] != nil else { return }
+        stop()
+        drafts[selectedProvider] = draft
+        selectedProvider = id
+        defaults.set(id.rawValue, forKey: "ai.provider")
+        model = defaults.string(forKey: "ai.model.\(id.rawValue)")
+            ?? (id == .openai ? defaults.string(forKey: "ai.model") : nil) ?? id.defaultModel
+        draft = drafts[id] ?? ""
+        messages = []
+        loaded = false
+        loadFailed = false
+        errorMessage = nil
+        setupMessage = nil
+        load()
     }
 
     deinit { task?.cancel() }
@@ -54,6 +83,7 @@ final class AskSession: ObservableObject {
     }
 
     func saveKey(_ key: String) -> Bool {
+        guard selectedProvider.needsKey else { return false }
         do {
             try credentials.save(key)
             setupMessage = "API key saved in Keychain."
@@ -66,6 +96,7 @@ final class AskSession: ObservableObject {
     }
 
     func removeKey() {
+        guard selectedProvider.needsKey else { return }
         stop()
         do {
             try credentials.delete()
@@ -81,10 +112,14 @@ final class AskSession: ObservableObject {
         let question = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !question.isEmpty else { return }
         let model = model.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !model.isEmpty else { errorMessage = AIError.invalidModel.localizedDescription; return }
+        guard !selectedProvider.needsKey || !model.isEmpty else { errorMessage = AIError.invalidModel.localizedDescription; return }
 
         do {
-            guard let key = try credentials.read(), !key.isEmpty else { throw AIError.missingKey }
+            let key: String
+            if selectedProvider.needsKey {
+                guard let savedKey = try credentials.read(), !savedKey.isEmpty else { throw AIError.missingKey }
+                key = savedKey
+            } else { key = "" }
             // Send only complete question/answer pairs. Stopped or failed turns
             // stay visible locally but cannot masquerade as complete answers.
             var context: [AIMessage] = []

@@ -2,6 +2,43 @@ import Foundation
 import XCTest
 
 final class OpenAIProviderTests: XCTestCase {
+    func testProviderSpecificEndpointsHeadersAndPayloads() throws {
+        let request = AIRequest(model: "test-model", messages: [AIMessage(role: .user, text: "Explain pwd")])
+        let anthropic = try HTTPAIProvider.urlRequest(kind: .anthropic, request: request, credential: "anthropic-key")
+        XCTAssertEqual(anthropic.url?.host, "api.anthropic.com")
+        XCTAssertEqual(anthropic.value(forHTTPHeaderField: "x-api-key"), "anthropic-key")
+        XCTAssertEqual(anthropic.value(forHTTPHeaderField: "anthropic-version"), "2023-06-01")
+        XCTAssertNil(anthropic.value(forHTTPHeaderField: "Authorization"))
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: anthropic.httpBody!) as? [String: Any])
+        XCTAssertNotNil(body["system"])
+        XCTAssertEqual(body["max_tokens"] as? Int, 4096)
+        let gateway = try HTTPAIProvider.urlRequest(kind: .gateway, request: request, credential: "gateway-key")
+        XCTAssertEqual(gateway.url?.absoluteString, "https://ai-gateway.vercel.sh/v1/chat/completions")
+        XCTAssertEqual(gateway.value(forHTTPHeaderField: "Authorization"), "Bearer gateway-key")
+        XCTAssertNil(gateway.value(forHTTPHeaderField: "x-api-key"))
+        XCTAssertFalse(String(decoding: gateway.httpBody!, as: UTF8.self).contains("gateway-key"))
+    }
+
+    func testAnthropicStreamingCompletionAndTruncation() throws {
+        var parser = ProviderStreamDecoder(kind: .anthropic)
+        XCTAssertEqual(try parser.parse(line: "data: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"Hi\"}}"), [.text("Hi")])
+        XCTAssertEqual(try parser.parse(line: "data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"}}"), [])
+        XCTAssertEqual(try parser.parse(line: "data: {\"type\":\"message_stop\"}"), [.completed])
+        var truncated = ProviderStreamDecoder(kind: .anthropic)
+        XCTAssertThrowsError(try truncated.parse(line: "data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"max_tokens\"}}"))
+        XCTAssertThrowsError(try truncated.parse(line: "data: {\"type\":\"message_stop\"}"))
+        XCTAssertThrowsError(try truncated.parse(line: "data: {\"type\":\"error\",\"error\":{}}"))
+    }
+
+    func testGatewayRequiresFinishReasonBeforeDone() throws {
+        var parser = ProviderStreamDecoder(kind: .gateway)
+        XCTAssertEqual(try parser.parse(line: "data: {\"choices\":[{\"delta\":{\"content\":\"hello\"},\"finish_reason\":null}]}"), [.text("hello")])
+        XCTAssertThrowsError(try parser.parse(line: "data: [DONE]"))
+        XCTAssertEqual(try parser.parse(line: "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}"), [])
+        XCTAssertEqual(try parser.parse(line: "data: [DONE]"), [.completed])
+        XCTAssertThrowsError(try parser.parse(line: "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"length\"}]}"))
+    }
+
     func testURLSessionStreamingAndHTTPFailuresWithoutNetwork() async throws {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [AIHTTPFixture.self]
@@ -103,6 +140,55 @@ final class AskSessionTests: XCTestCase {
         XCTAssertEqual(session.errorMessage, AIError.missingKey.localizedDescription)
     }
 
+    func testSwitchingProvidersIsolatesCredentialsModelsDraftsAndConversations() async {
+        let first = ControlledProvider(), second = ControlledProvider()
+        let firstKey = MemoryKey("first-key"), secondKey = MemoryKey("second-key")
+        let firstStore = MemoryConversation(), secondStore = MemoryConversation()
+        let backends = [AIBackend(id: .openai, provider: first, credentials: firstKey, conversations: firstStore),
+                        AIBackend(id: .anthropic, provider: second, credentials: secondKey, conversations: secondStore)]
+        let session = AskSession(backends: backends, defaults: defaults)
+        session.enabled = true
+        session.model = "openai-model"
+        session.draft = "private OpenAI question"
+        session.send()
+        await waitFor { first.requests.count == 1 }
+        first.emit(.text("partial"))
+        await waitFor { session.messages.last?.text == "partial" }
+        session.draft = "OpenAI draft"
+        session.selectProvider(.anthropic)
+        XCTAssertFalse(session.isSending)
+        XCTAssertEqual(firstStore.messages.last?.status, .stopped)
+        XCTAssertTrue(session.messages.isEmpty)
+        XCTAssertEqual(session.draft, "")
+        XCTAssertEqual(session.model, AIBackendID.anthropic.defaultModel)
+        _ = session.saveKey("updated-second-key")
+        XCTAssertEqual(firstKey.value, "first-key")
+        XCTAssertEqual(secondKey.value, "updated-second-key")
+        session.draft = "Anthropic question"
+        session.send()
+        await waitFor { second.requests.count == 1 }
+        XCTAssertEqual(second.requests.first?.messages.map(\.text), ["Anthropic question"])
+        first.emit(.text("late OpenAI text"))
+        first.finish()
+        session.selectProvider(.openai)
+        XCTAssertEqual(session.draft, "OpenAI draft")
+        XCTAssertEqual(session.model, "openai-model")
+        XCTAssertEqual(session.messages.last?.text, "partial")
+    }
+
+    func testCodexAllowsDefaultModelAndDoesNotRequireAPIKey() async {
+        let provider = ControlledProvider()
+        let session = AskSession(backends: [AIBackend(id: .codex, provider: provider,
+            credentials: MemoryKey(nil), conversations: MemoryConversation())], defaults: defaults)
+        session.enabled = true
+        session.draft = "Codex question"
+        XCTAssertEqual(session.model, "")
+        session.send()
+        await waitFor { provider.requests.count == 1 }
+        XCTAssertTrue(session.isSending)
+        session.stop()
+    }
+
     func testStreamsPersistsAndIncludesCompletedConversationInNextTurn() async throws {
         let provider = ControlledProvider()
         let store = MemoryConversation()
@@ -180,6 +266,58 @@ final class AskSessionTests: XCTestCase {
             try? await Task.sleep(nanoseconds: 5_000_000)
         }
         XCTFail("Condition did not become true", file: file, line: line)
+    }
+}
+
+final class CodexProviderTests: XCTestCase {
+    func testShortRPCRepliesArriveWhileServerKeepsPipeOpen() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let script = directory.appendingPathComponent("codex-fixture")
+        let source = #"""
+        #!/bin/sh
+        while IFS= read -r line; do
+          case "$line" in
+            *'"initialize"'*) printf '%s\n' '{"id":1,"result":{"userAgent":"codex/0.153.0"}}' ;;
+            *'account'*) printf '%s\n' '{"id":2,"result":{"account":null}}' ;;
+          esac
+        done
+        """#
+        try Data(source.utf8).write(to: script)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: script.path)
+        let connection = CodexConnection()
+        let timeout = Task {
+            try await Task.sleep(nanoseconds: 3_000_000_000)
+            connection.close(CodexError.timedOut)
+        }
+        defer { timeout.cancel(); connection.close() }
+        try await connection.start(executable: script)
+        let account = try await connection.rpc("account/read", ["refreshToken": false])
+        XCTAssertTrue(account["account"] is NSNull)
+    }
+
+    func testCodexAskUsesAnEphemeralThreadWithoutEnvironmentOrTools() throws {
+        let params = CodexProvider.threadParameters(model: "")
+        XCTAssertEqual(params["ephemeral"] as? Bool, true)
+        XCTAssertEqual(params["sandbox"] as? String, "read-only")
+        XCTAssertEqual((params["environments"] as? [String])?.count, 0)
+        XCTAssertEqual((params["dynamicTools"] as? [String])?.count, 0)
+        XCTAssertNil(params["model"])
+        XCTAssertEqual(CodexProvider.threadParameters(model: "chosen")["model"] as? String, "chosen")
+        XCTAssertTrue(CodexConnection.arguments.contains("features.hooks=false"))
+        XCTAssertTrue(CodexConnection.arguments.contains("features.shell_tool=false"))
+        XCTAssertTrue(CodexConnection.arguments.contains("cli_auth_credentials_store=\"keyring\""))
+        XCTAssertTrue(CodexConnection.supports("Codex Desktop/0.153.0 (Mac OS 26.6.2)"))
+        XCTAssertFalse(CodexConnection.supports("codex/0.100.0"))
+        XCTAssertFalse(CodexConnection.supports("unknown"))
+    }
+
+    func testCodexTranslatesOnlyAnswerAndTurnCompletionEvents() throws {
+        XCTAssertEqual(try CodexProvider.event(["method": "item/agentMessage/delta", "params": ["delta": "Hi"]]), .text("Hi"))
+        XCTAssertNil(try CodexProvider.event(["method": "item/reasoning/textDelta", "params": ["delta": "private"]]))
+        XCTAssertEqual(try CodexProvider.event(["method": "turn/completed", "params": ["turn": ["status": "completed"]]]), .completed)
+        XCTAssertThrowsError(try CodexProvider.event(["method": "turn/completed", "params": ["turn": ["status": "failed"]]]))
     }
 }
 

@@ -96,9 +96,10 @@ input on-grid while the live prompt is visible. Human check remaining.
 Exit: providers can be swapped without changing tool or permission behavior.
 
 **Status (2026-09-04):** first Ask vertical slice implemented, per explicit user
-request to start AI. Native Ask window, optional OpenAI provider, streaming and
-cancellation, Keychain credentials, and local conversation persistence are in the
-tree. Only explicit Ask messages are sent. Tool registry, tool permissions, and
+request to start AI. Native Ask supports OpenAI API, Codex through its official
+app-server, Anthropic API, and Vercel AI Gateway. Streaming and cancellation,
+Keychain credentials, Codex ChatGPT sign-in, and isolated local conversations
+are in the tree. Only explicit Ask messages are sent. Tool registry, tool permissions, and
 autonomous execution remain deferred; Phase 6 as a whole is not complete.
 See [`ai-ask.md`](ai-ask.md).
 
@@ -123,4 +124,3 @@ Exit: agents can perform bounded work with visible actions and consistent permis
 - extension marketplace
 - unofficial or scraped provider authentication
 - AI calls on every keystroke
-

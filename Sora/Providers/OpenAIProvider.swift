@@ -8,29 +8,7 @@ struct OpenAIProvider: AIProvider {
     }
 
     func events(for request: AIRequest, credential: String) -> AsyncThrowingStream<AIEvent, Error> {
-        AsyncThrowingStream { continuation in
-            let task = Task {
-                do {
-                    let (bytes, response) = try await session.bytes(for: Self.urlRequest(request, credential: credential))
-                    guard let http = response as? HTTPURLResponse else { throw AIError.malformedResponse }
-                    guard (200..<300).contains(http.statusCode) else { throw AIError.requestFailed(http.statusCode) }
-                    guard http.value(forHTTPHeaderField: "Content-Type")?.lowercased().contains("text/event-stream") == true
-                    else { throw AIError.malformedResponse }
-                    var completed = false
-                    for try await line in bytes.lines {
-                        try Task.checkCancellation()
-                        // Responses emits one JSON object per data line. Other
-                        // SSE fields and keepalive comments carry no text.
-                        guard let event = try Self.parse(line: line) else { continue }
-                        continuation.yield(event)
-                        if event == .completed { completed = true; break }
-                    }
-                    guard completed else { throw AIError.incompleteStream }
-                    continuation.finish()
-                } catch { continuation.finish(throwing: error) }
-            }
-            continuation.onTermination = { _ in task.cancel() }
-        }
+        HTTPAIProvider(kind: .openai, session: session).events(for: request, credential: credential)
     }
 
     static func urlRequest(_ request: AIRequest, credential: String) throws -> URLRequest {
@@ -45,13 +23,7 @@ struct OpenAIProvider: AIProvider {
             "stream": true,
             "store": false,
             "max_output_tokens": 4096,
-            "instructions": """
-            You are Sora's terminal assistant for macOS and zsh. Help explain commands,
-            troubleshoot errors, and propose concise, practical commands. You have no
-            access to the terminal, files, or command history beyond what the user pastes
-            into this conversation. Do not claim to run commands or inspect the computer.
-            Explain consequential side effects before suggesting destructive commands.
-            """,
+            "instructions": AIRequest.instructions,
             "input": request.messages.map { ["role": $0.role.rawValue, "content": $0.text] }
         ])
         return result

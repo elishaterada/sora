@@ -3,6 +3,7 @@ import SwiftUI
 
 struct AskView: View {
     @ObservedObject var session: AskSession
+    @StateObject private var codexLogin = CodexLogin()
     @State private var showingSetup = false
     @State private var keyDraft = ""
     @FocusState private var composerFocused: Bool
@@ -21,6 +22,14 @@ struct AskView: View {
                 Button("Setup", systemImage: "slider.horizontal.3") { showingSetup.toggle() }
             }
             .padding(20)
+            HStack {
+                Picker("Provider", selection: Binding(get: { session.selectedProvider }, set: { session.selectProvider($0) })) {
+                    ForEach(session.availableProviders) { id in Text(id.name).tag(id) }
+                }
+                .frame(maxWidth: 350)
+                Spacer()
+            }
+            .padding(.horizontal, 20).padding(.bottom, 12)
             Divider()
 
             if showingSetup || !session.enabled {
@@ -70,7 +79,7 @@ struct AskView: View {
                     .focused($composerFocused)
                     .accessibilityLabel("Question")
                 HStack {
-                    Text("Only this conversation is sent to OpenAI.")
+                    Text(session.selectedProvider.disclosure)
                         .font(.caption).foregroundStyle(.secondary)
                     Spacer()
                     if session.isSending {
@@ -90,28 +99,47 @@ struct AskView: View {
             session.load()
             if !session.enabled { showingSetup = true }
         }
-        .onDisappear { session.stop(); keyDraft = "" }
+        .onChange(of: session.selectedProvider) { _ in
+            keyDraft = ""
+            codexLogin.cancel()
+            showingSetup = true
+        }
+        .onDisappear { session.stop(); codexLogin.cancel(); keyDraft = "" }
     }
 
     private var setup: some View {
         VStack(alignment: .leading, spacing: 12) {
             Toggle("Enable AI", isOn: $session.enabled)
-            Text("Use your own OpenAI API key. API usage is billed separately from ChatGPT.")
-                .font(.caption).foregroundStyle(.secondary)
-            HStack {
-                SecureField("OpenAI API key", text: $keyDraft)
-                Button("Save Key") {
-                    if session.saveKey(keyDraft) { keyDraft = "" }
+            if session.selectedProvider == .codex {
+                Text("Use the installed Codex CLI with your Codex / ChatGPT sign-in. Sora does not copy login tokens.")
+                    .font(.caption).foregroundStyle(.secondary)
+                HStack {
+                    Button("Check Sign-In") { codexLogin.connect(signIn: false) }
+                    Button("Sign In with ChatGPT") { codexLogin.connect(signIn: true) }
+                    if codexLogin.isBusy { Button("Cancel") { codexLogin.cancel() } }
                 }
-                .disabled(keyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || session.isSending)
-                Button("Remove Key") { session.removeKey(); keyDraft = "" }
+                .disabled(session.isSending)
+                Text(codexLogin.status).font(.caption).foregroundStyle(.secondary)
+            } else {
+                Text(session.selectedProvider == .openai
+                     ? "Use your OpenAI API key. API usage is billed separately from ChatGPT."
+                     : "Use your \(session.selectedProvider.name) key. Usage is billed by that service.")
+                    .font(.caption).foregroundStyle(.secondary)
+                HStack {
+                    SecureField("\(session.selectedProvider.name) key", text: $keyDraft)
+                    Button("Save Key") {
+                        if session.saveKey(keyDraft) { keyDraft = "" }
+                    }
+                    .disabled(keyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || session.isSending)
+                    Button("Remove Key") { session.removeKey(); keyDraft = "" }
+                }
             }
-            TextField("Model ID", text: $session.model)
+            TextField(session.selectedProvider == .codex ? "Model ID (blank uses Codex default)" : "Model ID", text: $session.model)
                 .disabled(session.isSending)
             if let message = session.setupMessage {
                 Text(message).font(.caption).foregroundStyle(.secondary)
             }
-            Text("Your key stays in macOS Keychain. Conversations are saved on this Mac. Sora does not run AI-generated commands.")
+            Text("Credentials stay in macOS Keychain. Each provider has its own local conversation. Ask does not run commands.")
                 .font(.caption).foregroundStyle(.secondary)
         }
         .textFieldStyle(.roundedBorder)

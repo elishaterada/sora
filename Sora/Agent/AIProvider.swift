@@ -11,6 +11,13 @@ struct AIMessage: Codable, Identifiable, Equatable, Sendable {
 }
 
 struct AIRequest: Sendable {
+    static let instructions = """
+    You are Sora's terminal assistant for macOS and zsh. Explain commands,
+    troubleshoot errors, and propose concise, practical commands. You have no
+    access to terminal, files, or command history beyond this conversation.
+    Do not claim to execute commands or inspect the computer. Explain important
+    side effects before suggesting destructive commands. Answer using text only.
+    """
     let model: String
     let messages: [AIMessage]
 }
