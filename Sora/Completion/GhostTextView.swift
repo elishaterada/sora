@@ -10,7 +10,7 @@ final class GhostTextView: NSView {
         }
     }
 
-    var font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular) {
+    var font = NSFont.monospacedSystemFont(ofSize: 18, weight: .regular) {
         didSet { needsDisplay = true }
     }
     private var predicted = false

@@ -9,12 +9,11 @@ struct CommandHistoryView: View {
                 VStack(spacing: 10) {
                     Image(systemName: "clock.arrow.circlepath")
                         .font(.system(size: 28, weight: .light))
-                        .foregroundStyle(SoraTheme.copper)
+                        .foregroundStyle(SoraTheme.accent)
                     Text("No recorded commands yet")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(SoraTheme.text)
+                        .font(.headline)
                     Text("Run a command in a terminal tab to see it here.")
-                        .font(.system(size: 12))
+                        .font(.subheadline)
                         .foregroundStyle(SoraTheme.muted)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -24,27 +23,23 @@ struct CommandHistoryView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text(run.command)
                             .font(.system(.body, design: .monospaced))
-                            .foregroundStyle(SoraTheme.text)
                             .lineLimit(2)
                         HStack(spacing: 8) {
                             Label(run.cwd.lastPathComponent, systemImage: "folder")
                             Spacer()
                             Text("exit \(run.exitCode)")
-                                .foregroundStyle(run.exitCode == 0 ? SoraTheme.sage : Color(red: 0.82, green: 0.42, blue: 0.42))
+                                .foregroundStyle(run.exitCode == 0 ? SoraTheme.git : Color.red)
                             Text(run.finishedAt, style: .time)
                         }
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.caption)
                         .foregroundStyle(SoraTheme.muted)
                         .labelStyle(.titleAndIcon)
                     }
-                    .padding(.vertical, 6)
-                    .listRowBackground(SoraTheme.surface)
+                    .padding(.vertical, 4)
                 }
                 .listStyle(.inset)
-                .scrollContentBackground(.hidden)
             }
         }
-        .background(SoraTheme.ink)
         .preferredColorScheme(.dark)
         .frame(minWidth: 420, minHeight: 240)
         .navigationTitle("History")

@@ -15,22 +15,21 @@ struct ContentView: View {
     }
 
     var body: some View {
-        HStack(spacing: 0) {
+        NavigationSplitView {
             WorkspaceTabBar(workspace: workspace)
-            Rectangle()
-                .fill(SoraTheme.hairline)
-                .frame(width: 1)
-            VStack(spacing: 0) {
-                SessionHeader(workingDirectory: workspace.selected.workingDirectory)
-                WorkspaceHostRepresentable(workspace: workspace)
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    .padding(.horizontal, 10)
-                    .padding(.bottom, 10)
-                    .frame(minWidth: 480, minHeight: 280)
-            }
-            .background(SoraTheme.ink)
+                .navigationSplitViewColumnWidth(min: 176, ideal: 220, max: 280)
+        } detail: {
+            WorkspaceHostRepresentable(workspace: workspace)
+                .padding(12)
+                .frame(minWidth: 480, minHeight: 280)
+                .toolbar {
+                    ToolbarItem(placement: .principal) {
+                        SessionHeader(workingDirectory: workspace.selected.workingDirectory)
+                    }
+                }
+                .navigationTitle(workspace.selected.displayTitle)
         }
-        .background(SoraTheme.sidebar)
+        .navigationSplitViewStyle(.balanced)
         .preferredColorScheme(.dark)
         .focusedSceneObject(workspace)
         .onAppear {
