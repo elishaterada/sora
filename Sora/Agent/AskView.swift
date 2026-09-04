@@ -5,6 +5,7 @@ struct AskView: View {
     @ObservedObject var session: AskSession
     var inline = false
     var onClose: (() -> Void)?
+    var onRunCommand: ((UUID) -> Void)?
     @StateObject private var codexLogin = CodexLogin()
     @State private var showingSetup = false
     @State private var keyDraft = ""
@@ -167,7 +168,7 @@ struct AskView: View {
             if let message = session.setupMessage {
                 Text(message).font(.caption).foregroundStyle(.secondary)
             }
-            Text("Credentials stay in macOS Keychain. Each provider has its own local conversation. Ask does not run commands.")
+            Text("Credentials stay in macOS Keychain. Each provider has its own local conversation. Commands require approval.")
                 .font(.caption).foregroundStyle(.secondary)
         }
         .textFieldStyle(.roundedBorder)
@@ -189,9 +190,15 @@ struct AskView: View {
             }
             if message.text.isEmpty && message.status == .streaming {
                 ProgressView("Thinking…").controlSize(.small)
+            } else if message.status == .streaming,
+                      AgentCommandProposalParser.isStreamingEnvelope(message.text) {
+                ProgressView("Preparing a command…").controlSize(.small)
             } else {
                 Text(message.text).textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            if let proposal = message.commandProposal {
+                commandCard(proposal, messageID: message.id)
             }
             if let page = message.webpage {
                 DisclosureGroup("Webpage: \(page.title)") {
@@ -207,5 +214,37 @@ struct AskView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
+    }
+
+    private func commandCard(_ proposal: AgentCommandProposal, messageID: UUID) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Image(systemName: proposal.status == .pending ? "terminal" :
+                      proposal.status == .approved ? "checkmark.circle.fill" : "xmark.circle")
+                Text(proposal.status == .pending ? "Run this command in the terminal?" :
+                     proposal.status == .approved ? "Approved and sent to the terminal" : "Command dismissed")
+                    .font(.callout.weight(.semibold))
+                Spacer()
+            }
+            ScrollView(.horizontal) {
+                Text(proposal.command)
+                    .font(.system(.body, design: .monospaced))
+                    .textSelection(.enabled)
+                    .padding(12)
+            }
+            .background(Color.black.opacity(0.28), in: RoundedRectangle(cornerRadius: 7))
+            if proposal.status == .pending {
+                HStack {
+                    Button("Dismiss") { session.dismissCommand(messageID: messageID) }
+                    Spacer()
+                    Button("Run in Terminal", systemImage: "play.fill") { onRunCommand?(messageID) }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(onRunCommand == nil)
+                }
+            }
+        }
+        .padding(14)
+        .background(Color.accentColor.opacity(0.10), in: RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.accentColor.opacity(0.55)))
     }
 }

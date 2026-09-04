@@ -207,12 +207,59 @@ final class AskSession: ObservableObject {
         } catch { errorMessage = "The conversation could not be cleared: \(error.localizedDescription)" }
     }
 
+    func approveCommand(messageID: UUID) -> AgentCommandProposal? {
+        guard let index = messages.firstIndex(where: { $0.id == messageID }),
+              var proposal = messages[index].commandProposal,
+              proposal.status == .pending
+        else { return nil }
+        proposal.status = .approved
+        var updated = messages
+        updated[index].commandProposal = proposal
+        do {
+            try conversations.save(updated)
+            messages = updated
+            errorMessage = nil
+            return proposal
+        } catch {
+            errorMessage = "The approval could not be saved, so the command was not run: \(error.localizedDescription)"
+            return nil
+        }
+    }
+
+    func dismissCommand(messageID: UUID) {
+        guard let index = messages.firstIndex(where: { $0.id == messageID }),
+              var proposal = messages[index].commandProposal,
+              proposal.status == .pending
+        else { return }
+        proposal.status = .dismissed
+        var updated = messages
+        updated[index].commandProposal = proposal
+        do {
+            try conversations.save(updated)
+            messages = updated
+            errorMessage = nil
+        } catch {
+            errorMessage = "The command decision could not be saved: \(error.localizedDescription)"
+        }
+    }
+
+    func reportCommandUnavailable() {
+        errorMessage = "Return to an empty, ready shell prompt before running this command."
+    }
+
     private func finish(token: UUID, responseID: UUID, status: AIMessage.Status, error: String? = nil) {
         guard generation == token else { return }
         generation = nil
         task = nil
         isSending = false
-        if let index = messages.firstIndex(where: { $0.id == responseID }) { messages[index].status = status }
+        if let index = messages.firstIndex(where: { $0.id == responseID }) {
+            messages[index].status = status
+            if status == .complete,
+               let proposal = AgentCommandProposalParser.parse(messages[index].text) {
+                messages[index].text = proposal.summary
+                messages[index].commandProposal = proposal
+            }
+        }
         errorMessage = error
         persist()
     }

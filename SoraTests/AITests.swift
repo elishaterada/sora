@@ -2,6 +2,24 @@ import Foundation
 import XCTest
 
 final class OpenAIProviderTests: XCTestCase {
+    func testCommandProposalEnvelopeIsStrictAndSingleLine() throws {
+        let valid = #"<SORA_COMMAND>{"summary":"List the largest files without changing them.","command":"find . -type f -print | head"}</SORA_COMMAND>"#
+        XCTAssertEqual(
+            AgentCommandProposalParser.parse(valid),
+            AgentCommandProposal(
+                summary: "List the largest files without changing them.",
+                command: "find . -type f -print | head"
+            )
+        )
+        XCTAssertTrue(AgentCommandProposalParser.isStreamingEnvelope("<SORA_"))
+        XCTAssertTrue(AgentCommandProposalParser.isStreamingEnvelope("<SORA_COMMAND>{"))
+        XCTAssertNil(AgentCommandProposalParser.parse("Run this:\n\(valid)"))
+        XCTAssertNil(AgentCommandProposalParser.parse(#"<SORA_COMMAND>{"summary":"Run it","command":"pwd\nwhoami"}</SORA_COMMAND>"#))
+        XCTAssertNil(AgentCommandProposalParser.parse(#"<SORA_COMMAND>{"summary":"","command":"pwd"}</SORA_COMMAND>"#))
+        XCTAssertFalse(AgentCommandProposal.isValidCommand("pwd\u{1B}"))
+        XCTAssertFalse(AgentCommandProposal.isValidCommand("echo safe\u{202E}txt"))
+    }
+
     func testGrokRequestUsesDirectXAIEndpointAndExplicitConversation() throws {
         let request = AIRequest(model: AIBackendID.grok.defaultModel,
                                 messages: [AIMessage(role: .user, text: "Explain pwd")])
@@ -266,6 +284,52 @@ final class AskSessionTests: XCTestCase {
         XCTAssertEqual(provider.requests.last?.messages.map(\.text), ["Explain pwd", "Prints the directory.", "And ls?"])
         XCTAssertEqual(provider.requests.last?.messages.first?.webpage, page)
         session.stop()
+    }
+
+    func testCommandProposalRequiresPersistedApprovalAndCannotRunTwice() async throws {
+        let provider = ControlledProvider()
+        let store = MemoryConversation()
+        let session = makeSession(provider, store: store)
+        session.enabled = true
+        session.draft = "Help me find large files"
+        session.send()
+        await waitFor { provider.requests.count == 1 }
+        provider.emit(.text(#"<SORA_COMMAND>{"summary":"Scan this folder read-only.","command":"find . -type f | head"}</SORA_COMMAND>"#))
+        provider.emit(.completed)
+        provider.finish()
+        await waitFor { !session.isSending }
+
+        let message = try XCTUnwrap(session.messages.last)
+        XCTAssertEqual(message.text, "Scan this folder read-only.")
+        XCTAssertEqual(message.commandProposal?.status, .pending)
+        XCTAssertEqual(message.commandProposal?.command, "find . -type f | head")
+
+        store.failSave = true
+        XCTAssertNil(session.approveCommand(messageID: message.id))
+        XCTAssertEqual(session.messages.last?.commandProposal?.status, .pending)
+        store.failSave = false
+        let approved = try XCTUnwrap(session.approveCommand(messageID: message.id))
+        XCTAssertEqual(approved.status, .approved)
+        XCTAssertEqual(store.messages.last?.commandProposal?.status, .approved)
+        XCTAssertNil(session.approveCommand(messageID: message.id))
+    }
+
+    func testCommandProposalDismissalIsPersisted() async throws {
+        let provider = ControlledProvider()
+        let store = MemoryConversation()
+        let session = makeSession(provider, store: store)
+        session.enabled = true
+        session.draft = "Show disk usage"
+        session.send()
+        await waitFor { provider.requests.count == 1 }
+        provider.emit(.text(#"<SORA_COMMAND>{"summary":"Show disk usage.","command":"du -sh ."}</SORA_COMMAND>"#))
+        provider.emit(.completed)
+        provider.finish()
+        await waitFor { !session.isSending }
+        let id = try XCTUnwrap(session.messages.last?.id)
+        session.dismissCommand(messageID: id)
+        XCTAssertEqual(session.messages.last?.commandProposal?.status, .dismissed)
+        XCTAssertEqual(store.messages.last?.commandProposal?.status, .dismissed)
     }
 
     func testStopRejectsLateEventsAndNewTurnExcludesPartialAnswer() async {

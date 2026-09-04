@@ -115,6 +115,13 @@ ambiguous input remains with the shell. Routing is disabled while a foreground
 command or interactive program owns input. This slice does not add tools or
 autonomous execution.
 
+**Command approval slice (2026-09-04):** providers can propose one validated,
+single-line zsh command through Sora's provider-independent response envelope.
+The inline panel shows the purpose and exact command, and requires an explicit
+Dismiss or Run decision. Approval is persisted before the command is submitted
+to the current Ghostty terminal. No provider can execute directly, and command
+output is not yet returned to the model.
+
 ## Phase 7: agent mode and provider expansion
 
 - multi-step agent loop

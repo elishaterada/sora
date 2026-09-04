@@ -9,9 +9,11 @@ an autonomous command runner remain deferred.
 
 At a ready shell prompt, type a clear conversational request such as
 `Help me find the largest files` and press Return. Sora labels the line
-**AI prompt** while typing, removes it from the shell input, and opens Ask in
+**AI prompt** while typing, cancels it as shell input, and opens Ask in
 the same terminal tab. **Back to Terminal** or Escape returns to the unchanged
-terminal session. No separate Ask window is created.
+terminal session. The canceled request may remain visible in terminal
+scrollback, but it is never submitted as a command. No separate Ask window is
+created.
 
 Routing is conservative and local. Known command names, executable paths,
 assignments, shell operators, short input, and ambiguous text remain shell
@@ -45,6 +47,29 @@ text and prior completed Ask turns are sent. There is no automatic terminal,
 repository, working-directory, environment, or command-history collection.
 The local classifier makes no AI calls. A terminal sentence is sent only after
 the **AI prompt** label appears and the user presses Return.
+
+### Command approval
+
+When one shell command can directly advance a request, providers can return a
+Sora command proposal. The inline conversation shows the model's purpose and
+the exact single-line command in a bordered approval card. **Dismiss** records
+the rejection and leaves the terminal untouched. **Run in Terminal** first
+persists the approval, returns to the current terminal, inserts the displayed
+command, and submits it to zsh. A proposal cannot be approved twice.
+
+The provider never executes the proposal. Sora accepts only its exact internal
+envelope, a nonempty summary of at most 600 UTF-8 bytes, and one command of at
+most 4,096 UTF-8 bytes with no control, formatting, or line-separator
+characters. This prevents hidden input and misleading bidirectional display.
+Surrounding model prose, malformed JSON, and multi-line commands remain ordinary
+text and receive no Run button. The terminal must still be at a ready, empty
+shell prompt when approval is clicked.
+
+The request handoff uses a terminal interrupt to cancel zsh's complete edit
+buffer before opening AI. This avoids a race with zsh syntax-highlighting
+redraws that can make cursor-relative line deletion leave a suffix behind.
+The model does not receive command output after execution in this slice, and
+there is no multi-step agent loop.
 
 ### Attach webpage
 
@@ -100,6 +125,8 @@ without waiting for a full pipe buffer. Stderr and raw RPC errors are not logged
   Provider-owned schemas do not cross this boundary.
 - `Agent/PromptIntentClassifier.swift`: local conservative routing between
   shell input and an explicit Ask submission. It has no provider dependency.
+- `Agent/AgentCommandProposal.swift`: provider-independent proposal validation,
+  strict envelope parsing, and persisted approve/dismiss state.
 - `Agent/AskSession.swift`: explicit send, cancellation, completed-turn context,
   duplicate-send prevention, and request IDs that reject stale events.
 - `Providers/AIBackend.swift`: provider list, defaults, destinations, and stores.
@@ -135,7 +162,8 @@ and stopped turns remain visible but are excluded from later provider context.
 
 ## Verification and remaining work
 
-95 tests pass, including conversational prompt routing, shell-command false
+98 tests pass, including strict command proposal parsing, persisted one-time
+approval and dismissal, conversational prompt routing, shell-command false
 positives, explicit routing overrides, Unicode prompt tracking, provider and pending-attachment isolation,
 keys/models/drafts, disabled and
 missing-key behavior, streaming completion and cancellation, stale events,
@@ -152,8 +180,9 @@ provider payloads, context accounting, persistence failures, and late-result
 rejection after cancellation.
 
 The inline path was exercised by typing a conversational request at a ready
-prompt, streaming a live Vercel AI Gateway answer in the same tab, returning to
-a clean prompt, and running `pwd` normally. The installed Codex 0.153.0 app-server initialization and account/read handshake
+prompt, receiving and dismissing a live Vercel AI Gateway command proposal,
+approving a separate `pwd` proposal, and observing `pwd` run in the current
+Ghostty terminal. The installed Codex 0.153.0 app-server initialization and account/read handshake
 were exercised locally and in the app. Provider menus, model defaults, secure
 fields, and the Codex missing-sign-in state were checked manually. Vercel AI
 Gateway streaming was exercised with `openai/gpt-5.4`, including a two-turn
@@ -163,9 +192,10 @@ from that Gateway model. Other live responses and browser login completion still
 require user-supplied API keys or ChatGPT sign-in. The installed Codex currently reports
 no Keychain sign-in.
 
-The router does not grant tools or execute generated commands. The UI displays selectable plain text, including Markdown source. There is one
+The router grants no background tools and every command requires a visible
+approval. The UI displays selectable plain text, including Markdown source. There is one
 conversation per provider and no transcript browser. Terminal context attachments,
-command cards, tools, permissions, and agent loops are future slices.
+command-output capture, filesystem tools, and agent loops are future slices.
 Grok connects directly to `https://api.x.ai/v1/chat/completions` using Bearer
 authentication. This supported legacy endpoint reuses the existing stateless
 Chat Completions transport for this text-only slice. xAI recommends Responses
