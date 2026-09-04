@@ -7,8 +7,22 @@ an autonomous command runner remain deferred.
 
 ## User flow
 
-Open **AI → Ask Sora** or **Cmd+Shift+A**. AI starts disabled. Select a provider,
-open Setup, enable AI, and configure credentials and a model:
+At a ready shell prompt, type a clear conversational request such as
+`Help me find the largest files` and press Return. Sora labels the line
+**AI prompt** while typing, removes it from the shell input, and opens Ask in
+the same terminal tab. **Back to Terminal** or Escape returns to the unchanged
+terminal session. No separate Ask window is created.
+
+Routing is conservative and local. Known command names, executable paths,
+assignments, shell operators, short input, and ambiguous text remain shell
+input. Press **Cmd+Return** to force a detected sentence to run in the shell.
+Start a line with `/agent ` to force command-like text to AI; the prefix is
+removed before sending. Routing only occurs at a ready zsh prompt. Input to a
+foreground command, REPL, or other program always goes to that program.
+
+Open **AI → Ask Sora** or press **Cmd+Shift+A** to open the inline Ask panel
+without submitting terminal text. AI starts disabled. Select a provider, open
+Setup, enable AI, and configure credentials and a model:
 
 | Provider | Authentication | Default model |
 | --- | --- | --- |
@@ -19,8 +33,9 @@ open Setup, enable AI, and configure credentials and a model:
 | Grok (xAI) | xAI API key | `grok-4.6` |
 
 Model IDs are editable; Gateway uses `provider/model` IDs. API keys are saved
-from secure fields to Keychain. **Cmd+Return** sends a question. **Stop**,
-disabling AI, closing Ask, or switching providers cancels the current answer.
+from secure fields to Keychain. **Cmd+Return** sends a question from the Ask
+composer. **Stop**, disabling AI, closing Sora, or switching providers cancels
+the current answer.
 Partial answers stay visible. Copy copies text without executing anything.
 Standard Edit commands target the focused native field or terminal.
 
@@ -28,7 +43,8 @@ Switching providers restores that provider's own conversation, draft, and model.
 Conversations are not transferred between services. Only explicitly entered Ask
 text and prior completed Ask turns are sent. There is no automatic terminal,
 repository, working-directory, environment, or command-history collection.
-There are no AI calls from typing in the terminal.
+The local classifier makes no AI calls. A terminal sentence is sent only after
+the **AI prompt** label appears and the user presses Return.
 
 ### Attach webpage
 
@@ -82,6 +98,8 @@ without waiting for a full pipe buffer. Stderr and raw RPC errors are not logged
 
 - `Agent/AIProvider.swift`: internal messages, requests, events, and errors.
   Provider-owned schemas do not cross this boundary.
+- `Agent/PromptIntentClassifier.swift`: local conservative routing between
+  shell input and an explicit Ask submission. It has no provider dependency.
 - `Agent/AskSession.swift`: explicit send, cancellation, completed-turn context,
   duplicate-send prevention, and request IDs that reject stale events.
 - `Providers/AIBackend.swift`: provider list, defaults, destinations, and stores.
@@ -117,7 +135,8 @@ and stopped turns remain visible but are excluded from later provider context.
 
 ## Verification and remaining work
 
-90 tests pass, including provider and pending-attachment isolation,
+95 tests pass, including conversational prompt routing, shell-command false
+positives, explicit routing overrides, Unicode prompt tracking, provider and pending-attachment isolation,
 keys/models/drafts, disabled and
 missing-key behavior, streaming completion and cancellation, stale events,
 partial-turn exclusion, persistence errors, request serialization, Unicode SSE,
@@ -132,7 +151,9 @@ HTTP failures, no request credentials or cookies, Codable backward compatibility
 provider payloads, context accounting, persistence failures, and late-result
 rejection after cancellation.
 
-The installed Codex 0.153.0 app-server initialization and account/read handshake
+The inline path was exercised by typing a conversational request at a ready
+prompt, streaming a live Vercel AI Gateway answer in the same tab, returning to
+a clean prompt, and running `pwd` normally. The installed Codex 0.153.0 app-server initialization and account/read handshake
 were exercised locally and in the app. Provider menus, model defaults, secure
 fields, and the Codex missing-sign-in state were checked manually. Vercel AI
 Gateway streaming was exercised with `openai/gpt-5.4`, including a two-turn
@@ -142,7 +163,7 @@ from that Gateway model. Other live responses and browser login completion still
 require user-supplied API keys or ChatGPT sign-in. The installed Codex currently reports
 no Keychain sign-in.
 
-The UI displays selectable plain text, including Markdown source. There is one
+The router does not grant tools or execute generated commands. The UI displays selectable plain text, including Markdown source. There is one
 conversation per provider and no transcript browser. Terminal context attachments,
 command cards, tools, permissions, and agent loops are future slices.
 Grok connects directly to `https://api.x.ai/v1/chat/completions` using Bearer

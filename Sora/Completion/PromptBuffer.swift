@@ -75,7 +75,7 @@ enum PromptEvent {
         }
 
         let filtered = characters.filter { scalar in
-            scalar != "\t" && scalar != "\r" && scalar != "\n" && scalar.isASCII
+            scalar != "\t" && scalar != "\r" && scalar != "\n"
                 && scalar.unicodeScalars.allSatisfy { $0.value >= 0x20 }
         }
         if filtered.isEmpty { return nil }

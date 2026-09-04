@@ -3,15 +3,17 @@ import SwiftUI
 
 struct WorkspaceHostRepresentable: NSViewRepresentable {
     @ObservedObject var workspace: WorkspaceController
+    @ObservedObject var ask: AskSession
+    let agentTrigger: Int
 
     func makeNSView(context: Context) -> WorkspaceHostView {
         let view = WorkspaceHostView()
-        view.sync(workspace: workspace)
+        view.sync(workspace: workspace, ask: ask, agentTrigger: agentTrigger)
         return view
     }
 
     func updateNSView(_ nsView: WorkspaceHostView, context: Context) {
-        nsView.sync(workspace: workspace)
+        nsView.sync(workspace: workspace, ask: ask, agentTrigger: agentTrigger)
     }
 }
 
@@ -19,6 +21,7 @@ struct WorkspaceHostRepresentable: NSViewRepresentable {
 /// `ContentView`; this view stays square.
 final class WorkspaceHostView: NSView {
     private var panes: [UUID: TerminalPaneView] = [:]
+    private var lastAgentTrigger = 0
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -34,7 +37,7 @@ final class WorkspaceHostView: NSView {
         fatalError("init(coder:) is not supported")
     }
 
-    func sync(workspace: WorkspaceController) {
+    func sync(workspace: WorkspaceController, ask: AskSession, agentTrigger: Int) {
         let liveIDs = Set(workspace.tabs.map(\.id))
         for id in panes.keys where !liveIDs.contains(id) {
             panes[id]?.removeFromSuperview()
@@ -47,7 +50,7 @@ final class WorkspaceHostView: NSView {
             if let existing = panes[tab.id] {
                 pane = existing
             } else {
-                pane = TerminalPaneView(surface: surface)
+                pane = TerminalPaneView(surface: surface, ask: ask)
                 panes[tab.id] = pane
                 addSubview(pane)
             }
@@ -57,6 +60,10 @@ final class WorkspaceHostView: NSView {
             pane.setActive(tab.id == workspace.selectedID)
         }
         layoutPanes()
+        if agentTrigger != lastAgentTrigger {
+            lastAgentTrigger = agentTrigger
+            panes[workspace.selectedID]?.showAgent()
+        }
     }
 
     override func layout() {
