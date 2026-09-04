@@ -10,46 +10,42 @@ struct WorkspaceTabBar: View {
         VStack(alignment: .leading, spacing: 0) {
             chromeRow
 
-            if sidebarVisible {
-                Button {
-                    workspace.addTabInheritingCWD()
-                } label: {
-                    Label("New Tab", systemImage: "plus")
-                        .font(.system(size: 13, weight: .medium))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help("New Tab")
-                .padding(.horizontal, 6)
-                .padding(.top, 4)
-
-                Text("Sessions")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.tertiary)
-                    .padding(.horizontal, 16)
-                    .padding(.top, 16)
-                    .padding(.bottom, 6)
-
-                ScrollView(.vertical, showsIndicators: false) {
-                    VStack(spacing: 1) {
-                        ForEach(workspace.tabs) { tab in
-                            tabRow(tab)
-                        }
-                    }
-                    .padding(.horizontal, 6)
-                }
-
-                Spacer(minLength: 0)
-
-                SessionHeader(workingDirectory: workspace.selected.workingDirectory)
-                    .padding(.horizontal, 14)
-                    .padding(.bottom, 12)
-            } else {
-                Spacer(minLength: 0)
+            Button {
+                workspace.addTabInheritingCWD()
+            } label: {
+                Label("New Tab", systemImage: "plus")
+                    .font(.system(size: 13, weight: .medium))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .help("New Tab")
+            .padding(.horizontal, 6)
+            .padding(.top, 4)
+
+            Text("Sessions")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.tertiary)
+                .padding(.horizontal, 16)
+                .padding(.top, 16)
+                .padding(.bottom, 6)
+
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: 1) {
+                    ForEach(workspace.tabs) { tab in
+                        tabRow(tab)
+                    }
+                }
+                .padding(.horizontal, 6)
+            }
+
+            Spacer(minLength: 0)
+
+            SessionHeader(workingDirectory: workspace.selected.workingDirectory)
+                .padding(.horizontal, 14)
+                .padding(.bottom, 12)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Color.black.opacity(0.12))
@@ -59,28 +55,11 @@ struct WorkspaceTabBar: View {
         HStack(spacing: 2) {
             Color.clear
                 .frame(width: min(trafficLightWidth, 220), height: 1)
-            collapseToggle
+            SidebarToggleButton(sidebarVisible: $sidebarVisible)
             Spacer(minLength: 0)
         }
         .frame(height: titlebarHeight)
         .padding(.trailing, 6)
-    }
-
-    private var collapseToggle: some View {
-        Button {
-            withAnimation(.easeOut(duration: 0.18)) {
-                sidebarVisible.toggle()
-            }
-        } label: {
-            Image(systemName: "sidebar.leading")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.secondary)
-                .frame(width: 28, height: 28)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help(sidebarVisible ? "Hide Sidebar" : "Show Sidebar")
-        .accessibilityLabel(sidebarVisible ? "Hide Sidebar" : "Show Sidebar")
     }
 
     private func tabRow(_ tab: WorkspaceModel.Tab) -> some View {
