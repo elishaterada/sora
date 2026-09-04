@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AA00000000000000000000B1 /* GhostTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000165 /* GhostTextView.swift */; };
+		AA00000000000000000000B2 /* SoraTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000105 /* SoraTheme.swift */; };
 		AA00000000000000000000B0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA00000000000000000001B0 /* Assets.xcassets */; };
 		AA0000000000000000000001 /* SoraApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000101 /* SoraApp.swift */; };
 		AA0000000000000000000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000102 /* ContentView.swift */; };
@@ -458,6 +460,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AA00000000000000000000B1 /* GhostTextView.swift in Sources */,
+				AA00000000000000000000B2 /* SoraTheme.swift in Sources */,
 				AA0000000000000000000010 /* GhosttyInputTests.swift in Sources */,
 				AA0000000000000000000011 /* GhosttyClipboardTests.swift in Sources */,
 				AA0000000000000000000014 /* GhosttyInput.swift in Sources */,

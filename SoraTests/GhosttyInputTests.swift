@@ -88,4 +88,40 @@ final class GhosttyInputTests: XCTestCase {
         XCTAssertGreaterThan(baseline, 0)
         XCTAssertLessThan(baseline, cellHeight)
     }
+    func testSuggestionFollowsDelayedCursorEchoAndBackspace() {
+        let view = GhostTextView()
+        var cursor = NSPoint(x: 30, y: 100)
+        view.show(text: " -lah", origin: cursor, cellWidth: 10, cellHeight: 20,
+                  font: CTFontCreateWithName("Menlo" as CFString, 14, nil),
+                  cursorOrigin: { cursor })
+        defer { view.hide() }
+
+        // The shell moves after the suggestion was calculated, without a new key.
+        cursor.x = 40
+        let followedEcho = expectation(description: "Tracks delayed PTY cursor")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+            XCTAssertEqual(view.frame.origin, cursor)
+            followedEcho.fulfill()
+        }
+        wait(for: [followedEcho], timeout: 1)
+        cursor.x = 20
+        view.updateCursorOrigin()
+        XCTAssertEqual(view.frame.origin, cursor)
+
+        view.hide()
+        cursor.x = 50
+        view.updateCursorOrigin()
+        XCTAssertEqual(view.frame.origin.x, 20)
+        XCTAssertTrue(view.isHidden)
+    }
+
+    func testSuggestionHidesWhenCursorSurfaceDisappears() {
+        let view = GhostTextView()
+        view.show(text: "tail", origin: .zero, cellWidth: 10, cellHeight: 20,
+                  font: CTFontCreateWithName("Menlo" as CFString, 14, nil),
+                  cursorOrigin: { nil })
+        view.updateCursorOrigin()
+        XCTAssertTrue(view.isHidden)
+        XCTAssertEqual(view.text, "")
+    }
 }

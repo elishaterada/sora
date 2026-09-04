@@ -88,6 +88,7 @@ The host does not implement VT parsing, glyph rendering, or PTY spawn.
 - history prefix completion ranked by cwd, git root, frequency, and recency
 - filesystem path completion for tokens that look like paths
 - inline ghost text; Tab / Right Arrow accept without sending those keys to the PTY
+- While an inline suggestion is visible, its AppKit overlay samples Ghostty’s live IME cursor point at 60 Hz. PTY echo runs independently of app wakeups, so a keystroke refresh alone can leave the overlay one cell behind or ahead. Position sampling does not rerank suggestions or read history; hiding the overlay or closing its surface stops the timer.
 - overlay resets on Enter, Esc, arrows (except accept), Ctrl-C/U/A/E/K/W, Option, mouse down, and multiline paste. zsh Tab-complete and history recall desync the buffer until the next prompt.
 - next-command prediction on an empty prompt after a successful command, shown as accent `→` text in the sticky prompt footer under the grid (not as an overlay on scrollback). Esc or Up/Down/Left dismisses it until the next successful command. Prefix ghost text stays on-grid only while the live prompt is visible; scrolling away hides the overlay and mirrors the line in the footer.
 
