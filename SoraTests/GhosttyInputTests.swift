@@ -33,10 +33,19 @@ final class GhosttyInputTests: XCTestCase {
         let origin = GhosttyInput.ghostTextOrigin(
             imeX: 20,
             imeY: 40,
-            viewHeight: 500,
-            cellWidth: 8
+            viewHeight: 500
         )
-        XCTAssertEqual(origin.x, 16)
+        XCTAssertEqual(origin.x, 20)
         XCTAssertEqual(origin.y, 460)
+    }
+
+    func testGhostTextBaselineCentersFontInCell() {
+        let font = NSFont.monospacedSystemFont(ofSize: 18, weight: .regular)
+        let cellHeight: CGFloat = 24
+        let baseline = GhosttyInput.ghostTextBaseline(cellHeight: cellHeight, font: font)
+        XCTAssertGreaterThan(baseline, 0)
+        XCTAssertLessThan(baseline, cellHeight)
+        let extra = cellHeight - font.ascender + font.descender
+        XCTAssertEqual(baseline, -font.descender + extra / 2)
     }
 }

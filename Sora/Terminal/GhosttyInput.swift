@@ -46,14 +46,21 @@ enum GhosttyInput {
         NSPoint(x: viewPoint.x, y: viewHeight - viewPoint.y)
     }
 
-    /// `ghostty_surface_ime_point` is top-left origin with x at the cursor cell
-    /// midpoint and y at the cell bottom. AppKit overlay origin is bottom-left.
+    /// `ghostty_surface_ime_point` is top-left origin. `x` is the caret's
+    /// leading edge (bar cursor), `y` is the cell bottom. AppKit overlays
+    /// use bottom-left origin.
     static func ghostTextOrigin(
         imeX: CGFloat,
         imeY: CGFloat,
-        viewHeight: CGFloat,
-        cellWidth: CGFloat
+        viewHeight: CGFloat
     ) -> NSPoint {
-        NSPoint(x: imeX - cellWidth / 2, y: viewHeight - imeY)
+        NSPoint(x: imeX, y: viewHeight - imeY)
+    }
+
+    /// Baseline inside an unflipped cell, matching Ghostty's vertically
+    /// centered glyphs when `adjust-cell-height` adds extra leading.
+    static func ghostTextBaseline(cellHeight: CGFloat, font: NSFont) -> CGFloat {
+        let extra = cellHeight - font.ascender + font.descender
+        return -font.descender + extra / 2
     }
 }

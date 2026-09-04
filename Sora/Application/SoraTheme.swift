@@ -18,4 +18,13 @@ enum SoraTheme {
     static var nsGlassTint: NSColor {
         NSColor(calibratedWhite: 0.10, alpha: 0.50)
     }
+
+    /// Matches `font-size` / `font-family` in `Resources/sora.ghostty`.
+    static let terminalFontSize: CGFloat = 18
+
+    static var terminalFont: NSFont {
+        NSFont(name: "SFMono-Regular", size: terminalFontSize)
+            ?? NSFont(name: "SF Mono", size: terminalFontSize)
+            ?? NSFont.monospacedSystemFont(ofSize: terminalFontSize, weight: .regular)
+    }
 }

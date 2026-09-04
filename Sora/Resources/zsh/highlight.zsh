@@ -107,7 +107,7 @@ _sora_highlight_apply() {
 
     if (( cmdpos )); then
       if _sora_command_exists "$word"; then
-        style='fg=green,bold'
+        style='fg=green'
       else
         style='fg=red'
       fi
