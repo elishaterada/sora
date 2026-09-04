@@ -48,8 +48,8 @@ struct ContentView: View {
             )
         )
         .modifier(ClearWindowBackground())
+        .modifier(HiddenWindowTitle())
         .ignoresSafeArea()
-        .toolbar(.hidden, for: .windowToolbar)
         .preferredColorScheme(.dark)
         .focusedSceneObject(workspace)
         .focusedSceneValue(\.sidebarVisible, $sidebarVisible)
@@ -143,10 +143,8 @@ private struct WindowChromeRepresentable: NSViewRepresentable {
     func updateNSView(_ nsView: WindowChromeView, context: Context) {
         context.coordinator.titlebarHeight = $titlebarHeight
         context.coordinator.trafficLightWidth = $trafficLightWidth
-        if abs(nsView.sidebarWidth - sidebarWidth) > 0.5 {
-            nsView.sidebarWidth = sidebarWidth
-            nsView.constrainTitlebar()
-        }
+        nsView.sidebarWidth = sidebarWidth
+        nsView.revealTrafficLights()
     }
 
     final class Coordinator {
@@ -189,32 +187,39 @@ private final class WindowChromeView: NSView {
 
     override func layout() {
         super.layout()
-        constrainTitlebar()
+        revealTrafficLights()
     }
 
     func applyChrome() {
         guard let window else { return }
-        window.styleMask.insert(.fullSizeContentView)
+        window.styleMask.formUnion([.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView])
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.titlebarSeparatorStyle = .none
-        window.toolbar = nil
         window.isMovableByWindowBackground = true
         window.isOpaque = false
         window.backgroundColor = SoraTheme.nsWindowFill
         clearHostingSafeArea(in: window.contentView)
-        constrainTitlebar()
+        revealTrafficLights()
         publishMetrics()
     }
 
-    fileprivate func constrainTitlebar() {
-        guard let window, let container = titlebarContainer(in: window) else { return }
-        var frame = container.frame
-        let width = min(max(sidebarWidth, 80), max(window.frame.width, 80))
-        if abs(frame.size.width - width) > 0.5 || abs(frame.origin.x) > 0.5 {
-            frame.origin.x = 0
-            frame.size.width = width
-            container.frame = frame
+    fileprivate func revealTrafficLights() {
+        guard let window else { return }
+        let types: [NSWindow.ButtonType] = [.closeButton, .miniaturizeButton, .zoomButton]
+        for type in types {
+            guard let button = window.standardWindowButton(type) else { continue }
+            button.isHidden = false
+            button.alphaValue = 1
+            button.superview?.isHidden = false
+            button.superview?.alphaValue = 1
+        }
+        if let container = titlebarContainer(in: window), let parent = container.superview {
+            container.isHidden = false
+            container.alphaValue = 1
+            if parent.subviews.last !== container {
+                parent.addSubview(container, positioned: .above, relativeTo: nil)
+            }
         }
     }
 
@@ -269,6 +274,19 @@ private struct ClearWindowBackground: ViewModifier {
     func body(content: Content) -> some View {
         if #available(macOS 15.0, *) {
             content.containerBackground(.clear, for: .window)
+        } else {
+            content
+        }
+    }
+}
+
+/// Hide the window title without hiding close/minimize/zoom.
+private struct HiddenWindowTitle: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 15.0, *) {
+            content
+                .toolbar(removing: .title)
+                .toolbarBackground(.hidden, for: .windowToolbar)
         } else {
             content
         }

@@ -48,8 +48,6 @@ struct WorkspaceTabBar: View {
                     .padding(.horizontal, 14)
                     .padding(.bottom, 12)
             } else {
-                collapseToggle
-                    .padding(.top, 2)
                 Spacer(minLength: 0)
             }
         }
@@ -58,16 +56,14 @@ struct WorkspaceTabBar: View {
     }
 
     private var chromeRow: some View {
-        HStack(spacing: 0) {
+        HStack(spacing: 2) {
             Color.clear
                 .frame(width: min(trafficLightWidth, 220), height: 1)
+            collapseToggle
             Spacer(minLength: 0)
-            if sidebarVisible {
-                collapseToggle
-            }
         }
         .frame(height: titlebarHeight)
-        .padding(.trailing, sidebarVisible ? 6 : 0)
+        .padding(.trailing, 6)
     }
 
     private var collapseToggle: some View {
