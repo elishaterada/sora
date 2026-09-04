@@ -30,6 +30,32 @@ text and prior completed Ask turns are sent. There is no automatic terminal,
 repository, working-directory, environment, or command-history collection.
 There are no AI calls from typing in the terminal.
 
+### Attach webpage
+
+Choose **Attach webpage**, enter a public HTTPS address (typing a hostname adds
+`https://`), and choose **Fetch Page**. This contacts the website without saved
+cookies or credentials, downloads at most 2 MB, and accepts HTML or plain text.
+HTML is never rendered and page scripts or subresources are never run or loaded.
+Script, style, template, SVG, head, comments, and markup are removed to create a
+static text snapshot. The preview is the exact text that can be attached.
+
+Readable text is capped at 50,000 UTF-8 bytes on a Unicode scalar boundary and
+is labeled as an excerpt when capped. Review it, then choose **Attach to
+Question**. The page title/host appears beside the composer; Review and Remove
+remain available until sending. The attachment is not sent on fetch or attach.
+It is sent with the next question only, stored with that user message, and shown
+in an expandable conversation disclosure afterward. Switching providers keeps
+unsent attachments isolated with that provider, and clearing its conversation
+also clears its pending attachment.
+
+The model receives the question plus a JSON snapshot labeled as external
+reference data, including URL, title, fetch time, excerpt flag, and text. System
+instructions require providers to treat embedded page content as untrusted data,
+cite the source URL, and avoid inventing missing content. Redirects must remain
+HTTPS. Unsupported encodings, binary files, large responses, empty extracted
+text, HTTP errors, and timeouts are visible to the user. Sites that require
+JavaScript or sign-in may return little readable text in this static first slice.
+
 ## Codex setup and boundaries
 
 Install version 0.153.0 or newer of the official Codex CLI or desktop app.
@@ -91,22 +117,33 @@ and stopped turns remain visible but are excluded from later provider context.
 
 ## Verification and remaining work
 
-83 tests pass, including provider isolation, keys/models/drafts, disabled and
+90 tests pass, including provider and pending-attachment isolation,
+keys/models/drafts, disabled and
 missing-key behavior, streaming completion and cancellation, stale events,
 partial-turn exclusion, persistence errors, request serialization, Unicode SSE,
 HTTP auth/rate errors, truncation, and Codex RPC pipe handling and configuration.
 HTTP tests use an isolated URLProtocol fixture. The Codex transport regression
 uses a local shell fixture with short replies and an open stdout pipe.
 
+Webpage tests cover URL normalization and scheme/credential rejection, static
+HTML extraction and entity decoding, script/style/attribute removal, Unicode-safe
+excerpt limits, download and streaming size bounds, content types, encodings,
+HTTP failures, no request credentials or cookies, Codable backward compatibility,
+provider payloads, context accounting, persistence failures, and late-result
+rejection after cancellation.
+
 The installed Codex 0.153.0 app-server initialization and account/read handshake
 were exercised locally and in the app. Provider menus, model defaults, secure
-fields, and the Codex missing-sign-in state were checked manually. No paid model
-request was made. Live responses and browser login completion still require
-user-supplied API keys or ChatGPT sign-in. The installed Codex currently reports
+fields, and the Codex missing-sign-in state were checked manually. Vercel AI
+Gateway streaming was exercised with `openai/gpt-5.4`, including a two-turn
+conversation. The webpage flow fetched `https://www.elishaterada.com/`, displayed
+the extracted text for review, attached it, and received a source-cited summary
+from that Gateway model. Other live responses and browser login completion still
+require user-supplied API keys or ChatGPT sign-in. The installed Codex currently reports
 no Keychain sign-in.
 
 The UI displays selectable plain text, including Markdown source. There is one
-conversation per provider and no transcript browser. Explicit context attachments,
+conversation per provider and no transcript browser. Terminal context attachments,
 command cards, tools, permissions, and agent loops are future slices.
 Grok connects directly to `https://api.x.ai/v1/chat/completions` using Bearer
 authentication. This supported legacy endpoint reuses the existing stateless

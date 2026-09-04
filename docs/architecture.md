@@ -107,6 +107,15 @@ provider. Switching providers cancels outstanding work and restores that
 provider's draft, model, and history. No tool interface is exposed in this slice.
 See [AI Ask](ai-ask.md).
 
+`WebpageFetcher` is an explicit context input outside the provider adapters. It
+accepts HTTPS HTML/text responses, does not use cookies or saved credentials,
+caps the download, and never renders or executes the page. `WebpageText` removes
+non-content blocks and creates a bounded static text snapshot. `WebpageLoader`
+owns fetch cancellation and stale-result rejection; the user reviews that
+snapshot in `WebpageAttachmentView` before attaching it to a question. The
+attachment is stored with its user message and serialized as untrusted reference
+data only when constructing a provider request.
+
 The remaining target responsibilities are:
 
 - application-owned agent loop

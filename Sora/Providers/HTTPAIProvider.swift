@@ -47,7 +47,7 @@ struct HTTPAIProvider: AIProvider {
         result.timeoutInterval = kind == .grok ? 3600 : 60
         result.setValue("application/json", forHTTPHeaderField: "Content-Type")
         result.setValue("text/event-stream", forHTTPHeaderField: "Accept")
-        var messages = request.messages.map { ["role": $0.role.rawValue, "content": $0.text] }
+        var messages = try request.messages.map { ["role": $0.role.rawValue, "content": try $0.contentForProvider()] }
         var body: [String: Any] = ["model": request.model, "stream": true, "max_tokens": 4096]
         if kind == .anthropic {
             result.setValue(credential, forHTTPHeaderField: "x-api-key")

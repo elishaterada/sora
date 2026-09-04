@@ -7,6 +7,12 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		EE000000000000000000006B /* WebpageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE0000000000000000000003 /* WebpageTests.swift */; };
+		EE0000000000000000000068 /* WebpageAttachmentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE0000000000000000000002 /* WebpageAttachmentView.swift */; };
+		EE0000000000000000000067 /* WebpageFetcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE0000000000000000000001 /* WebpageFetcher.swift */; };
+		EE0000000000000000000066 /* WebpageFetcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE0000000000000000000001 /* WebpageFetcher.swift */; };
+		EE0000000000000000000065 /* WebpageAttachment.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE0000000000000000000000 /* WebpageAttachment.swift */; };
+		EE0000000000000000000064 /* WebpageAttachment.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE0000000000000000000000 /* WebpageAttachment.swift */; };
 		DD00000000000000000000C8 /* AIBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD0000000000000000000064 /* AIBackend.swift */; };
 		DD000000000000000000012C /* AIBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD0000000000000000000064 /* AIBackend.swift */; };
 		DD00000000000000000000C9 /* HTTPAIProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD0000000000000000000065 /* HTTPAIProvider.swift */; };
@@ -120,6 +126,10 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		EE0000000000000000000003 /* WebpageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebpageTests.swift; sourceTree = "<group>"; };
+		EE0000000000000000000002 /* WebpageAttachmentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebpageAttachmentView.swift; sourceTree = "<group>"; };
+		EE0000000000000000000001 /* WebpageFetcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebpageFetcher.swift; sourceTree = "<group>"; };
+		EE0000000000000000000000 /* WebpageAttachment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebpageAttachment.swift; sourceTree = "<group>"; };
 		DD0000000000000000000064 /* AIBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIBackend.swift; sourceTree = "<group>"; };
 		DD0000000000000000000065 /* HTTPAIProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPAIProvider.swift; sourceTree = "<group>"; };
 		DD0000000000000000000066 /* CodexConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexConnection.swift; sourceTree = "<group>"; };
@@ -230,6 +240,9 @@
 			isa = PBXGroup;
 			children = (
 				CC0000000000000000000064 /* AIProvider.swift */,
+				EE0000000000000000000002 /* WebpageAttachmentView.swift */,
+				EE0000000000000000000001 /* WebpageFetcher.swift */,
+				EE0000000000000000000000 /* WebpageAttachment.swift */,
 				CC0000000000000000000065 /* AskSession.swift */,
 				CC0000000000000000000066 /* AskView.swift */,
 			);
@@ -364,6 +377,7 @@
 			isa = PBXGroup;
 			children = (
 				CC000000000000000000006A /* AITests.swift */,
+				EE0000000000000000000003 /* WebpageTests.swift */,
 				AA0000000000000000000110 /* GhosttyInputTests.swift */,
 				AA0000000000000000000111 /* GhosttyClipboardTests.swift */,
 				AA0000000000000000000130 /* WorkspaceSnapshotTests.swift */,
@@ -487,6 +501,9 @@
 				DD00000000000000000000CB /* CodexProvider.swift in Sources */,
 				DD00000000000000000000CC /* CodexLogin.swift in Sources */,
 				CC00000000000000000000C8 /* AIProvider.swift in Sources */,
+				EE0000000000000000000068 /* WebpageAttachmentView.swift in Sources */,
+				EE0000000000000000000066 /* WebpageFetcher.swift in Sources */,
+				EE0000000000000000000064 /* WebpageAttachment.swift in Sources */,
 				CC00000000000000000000C9 /* AskSession.swift in Sources */,
 				CC00000000000000000000CA /* AskView.swift in Sources */,
 				CC00000000000000000000CB /* OpenAIProvider.swift in Sources */,
@@ -539,6 +556,9 @@
 				DD000000000000000000012F /* CodexProvider.swift in Sources */,
 				DD0000000000000000000130 /* CodexLogin.swift in Sources */,
 				CC000000000000000000012C /* AIProvider.swift in Sources */,
+				EE000000000000000000006B /* WebpageTests.swift in Sources */,
+				EE0000000000000000000067 /* WebpageFetcher.swift in Sources */,
+				EE0000000000000000000065 /* WebpageAttachment.swift in Sources */,
 				CC000000000000000000012D /* AskSession.swift in Sources */,
 				CC000000000000000000012F /* OpenAIProvider.swift in Sources */,
 				CC0000000000000000000130 /* AICredentialStore.swift in Sources */,
