@@ -477,6 +477,12 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         }
     }
 
+    /// Called from libghostty's wakeup after PTY output moves the cursor.
+    func scheduleCompletionRefreshFromTerminal() {
+        guard completion.suggestion != nil || !completion.buffer.text.isEmpty else { return }
+        scheduleCompletionRefresh()
+    }
+
     private func refreshCompletion() {
         runtime.tick()
         let cwd = lastWorkingDirectory
@@ -509,17 +515,18 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         ghostty_surface_ime_point(surface, &x, &y, &width, &height)
         _ = width
         let font = quicklookFont() ?? SoraTheme.terminalCTFont
-        // IME height is content-scaled points; rescale CELL_SIZE into that space
-        // so the half-cell origin and per-column pitch share one grid.
         let cellHeight: CGFloat = height > 0
             ? CGFloat(height)
             : (cellSize.height > 0 ? cellSize.height : 16)
-        let cellWidth = GhosttyInput.ghostTextCellWidth(
-            imeHeight: cellHeight,
-            cellSize: cellSize,
-            font: font
-        )
-        // ime_point x is the cursor cell midpoint; y is the cell bottom.
+        // Prefer Ghostty's CELL_SIZE width for both IME half-cell and pitch so
+        // suggested glyphs land on the same columns as typed characters.
+        let cellWidth = cellSize.width > 0
+            ? cellSize.width
+            : GhosttyInput.ghostTextCellWidth(
+                imeHeight: cellHeight,
+                cellSize: cellSize,
+                font: font
+            )
         let origin = GhosttyInput.ghostTextOrigin(
             imeX: x,
             imeY: y,

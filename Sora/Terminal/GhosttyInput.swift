@@ -77,19 +77,17 @@ enum GhosttyInput {
         return roundedAdvance > 0 ? roundedAdvance : 8
     }
 
-    /// `ghostty_surface_ime_point` is top-left origin. `y` is the cell bottom.
-    /// Ghostty's AppKit IME rect uses `x` as its leading edge (see
-    /// `firstRect(forCharacterRange:)`); match that so a leading space in the
-    /// suggestion (` -lah`) occupies a full cell after the typed prefix.
-    /// AppKit overlays use bottom-left origin.
+    /// `ghostty_surface_ime_point` is top-left origin. `x` is the cursor
+    /// cell midpoint; `y` is the cell bottom. Ghost text starts at the
+    /// cell's leading edge so each suggested glyph shares a column with
+    /// the typed grid. AppKit overlays use bottom-left origin.
     static func ghostTextOrigin(
         imeX: CGFloat,
         imeY: CGFloat,
         viewHeight: CGFloat,
         cellWidth: CGFloat
     ) -> NSPoint {
-        _ = cellWidth
-        return NSPoint(x: imeX, y: viewHeight - imeY)
+        NSPoint(x: imeX - cellWidth / 2, y: viewHeight - imeY)
     }
 
     /// Baseline from the bottom of an unflipped cell. Matches Ghostty's
