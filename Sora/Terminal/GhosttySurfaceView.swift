@@ -474,33 +474,22 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         var height: Double = 0
         ghostty_surface_ime_point(surface, &x, &y, &width, &height)
         _ = width
+        _ = height
         let cellWidth = cellSize.width > 0 ? cellSize.width : 8
-        let cellHeight = max(height, cellSize.height > 0 ? cellSize.height : 16)
-        // ime_point x is the midpoint of the cursor cell; y is the bottom edge
+        let cellHeight = cellSize.height > 0 ? cellSize.height : 16
+        // ime_point x is the bar caret's leading edge; y is the cell bottom
         // in Ghostty's top-left coordinates.
         let origin = GhosttyInput.ghostTextOrigin(
             imeX: x,
             imeY: y,
-            viewHeight: bounds.height,
-            cellWidth: cellWidth
+            viewHeight: bounds.height
         )
-        let fontSize = min(max(cellHeight * 0.72, 13), 28)
-        let base = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
-        let font: NSFont
-        if suggestion.source == .prediction {
-            font = NSFont(
-                descriptor: base.fontDescriptor.withSymbolicTraits(.italic),
-                size: fontSize
-            ) ?? base
-        } else {
-            font = base
-        }
         addSubview(ghostText)
         ghostText.show(
             text: suggestion.displayText,
             origin: origin,
-            height: cellHeight,
-            font: font,
+            cellSize: NSSize(width: cellWidth, height: cellHeight),
+            font: SoraTheme.terminalFont,
             predicted: suggestion.source == .prediction
         )
     }

@@ -10,10 +10,12 @@ final class GhostTextView: NSView {
         }
     }
 
-    var font = NSFont.monospacedSystemFont(ofSize: 18, weight: .regular) {
+    var font = SoraTheme.terminalFont {
         didSet { needsDisplay = true }
     }
     private var predicted = false
+    private var cellWidth: CGFloat = 8
+    private var cellHeight: CGFloat = 16
 
     override var isOpaque: Bool { false }
     override var acceptsFirstResponder: Bool { false }
@@ -31,25 +33,31 @@ final class GhostTextView: NSView {
             .font: font,
             .foregroundColor: color,
         ]
-        (text as NSString).draw(at: NSPoint(x: 0, y: 0), withAttributes: attributes)
+        let baseline = GhosttyInput.ghostTextBaseline(cellHeight: cellHeight, font: font)
+        for (index, character) in text.enumerated() {
+            let point = NSPoint(x: CGFloat(index) * cellWidth, y: baseline)
+            String(character).draw(at: point, withAttributes: attributes)
+        }
     }
 
     func show(
         text: String,
         origin: NSPoint,
-        height: CGFloat,
+        cellSize: NSSize,
         font: NSFont,
         predicted: Bool = false
     ) {
         self.font = font
         self.predicted = predicted
+        self.cellWidth = cellSize.width > 0 ? cellSize.width : 8
+        self.cellHeight = cellSize.height > 0 ? cellSize.height : 16
         self.text = text
-        let size = (text as NSString).size(withAttributes: [.font: font])
+        let columns = CGFloat(max(text.count, 1))
         frame = NSRect(
             x: origin.x,
             y: origin.y,
-            width: ceil(size.width) + 1,
-            height: max(height, ceil(size.height))
+            width: ceil(self.cellWidth * columns) + 1,
+            height: self.cellHeight
         )
         isHidden = false
         needsDisplay = true
