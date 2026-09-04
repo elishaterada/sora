@@ -4,55 +4,90 @@ struct WorkspaceTabBar: View {
     @ObservedObject var workspace: WorkspaceController
 
     var body: some View {
-        List(selection: Binding(
-            get: { workspace.selectedID },
-            set: { workspace.select($0) }
-        )) {
+        VStack(alignment: .leading, spacing: 0) {
             Button {
                 workspace.addTabInheritingCWD()
             } label: {
                 Label("New Tab", systemImage: "plus")
+                    .font(.system(size: 13, weight: .medium))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
             .help("New Tab")
+            .padding(.horizontal, 6)
+            .padding(.top, 8)
 
-            Section("Sessions") {
-                ForEach(workspace.tabs) { tab in
-                    tabRow(tab)
-                        .tag(tab.id)
-                        .contextMenu {
-                            if workspace.tabs.count > 1 {
-                                Button("Close Tab", role: .destructive) {
-                                    workspace.closeTab(id: tab.id)
-                                }
-                            }
-                        }
+            Text("Sessions")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.tertiary)
+                .padding(.horizontal, 16)
+                .padding(.top, 16)
+                .padding(.bottom, 6)
+
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: 1) {
+                    ForEach(workspace.tabs) { tab in
+                        tabRow(tab)
+                    }
                 }
+                .padding(.horizontal, 6)
             }
+
+            Spacer(minLength: 0)
+
+            SessionHeader(workingDirectory: workspace.selected.workingDirectory)
+                .padding(.horizontal, 14)
+                .padding(.bottom, 12)
         }
-        .listStyle(.sidebar)
-        .listRowSeparator(.hidden)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(Color.black.opacity(0.12))
     }
 
     private func tabRow(_ tab: WorkspaceModel.Tab) -> some View {
+        let selected = tab.id == workspace.selectedID
         let branch = GitRepository.branchName(containing: tab.workingDirectory)
-        return HStack(spacing: 8) {
-            Image(systemName: "terminal")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.secondary)
-                .frame(width: 16)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(tab.displayTitle)
-                    .font(.system(size: 13, weight: .medium))
-                    .lineLimit(1)
-                if let branch {
-                    Text(branch)
-                        .font(.system(size: 11))
-                        .foregroundStyle(.tertiary)
+        return Button {
+            workspace.select(tab.id)
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "terminal")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 16)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(tab.displayTitle)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.primary)
                         .lineLimit(1)
+                    if let branch {
+                        Text(branch)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.tertiary)
+                            .lineLimit(1)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(selected ? Color.white.opacity(0.08) : Color.clear)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            if workspace.tabs.count > 1 {
+                Button("Close Tab", role: .destructive) {
+                    workspace.closeTab(id: tab.id)
                 }
             }
-            Spacer(minLength: 0)
         }
         .accessibilityLabel(tab.displayTitle)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
