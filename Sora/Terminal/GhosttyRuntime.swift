@@ -70,6 +70,9 @@ final class GhosttyRuntime: ObservableObject {
             let runtime = Unmanaged<GhosttyRuntime>.fromOpaque(userdata).takeUnretainedValue()
             DispatchQueue.main.async {
                 runtime.tick()
+                // PTY echo advances the cursor after keyDown; refresh ghost
+                // against the updated IME point so suggestions stay on-grid.
+                runtime.activeSurface?.scheduleCompletionRefreshFromTerminal()
             }
         }
         runtime.action_cb = { _, target, action in

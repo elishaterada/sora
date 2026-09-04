@@ -31,14 +31,14 @@ final class GhosttyInputTests: XCTestCase {
     }
 
     func testGhostTextOriginConvertsIMETopLeftToAppKit() {
-        // Match Ghostty AppKit: ime x is the IME rect's leading edge.
+        // ime_point x is the cell midpoint; ghost text starts at the leading edge.
         let origin = GhosttyInput.ghostTextOrigin(
             imeX: 20,
             imeY: 40,
             viewHeight: 500,
             cellWidth: 8
         )
-        XCTAssertEqual(origin.x, 20)
+        XCTAssertEqual(origin.x, 16)
         XCTAssertEqual(origin.y, 460)
     }
 
