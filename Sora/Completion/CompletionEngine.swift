@@ -4,10 +4,18 @@ struct CompletionSuggestion: Equatable {
     enum Source: Equatable {
         case history
         case path
+        case prediction
     }
 
     var insertSuffix: String
     var source: Source
+    var displayText: String
+
+    init(insertSuffix: String, source: Source, displayText: String? = nil) {
+        self.insertSuffix = insertSuffix
+        self.source = source
+        self.displayText = displayText ?? insertSuffix
+    }
 }
 
 struct HistoryCommandStat: Equatable {

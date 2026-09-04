@@ -71,8 +71,8 @@ Ghostty is pinned to commit `c81f0b26871c7fbbe2fc35549fdad1f64ed29094`. See [`do
 - [`docs/licensing.md`](docs/licensing.md): dependency and reference-project constraints
 - [`docs/naming.md`](docs/naming.md): working-name status
 
-Open **Window → Command History** after running a command to confirm structured history. Type a command prefix to see ghost text; Tab or Right Arrow accepts it.
+Open **Window → Command History** after running a command to confirm structured history. Type a command prefix to see ghost text; Tab or Right Arrow accepts it. After a successful `git status` then `git push`, run `git status` again and look for italic `→ git push` on the empty prompt.
 
 ## Current status
 
-Phase 4 local completion is complete. Human checks passed: history and path ghost text, Tab and Right Arrow accept, unmodified Tab still reaches zsh. AI is not implemented.
+Phase 5 next-command prediction is in the tree: after a successful command, an empty prompt can show a `→` follow-up from local transitions. AI is not implemented.

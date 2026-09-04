@@ -69,6 +69,15 @@ final class CommandHistoryStore: ObservableObject {
                 ON command_runs(finished_at DESC);
             CREATE INDEX IF NOT EXISTS idx_command_runs_command
                 ON command_runs(command);
+            CREATE TABLE IF NOT EXISTS command_transitions (
+                id TEXT PRIMARY KEY NOT NULL,
+                previous TEXT NOT NULL,
+                next TEXT NOT NULL,
+                cwd TEXT NOT NULL,
+                finished_at REAL NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_command_transitions_previous
+                ON command_transitions(previous, finished_at DESC);
             """
         )
         try reload()
@@ -156,6 +165,75 @@ final class CommandHistoryStore: ObservableObject {
             }
             stats.append(HistoryCommandStat(
                 command: String(cString: command),
+                lastCwd: URL(fileURLWithPath: String(cString: cwdText)),
+                frequency: Int(sqlite3_column_int(statement, 2)),
+                lastUsed: Date(timeIntervalSince1970: sqlite3_column_double(statement, 3)),
+                sameCwdCount: Int(sqlite3_column_int(statement, 4))
+            ))
+        }
+        return stats
+    }
+
+    func recordTransition(previous: String, next: String, cwd: URL, at: Date = Date()) throws {
+        guard !previous.isEmpty, !next.isEmpty else { return }
+        let sql = """
+            INSERT INTO command_transitions (id, previous, next, cwd, finished_at)
+            VALUES (?, ?, ?, ?, ?);
+            """
+        let statement = try prepare(sql)
+        defer { sqlite3_finalize(statement) }
+        try bindText(statement, index: 1, UUID().uuidString)
+        try bindText(statement, index: 2, previous)
+        try bindText(statement, index: 3, next)
+        try bindText(statement, index: 4, cwd.path)
+        guard sqlite3_bind_double(statement, 5, at.timeIntervalSince1970) == SQLITE_OK else {
+            throw CommandHistoryStoreError.executeFailed(message)
+        }
+        guard sqlite3_step(statement) == SQLITE_DONE else {
+            throw CommandHistoryStoreError.executeFailed(message)
+        }
+    }
+
+    func transitionStats(previous: String, cwd: URL, limit: Int = 40) throws -> [TransitionStat] {
+        guard !previous.isEmpty else { return [] }
+        let sql = """
+            SELECT
+                r.next,
+                r.cwd,
+                s.frequency,
+                s.last_used,
+                s.same_cwd_count
+            FROM (
+                SELECT
+                    next,
+                    COUNT(*) AS frequency,
+                    MAX(finished_at) AS last_used,
+                    SUM(CASE WHEN cwd = ? THEN 1 ELSE 0 END) AS same_cwd_count
+                FROM command_transitions
+                WHERE previous = ?
+                GROUP BY next
+                ORDER BY frequency DESC, last_used DESC
+                LIMIT ?
+            ) AS s
+            JOIN command_transitions AS r
+                ON r.previous = ? AND r.next = s.next AND r.finished_at = s.last_used;
+            """
+        let statement = try prepare(sql)
+        defer { sqlite3_finalize(statement) }
+        try bindText(statement, index: 1, cwd.path)
+        try bindText(statement, index: 2, previous)
+        sqlite3_bind_int(statement, 3, Int32(limit))
+        try bindText(statement, index: 4, previous)
+
+        var stats: [TransitionStat] = []
+        while sqlite3_step(statement) == SQLITE_ROW {
+            guard let next = sqlite3_column_text(statement, 0),
+                  let cwdText = sqlite3_column_text(statement, 1)
+            else {
+                continue
+            }
+            stats.append(TransitionStat(
+                next: String(cString: next),
                 lastCwd: URL(fileURLWithPath: String(cString: cwdText)),
                 frequency: Int(sqlite3_column_int(statement, 2)),
                 lastUsed: Date(timeIntervalSince1970: sqlite3_column_double(statement, 3)),

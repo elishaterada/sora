@@ -63,6 +63,9 @@
 		AA0000000000000000000082 /* PathCompleter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000162 /* PathCompleter.swift */; };
 		AA0000000000000000000083 /* CompletionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000163 /* CompletionEngine.swift */; };
 		AA0000000000000000000084 /* CompletionSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000164 /* CompletionSession.swift */; };
+		AA0000000000000000000090 /* NextCommandEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000180 /* NextCommandEngine.swift */; };
+		AA0000000000000000000091 /* NextCommandEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000180 /* NextCommandEngine.swift */; };
+		AA0000000000000000000092 /* NextCommandEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000181 /* NextCommandEngineTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -118,6 +121,8 @@
 		AA0000000000000000000172 /* CompletionEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompletionEngineTests.swift; sourceTree = "<group>"; };
 		AA0000000000000000000173 /* GitRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitRepositoryTests.swift; sourceTree = "<group>"; };
 		AA0000000000000000000174 /* CompletionSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompletionSessionTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000180 /* NextCommandEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NextCommandEngine.swift; sourceTree = "<group>"; };
+		AA0000000000000000000181 /* NextCommandEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NextCommandEngineTests.swift; sourceTree = "<group>"; };
 		AA0000000000000000000112 /* Sora.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Sora.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0000000000000000000113 /* SoraTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SoraTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -162,6 +167,7 @@
 				AA0000000000000000000507 /* Commands */,
 				AA0000000000000000000508 /* Storage */,
 				AA0000000000000000000509 /* Completion */,
+				AA0000000000000000000510 /* Intelligence */,
 			);
 			path = Sora;
 			sourceTree = "<group>";
@@ -234,6 +240,14 @@
 			path = Completion;
 			sourceTree = "<group>";
 		};
+		AA0000000000000000000510 /* Intelligence */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000180 /* NextCommandEngine.swift */,
+			);
+			path = Intelligence;
+			sourceTree = "<group>";
+		};
 		AA0000000000000000000504 /* SoraTests */ = {
 			isa = PBXGroup;
 			children = (
@@ -250,6 +264,7 @@
 				AA0000000000000000000172 /* CompletionEngineTests.swift */,
 				AA0000000000000000000173 /* GitRepositoryTests.swift */,
 				AA0000000000000000000174 /* CompletionSessionTests.swift */,
+				AA0000000000000000000181 /* NextCommandEngineTests.swift */,
 			);
 			path = SoraTests;
 			sourceTree = "<group>";
@@ -372,6 +387,7 @@
 				AA0000000000000000000063 /* CompletionEngine.swift in Sources */,
 				AA0000000000000000000064 /* CompletionSession.swift in Sources */,
 				AA0000000000000000000065 /* GhostTextView.swift in Sources */,
+				AA0000000000000000000090 /* NextCommandEngine.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -406,6 +422,8 @@
 				AA0000000000000000000082 /* PathCompleter.swift in Sources */,
 				AA0000000000000000000083 /* CompletionEngine.swift in Sources */,
 				AA0000000000000000000084 /* CompletionSession.swift in Sources */,
+				AA0000000000000000000091 /* NextCommandEngine.swift in Sources */,
+				AA0000000000000000000092 /* NextCommandEngineTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

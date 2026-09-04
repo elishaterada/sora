@@ -13,6 +13,7 @@ final class GhostTextView: NSView {
     var font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular) {
         didSet { needsDisplay = true }
     }
+    private var predicted = false
 
     override var isOpaque: Bool { false }
     override var acceptsFirstResponder: Bool { false }
@@ -23,7 +24,9 @@ final class GhostTextView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         guard !text.isEmpty else { return }
-        let color = NSColor.secondaryLabelColor.withAlphaComponent(0.5)
+        let color = predicted
+            ? NSColor.controlAccentColor.withAlphaComponent(0.55)
+            : NSColor.secondaryLabelColor.withAlphaComponent(0.5)
         let attributes: [NSAttributedString.Key: Any] = [
             .font: font,
             .foregroundColor: color,
@@ -31,8 +34,15 @@ final class GhostTextView: NSView {
         (text as NSString).draw(at: NSPoint(x: 0, y: 0), withAttributes: attributes)
     }
 
-    func show(text: String, origin: NSPoint, height: CGFloat, font: NSFont) {
+    func show(
+        text: String,
+        origin: NSPoint,
+        height: CGFloat,
+        font: NSFont,
+        predicted: Bool = false
+    ) {
         self.font = font
+        self.predicted = predicted
         self.text = text
         let size = (text as NSString).size(withAttributes: [.font: font])
         frame = NSRect(
@@ -47,6 +57,7 @@ final class GhostTextView: NSView {
 
     func hide() {
         text = ""
+        predicted = false
         isHidden = true
     }
 }

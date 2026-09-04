@@ -355,15 +355,26 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     }
 
     func recordCommandFinished(exitCode: Int16, durationNanos: UInt64) {
-        completion.reset()
-        ghostText.hide()
         let cwd = lastWorkingDirectory ?? currentWorkingDirectory() ?? initialWorkingDirectory
-        runtime.recordCommand(
+        let run = runtime.recordCommand(
             command: lastShellTitle,
             cwd: cwd,
             exitCode: exitCode,
             durationNanos: durationNanos
         )
+        completion.reset()
+        if let run, run.exitCode == 0 {
+            if let previous = completion.lastSuccessfulCommand {
+                runtime.recordTransition(
+                    previous: previous,
+                    next: run.command,
+                    cwd: run.cwd,
+                    at: run.finishedAt
+                )
+            }
+            completion.rememberSuccessfulCommand(run.command)
+        }
+        scheduleCompletionRefresh()
     }
 
     func applyCellSize(backingWidth: UInt32, backingHeight: UInt32) {
@@ -465,9 +476,24 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
             cellWidth: cellWidth
         )
         let fontSize = min(max(cellHeight * 0.72, 11), 22)
-        let font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+        let base = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+        let font: NSFont
+        if suggestion.source == .prediction {
+            font = NSFont(
+                descriptor: base.fontDescriptor.withSymbolicTraits(.italic),
+                size: fontSize
+            ) ?? base
+        } else {
+            font = base
+        }
         addSubview(ghostText)
-        ghostText.show(text: suggestion.insertSuffix, origin: origin, height: cellHeight, font: font)
+        ghostText.show(
+            text: suggestion.displayText,
+            origin: origin,
+            height: cellHeight,
+            font: font,
+            predicted: suggestion.source == .prediction
+        )
     }
 
     private func sendKey(_ event: NSEvent, action: ghostty_input_action_e) {

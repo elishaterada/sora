@@ -42,9 +42,9 @@ Sora/
 └── Shared/
 ```
 
-Only create directories required by the current phase. Phase 4 creates
-`Application/`, `Terminal/`, `Workspace/`, `Commands/`, `Storage/`, and
-`Completion/`.
+Only create directories required by the current phase. Phase 5 creates
+`Application/`, `Terminal/`, `Workspace/`, `Commands/`, `Storage/`,
+`Completion/`, and `Intelligence/`.
 
 ## Responsibilities
 
@@ -88,7 +88,7 @@ The host does not implement VT parsing, glyph rendering, or PTY spawn.
 - filesystem path completion for tokens that look like paths
 - inline ghost text; Tab / Right Arrow accept without sending those keys to the PTY
 - overlay resets on Enter, Esc, arrows (except accept), Ctrl-C/U/A/E/K/W, Option, mouse down, and multiline paste. zsh Tab-complete and history recall desync the buffer until the next prompt.
-- next-command prediction (Phase 5)
+- next-command prediction on an empty prompt after a successful command, shown as italic accent `→` ghost text, ranked by cwd, git root, frequency, and recency. Esc or Up/Down/Left dismisses it until the next successful command.
 
 ### Agent, Providers, and Tools
 

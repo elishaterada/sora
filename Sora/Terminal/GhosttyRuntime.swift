@@ -140,19 +140,28 @@ final class GhosttyRuntime: ObservableObject {
         cwd: URL?,
         exitCode: Int16,
         durationNanos: UInt64
-    ) {
+    ) -> CommandRun? {
         guard let run = CommandRunFactory.make(
             command: command,
             cwd: cwd,
             exitCode: exitCode,
             durationNanos: durationNanos
         ) else {
-            return
+            return nil
         }
         do {
             try history.record(run)
         } catch {
             Self.logger.error("failed to persist command history: \(error.localizedDescription, privacy: .public)")
+        }
+        return run
+    }
+
+    func recordTransition(previous: String, next: String, cwd: URL, at: Date) {
+        do {
+            try history.recordTransition(previous: previous, next: next, cwd: cwd, at: at)
+        } catch {
+            Self.logger.error("failed to persist command transition: \(error.localizedDescription, privacy: .public)")
         }
     }
 

@@ -44,7 +44,7 @@ Time-box research. The goal is enough confidence to build a vertical slice, not 
 - Do not build a terminal emulator.
 - Do not introduce Rust for our own application logic.
 - Do not implement tabs until the single-session vertical slice is reliable. **Phase 0–4 are complete. Phase 5 is next-command prediction.**
-- Do not implement AI, providers, agents, or next-command prediction until Phase 5.
+- Do not implement AI, providers, or agents until Phase 6.
 - Do not copy code from Warp.
 - Keep the implementation intentionally small and understandable.
 
