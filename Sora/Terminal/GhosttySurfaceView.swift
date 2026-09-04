@@ -50,11 +50,8 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         if let window {
-            window.styleMask.remove(.fullSizeContentView)
-            window.titleVisibility = .hidden
-            window.titlebarAppearsTransparent = true
-            window.titlebarSeparatorStyle = .none
-            window.toolbar = nil
+            // Window chrome (fullSizeContentView, traffic lights in the sidebar)
+            // is owned by WindowChromeView. Do not reserve a titlebar strip here.
             window.isOpaque = false
             window.backgroundColor = SoraTheme.nsWindowFill
             window.appearance = NSAppearance(named: .darkAqua)
