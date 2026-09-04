@@ -1,0 +1,579 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		AA0000000000000000000001 /* SoraApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000101 /* SoraApp.swift */; };
+		AA0000000000000000000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000102 /* ContentView.swift */; };
+		AA0000000000000000000003 /* GhosttyRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000103 /* GhosttyRuntime.swift */; };
+		AA0000000000000000000004 /* GhosttySurfaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000104 /* GhosttySurfaceView.swift */; };
+		AA0000000000000000000006 /* GhosttyInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000106 /* GhosttyInput.swift */; };
+		AA0000000000000000000007 /* GhosttyClipboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000107 /* GhosttyClipboard.swift */; };
+		AA0000000000000000000008 /* GhosttyKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000108 /* GhosttyKit.xcframework */; };
+		AA0000000000000000000009 /* terminfo in Resources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000109 /* terminfo */; };
+		AA0000000000000000000013 /* ghostty in Resources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000114 /* ghostty */; };
+		AA0000000000000000000010 /* GhosttyInputTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000110 /* GhosttyInputTests.swift */; };
+		AA0000000000000000000011 /* GhosttyClipboardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000111 /* GhosttyClipboardTests.swift */; };
+		AA0000000000000000000014 /* GhosttyInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000106 /* GhosttyInput.swift */; };
+		AA0000000000000000000015 /* GhosttyClipboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000107 /* GhosttyClipboard.swift */; };
+		AA0000000000000000000012 /* GhosttyKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000108 /* GhosttyKit.xcframework */; };
+		AA0000000000000000000020 /* WorkspaceSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000120 /* WorkspaceSnapshot.swift */; };
+		AA0000000000000000000021 /* WorkspaceModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000121 /* WorkspaceModel.swift */; };
+		AA0000000000000000000022 /* WorkspaceRestore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000122 /* WorkspaceRestore.swift */; };
+		AA0000000000000000000023 /* WorkspaceController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000123 /* WorkspaceController.swift */; };
+		AA0000000000000000000024 /* WorkspaceTabBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000124 /* WorkspaceTabBar.swift */; };
+		AA0000000000000000000025 /* WorkspaceHostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000125 /* WorkspaceHostView.swift */; };
+		AA0000000000000000000026 /* ForegroundWorkingDirectory.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000126 /* ForegroundWorkingDirectory.swift */; };
+		AA0000000000000000000027 /* WorkspaceCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000127 /* WorkspaceCommands.swift */; };
+		AA0000000000000000000030 /* WorkspaceSnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000130 /* WorkspaceSnapshotTests.swift */; };
+		AA0000000000000000000031 /* WorkspaceModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000131 /* WorkspaceModelTests.swift */; };
+		AA0000000000000000000032 /* WorkspaceRestoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000132 /* WorkspaceRestoreTests.swift */; };
+		AA0000000000000000000033 /* ForegroundWorkingDirectoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000133 /* ForegroundWorkingDirectoryTests.swift */; };
+		AA0000000000000000000034 /* WorkspaceSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000120 /* WorkspaceSnapshot.swift */; };
+		AA0000000000000000000035 /* WorkspaceModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000121 /* WorkspaceModel.swift */; };
+		AA0000000000000000000036 /* WorkspaceRestore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000122 /* WorkspaceRestore.swift */; };
+		AA0000000000000000000037 /* ForegroundWorkingDirectory.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000126 /* ForegroundWorkingDirectory.swift */; };
+		AA0000000000000000000040 /* CommandRun.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000140 /* CommandRun.swift */; };
+		AA0000000000000000000041 /* CommandRunFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000141 /* CommandRunFactory.swift */; };
+		AA0000000000000000000042 /* CommandHistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000142 /* CommandHistoryStore.swift */; };
+		AA0000000000000000000043 /* CommandHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000143 /* CommandHistoryView.swift */; };
+		AA0000000000000000000050 /* CommandRunFactoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000150 /* CommandRunFactoryTests.swift */; };
+		AA0000000000000000000051 /* CommandHistoryStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000151 /* CommandHistoryStoreTests.swift */; };
+		AA0000000000000000000052 /* CommandRun.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000140 /* CommandRun.swift */; };
+		AA0000000000000000000053 /* CommandRunFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000141 /* CommandRunFactory.swift */; };
+		AA0000000000000000000054 /* CommandHistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000142 /* CommandHistoryStore.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		AA0000000000000000000201 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AA0000000000000000000000 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AA0000000000000000000301;
+			remoteInfo = Sora;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		AA0000000000000000000101 /* SoraApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoraApp.swift; sourceTree = "<group>"; };
+		AA0000000000000000000102 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		AA0000000000000000000103 /* GhosttyRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyRuntime.swift; sourceTree = "<group>"; };
+		AA0000000000000000000104 /* GhosttySurfaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttySurfaceView.swift; sourceTree = "<group>"; };
+		AA0000000000000000000106 /* GhosttyInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyInput.swift; sourceTree = "<group>"; };
+		AA0000000000000000000107 /* GhosttyClipboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyClipboard.swift; sourceTree = "<group>"; };
+		AA0000000000000000000108 /* GhosttyKit.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = Vendor/ghostty/macos/GhosttyKit.xcframework; sourceTree = "<group>"; };
+		AA0000000000000000000109 /* terminfo */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Vendor/ghostty/zig-out/share/terminfo; sourceTree = "<group>"; };
+		AA0000000000000000000114 /* ghostty */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Vendor/ghostty/zig-out/share/ghostty; sourceTree = "<group>"; };
+		AA0000000000000000000110 /* GhosttyInputTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyInputTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000111 /* GhosttyClipboardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyClipboardTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000120 /* WorkspaceSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceSnapshot.swift; sourceTree = "<group>"; };
+		AA0000000000000000000121 /* WorkspaceModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceModel.swift; sourceTree = "<group>"; };
+		AA0000000000000000000122 /* WorkspaceRestore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceRestore.swift; sourceTree = "<group>"; };
+		AA0000000000000000000123 /* WorkspaceController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceController.swift; sourceTree = "<group>"; };
+		AA0000000000000000000124 /* WorkspaceTabBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceTabBar.swift; sourceTree = "<group>"; };
+		AA0000000000000000000125 /* WorkspaceHostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceHostView.swift; sourceTree = "<group>"; };
+		AA0000000000000000000126 /* ForegroundWorkingDirectory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForegroundWorkingDirectory.swift; sourceTree = "<group>"; };
+		AA0000000000000000000127 /* WorkspaceCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceCommands.swift; sourceTree = "<group>"; };
+		AA0000000000000000000130 /* WorkspaceSnapshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceSnapshotTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000131 /* WorkspaceModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceModelTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000132 /* WorkspaceRestoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceRestoreTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000133 /* ForegroundWorkingDirectoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForegroundWorkingDirectoryTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000140 /* CommandRun.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandRun.swift; sourceTree = "<group>"; };
+		AA0000000000000000000141 /* CommandRunFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandRunFactory.swift; sourceTree = "<group>"; };
+		AA0000000000000000000142 /* CommandHistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandHistoryStore.swift; sourceTree = "<group>"; };
+		AA0000000000000000000143 /* CommandHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandHistoryView.swift; sourceTree = "<group>"; };
+		AA0000000000000000000150 /* CommandRunFactoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandRunFactoryTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000151 /* CommandHistoryStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandHistoryStoreTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000112 /* Sora.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Sora.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA0000000000000000000113 /* SoraTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SoraTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		AA0000000000000000000401 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA0000000000000000000008 /* GhosttyKit.xcframework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA0000000000000000000402 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA0000000000000000000012 /* GhosttyKit.xcframework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		AA0000000000000000000500 = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000501 /* Sora */,
+				AA0000000000000000000504 /* SoraTests */,
+				AA0000000000000000000108 /* GhosttyKit.xcframework */,
+				AA0000000000000000000109 /* terminfo */,
+				AA0000000000000000000114 /* ghostty */,
+				AA0000000000000000000505 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000501 /* Sora */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000502 /* Application */,
+				AA0000000000000000000503 /* Terminal */,
+				AA0000000000000000000506 /* Workspace */,
+				AA0000000000000000000507 /* Commands */,
+				AA0000000000000000000508 /* Storage */,
+			);
+			path = Sora;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000502 /* Application */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000101 /* SoraApp.swift */,
+				AA0000000000000000000102 /* ContentView.swift */,
+			);
+			path = Application;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000503 /* Terminal */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000103 /* GhosttyRuntime.swift */,
+				AA0000000000000000000104 /* GhosttySurfaceView.swift */,
+				AA0000000000000000000106 /* GhosttyInput.swift */,
+				AA0000000000000000000107 /* GhosttyClipboard.swift */,
+			);
+			path = Terminal;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000506 /* Workspace */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000120 /* WorkspaceSnapshot.swift */,
+				AA0000000000000000000121 /* WorkspaceModel.swift */,
+				AA0000000000000000000122 /* WorkspaceRestore.swift */,
+				AA0000000000000000000123 /* WorkspaceController.swift */,
+				AA0000000000000000000124 /* WorkspaceTabBar.swift */,
+				AA0000000000000000000125 /* WorkspaceHostView.swift */,
+				AA0000000000000000000126 /* ForegroundWorkingDirectory.swift */,
+				AA0000000000000000000127 /* WorkspaceCommands.swift */,
+			);
+			path = Workspace;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000507 /* Commands */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000140 /* CommandRun.swift */,
+				AA0000000000000000000141 /* CommandRunFactory.swift */,
+				AA0000000000000000000143 /* CommandHistoryView.swift */,
+			);
+			path = Commands;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000508 /* Storage */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000142 /* CommandHistoryStore.swift */,
+			);
+			path = Storage;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000504 /* SoraTests */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000110 /* GhosttyInputTests.swift */,
+				AA0000000000000000000111 /* GhosttyClipboardTests.swift */,
+				AA0000000000000000000130 /* WorkspaceSnapshotTests.swift */,
+				AA0000000000000000000131 /* WorkspaceModelTests.swift */,
+				AA0000000000000000000132 /* WorkspaceRestoreTests.swift */,
+				AA0000000000000000000133 /* ForegroundWorkingDirectoryTests.swift */,
+				AA0000000000000000000150 /* CommandRunFactoryTests.swift */,
+				AA0000000000000000000151 /* CommandHistoryStoreTests.swift */,
+			);
+			path = SoraTests;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000505 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000112 /* Sora.app */,
+				AA0000000000000000000113 /* SoraTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		AA0000000000000000000301 /* Sora */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA0000000000000000000601 /* Build configuration list for PBXNativeTarget "Sora" */;
+			buildPhases = (
+				AA0000000000000000000403 /* Sources */,
+				AA0000000000000000000401 /* Frameworks */,
+				AA0000000000000000000404 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Sora;
+			productName = Sora;
+			productReference = AA0000000000000000000112 /* Sora.app */;
+			productType = "com.apple.product-type.application";
+		};
+		AA0000000000000000000302 /* SoraTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA0000000000000000000602 /* Build configuration list for PBXNativeTarget "SoraTests" */;
+			buildPhases = (
+				AA0000000000000000000405 /* Sources */,
+				AA0000000000000000000402 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				AA0000000000000000000202 /* PBXTargetDependency */,
+			);
+			name = SoraTests;
+			productName = SoraTests;
+			productReference = AA0000000000000000000113 /* SoraTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		AA0000000000000000000000 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2600;
+				LastUpgradeCheck = 2600;
+			};
+			buildConfigurationList = AA0000000000000000000600 /* Build configuration list for PBXProject "Sora" */;
+			compatibilityVersion = "Xcode 15.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = AA0000000000000000000500;
+			productRefGroup = AA0000000000000000000505 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				AA0000000000000000000301 /* Sora */,
+				AA0000000000000000000302 /* SoraTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		AA0000000000000000000404 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA0000000000000000000009 /* terminfo in Resources */,
+				AA0000000000000000000013 /* ghostty in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		AA0000000000000000000403 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA0000000000000000000001 /* SoraApp.swift in Sources */,
+				AA0000000000000000000002 /* ContentView.swift in Sources */,
+				AA0000000000000000000003 /* GhosttyRuntime.swift in Sources */,
+				AA0000000000000000000004 /* GhosttySurfaceView.swift in Sources */,
+				AA0000000000000000000006 /* GhosttyInput.swift in Sources */,
+				AA0000000000000000000007 /* GhosttyClipboard.swift in Sources */,
+				AA0000000000000000000020 /* WorkspaceSnapshot.swift in Sources */,
+				AA0000000000000000000021 /* WorkspaceModel.swift in Sources */,
+				AA0000000000000000000022 /* WorkspaceRestore.swift in Sources */,
+				AA0000000000000000000023 /* WorkspaceController.swift in Sources */,
+				AA0000000000000000000024 /* WorkspaceTabBar.swift in Sources */,
+				AA0000000000000000000025 /* WorkspaceHostView.swift in Sources */,
+				AA0000000000000000000026 /* ForegroundWorkingDirectory.swift in Sources */,
+				AA0000000000000000000027 /* WorkspaceCommands.swift in Sources */,
+				AA0000000000000000000040 /* CommandRun.swift in Sources */,
+				AA0000000000000000000041 /* CommandRunFactory.swift in Sources */,
+				AA0000000000000000000042 /* CommandHistoryStore.swift in Sources */,
+				AA0000000000000000000043 /* CommandHistoryView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA0000000000000000000405 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA0000000000000000000010 /* GhosttyInputTests.swift in Sources */,
+				AA0000000000000000000011 /* GhosttyClipboardTests.swift in Sources */,
+				AA0000000000000000000014 /* GhosttyInput.swift in Sources */,
+				AA0000000000000000000015 /* GhosttyClipboard.swift in Sources */,
+				AA0000000000000000000030 /* WorkspaceSnapshotTests.swift in Sources */,
+				AA0000000000000000000031 /* WorkspaceModelTests.swift in Sources */,
+				AA0000000000000000000032 /* WorkspaceRestoreTests.swift in Sources */,
+				AA0000000000000000000033 /* ForegroundWorkingDirectoryTests.swift in Sources */,
+				AA0000000000000000000034 /* WorkspaceSnapshot.swift in Sources */,
+				AA0000000000000000000035 /* WorkspaceModel.swift in Sources */,
+				AA0000000000000000000036 /* WorkspaceRestore.swift in Sources */,
+				AA0000000000000000000037 /* ForegroundWorkingDirectory.swift in Sources */,
+				AA0000000000000000000050 /* CommandRunFactoryTests.swift in Sources */,
+				AA0000000000000000000051 /* CommandHistoryStoreTests.swift in Sources */,
+				AA0000000000000000000052 /* CommandRun.swift in Sources */,
+				AA0000000000000000000053 /* CommandRunFactory.swift in Sources */,
+				AA0000000000000000000054 /* CommandHistoryStore.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		AA0000000000000000000202 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AA0000000000000000000301 /* Sora */;
+			targetProxy = AA0000000000000000000201 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		AA0000000000000000000701 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		AA0000000000000000000702 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		AA0000000000000000000703 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Sora;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+				INFOPLIST_KEY_NSHighResolutionCapable = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				OTHER_LDFLAGS = (
+					"-lstdc++",
+					"-lsqlite3",
+					"-framework",
+					Carbon,
+					"-framework",
+					Metal,
+					"-framework",
+					MetalKit,
+					"-framework",
+					CoreText,
+					"-framework",
+					CoreGraphics,
+					"-framework",
+					QuartzCore,
+					"-framework",
+					IOSurface,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = dev.sora.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		AA0000000000000000000704 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Sora;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+				INFOPLIST_KEY_NSHighResolutionCapable = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				OTHER_LDFLAGS = (
+					"-lstdc++",
+					"-lsqlite3",
+					"-framework",
+					Carbon,
+					"-framework",
+					Metal,
+					"-framework",
+					MetalKit,
+					"-framework",
+					CoreText,
+					"-framework",
+					CoreGraphics,
+					"-framework",
+					QuartzCore,
+					"-framework",
+					IOSurface,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = dev.sora.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		AA0000000000000000000705 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				OTHER_LDFLAGS = (
+					"-lstdc++",
+					"-lsqlite3",
+					"-framework",
+					Carbon,
+					"-framework",
+					Metal,
+					"-framework",
+					MetalKit,
+					"-framework",
+					CoreText,
+					"-framework",
+					CoreGraphics,
+					"-framework",
+					QuartzCore,
+					"-framework",
+					IOSurface,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = dev.sora.app.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		AA0000000000000000000706 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				OTHER_LDFLAGS = (
+					"-lstdc++",
+					"-lsqlite3",
+					"-framework",
+					Carbon,
+					"-framework",
+					Metal,
+					"-framework",
+					MetalKit,
+					"-framework",
+					CoreText,
+					"-framework",
+					CoreGraphics,
+					"-framework",
+					QuartzCore,
+					"-framework",
+					IOSurface,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = dev.sora.app.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		AA0000000000000000000600 /* Build configuration list for PBXProject "Sora" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA0000000000000000000701 /* Debug */,
+				AA0000000000000000000702 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AA0000000000000000000601 /* Build configuration list for PBXNativeTarget "Sora" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA0000000000000000000703 /* Debug */,
+				AA0000000000000000000704 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AA0000000000000000000602 /* Build configuration list for PBXNativeTarget "SoraTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA0000000000000000000705 /* Debug */,
+				AA0000000000000000000706 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = AA0000000000000000000000 /* Project object */;
+}
