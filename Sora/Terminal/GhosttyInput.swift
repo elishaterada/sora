@@ -77,50 +77,19 @@ enum GhosttyInput {
         return roundedAdvance > 0 ? roundedAdvance : 8
     }
 
-    /// `ghostty_surface_ime_point` is top-left origin. `x` is the cursor
-    /// cell midpoint; `y` is the cell bottom. Ghost text starts at the
-    /// cell's leading edge. AppKit overlays use bottom-left origin.
+    /// `ghostty_surface_ime_point` is top-left origin. `y` is the cell bottom.
+    /// Ghostty's AppKit IME rect uses `x` as its leading edge (see
+    /// `firstRect(forCharacterRange:)`); match that so a leading space in the
+    /// suggestion (` -lah`) occupies a full cell after the typed prefix.
+    /// AppKit overlays use bottom-left origin.
     static func ghostTextOrigin(
         imeX: CGFloat,
         imeY: CGFloat,
         viewHeight: CGFloat,
         cellWidth: CGFloat
     ) -> NSPoint {
-        NSPoint(x: imeX - cellWidth / 2, y: viewHeight - imeY)
-    }
-
-    /// Where to draw ghost text relative to the live cursor.
-    ///
-    /// When the typed line has no trailing space but the suggestion continues
-    /// with a new token (` status`), keep that space in `insertSuffix` for
-    /// accept, and draw the visible remainder in the cell *after* the cursor.
-    /// The cursor cell itself is the gap, so `status` never paints on top of
-    /// the caret as `gitstatus`.
-    static func ghostTextPlacement(
-        line: String,
-        displayText: String,
-        origin: NSPoint,
-        cellWidth: CGFloat
-    ) -> (text: String, origin: NSPoint) {
-        let lineEndsWithSpace = line.hasSuffix(" ") || line.hasSuffix("\t")
-        guard !lineEndsWithSpace, !displayText.isEmpty else {
-            return (displayText, origin)
-        }
-
-        if displayText.hasPrefix(" ") || displayText.hasPrefix("\t") {
-            let visible = String(displayText.drop(while: { $0 == " " || $0 == "\t" }))
-            guard !visible.isEmpty else { return (displayText, origin) }
-            return (
-                visible,
-                NSPoint(x: origin.x + cellWidth, y: origin.y)
-            )
-        }
-
-        // Suggestion omitted the separator — still keep the caret cell empty.
-        return (
-            displayText,
-            NSPoint(x: origin.x + cellWidth, y: origin.y)
-        )
+        _ = cellWidth
+        return NSPoint(x: imeX, y: viewHeight - imeY)
     }
 
     /// Baseline from the bottom of an unflipped cell. Matches Ghostty's

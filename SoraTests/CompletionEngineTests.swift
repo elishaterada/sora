@@ -53,6 +53,28 @@ final class CompletionEngineTests: XCTestCase {
         XCTAssertTrue(suggestion?.insertSuffix.hasPrefix(" ") == true)
     }
 
+    func testHistorySuffixKeepsLeadingSpaceBeforeFlags() {
+        let cwd = URL(fileURLWithPath: "/tmp/project")
+        let now = Date(timeIntervalSince1970: 1_000)
+        let suggestion = CompletionEngine.suggest(
+            line: "ls",
+            cwd: cwd,
+            now: now,
+            history: [
+                HistoryCommandStat(
+                    command: "ls -lah",
+                    lastCwd: cwd,
+                    frequency: 4,
+                    lastUsed: now,
+                    sameCwdCount: 4
+                ),
+            ],
+            pathMatches: []
+        )
+        XCTAssertEqual(suggestion?.insertSuffix, " -lah")
+        XCTAssertEqual(suggestion?.displayText, " -lah")
+    }
+
     func testPathLikeTokenBeatsHistory() throws {
         let cwd = FileManager.default.temporaryDirectory
             .appendingPathComponent("sora-complete-\(UUID().uuidString)", isDirectory: true)

@@ -31,40 +31,15 @@ final class GhosttyInputTests: XCTestCase {
     }
 
     func testGhostTextOriginConvertsIMETopLeftToAppKit() {
-        // ime_point x is the cell midpoint; ghost text starts at the leading edge.
+        // Match Ghostty AppKit: ime x is the IME rect's leading edge.
         let origin = GhosttyInput.ghostTextOrigin(
             imeX: 20,
             imeY: 40,
             viewHeight: 500,
             cellWidth: 8
         )
-        XCTAssertEqual(origin.x, 16)
+        XCTAssertEqual(origin.x, 20)
         XCTAssertEqual(origin.y, 460)
-    }
-
-    func testGhostTextPlacementPutsNextTokenAfterCursorCell() {
-        let origin = NSPoint(x: 100, y: 50)
-        let placed = GhosttyInput.ghostTextPlacement(
-            line: "git",
-            displayText: " status",
-            origin: origin,
-            cellWidth: 12
-        )
-        XCTAssertEqual(placed.text, "status")
-        XCTAssertEqual(placed.origin.x, 112)
-        XCTAssertEqual(placed.origin.y, 50)
-    }
-
-    func testGhostTextPlacementKeepsSuffixWhenLineAlreadyHasSpace() {
-        let origin = NSPoint(x: 100, y: 50)
-        let placed = GhosttyInput.ghostTextPlacement(
-            line: "git ",
-            displayText: "status",
-            origin: origin,
-            cellWidth: 12
-        )
-        XCTAssertEqual(placed.text, "status")
-        XCTAssertEqual(placed.origin, origin)
     }
 
     func testGhostTextCellWidthUsesCELLSIZEWhenHeightsAgree() {
