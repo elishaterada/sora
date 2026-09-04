@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AA00000000000000000000B0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA00000000000000000001B0 /* Assets.xcassets */; };
 		AA0000000000000000000001 /* SoraApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000101 /* SoraApp.swift */; };
 		AA0000000000000000000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000102 /* ContentView.swift */; };
 		AA0000000000000000000005 /* SoraTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000105 /* SoraTheme.swift */; };
@@ -95,6 +96,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		AA00000000000000000001B0 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		AA0000000000000000000101 /* SoraApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoraApp.swift; sourceTree = "<group>"; };
 		AA0000000000000000000102 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		AA0000000000000000000105 /* SoraTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoraTheme.swift; sourceTree = "<group>"; };
@@ -217,6 +219,7 @@
 		AA0000000000000000000511 /* Resources */ = {
 			isa = PBXGroup;
 			children = (
+				AA00000000000000000001B0 /* Assets.xcassets */,
 				AA0000000000000000000118 /* sora.ghostty */,
 				AA0000000000000000000192 /* zsh */,
 			);
@@ -401,6 +404,7 @@
 			files = (
 				AA0000000000000000000009 /* terminfo in Resources */,
 				AA0000000000000000000013 /* ghostty in Resources */,
+				AA00000000000000000000B0 /* Assets.xcassets in Resources */,
 				AA0000000000000000000018 /* sora.ghostty in Resources */,
 				AA00000000000000000000A3 /* zsh in Resources */,
 			);
@@ -546,6 +550,7 @@
 			buildSettings = {
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_APP_SANDBOX = NO;
@@ -590,6 +595,7 @@
 			buildSettings = {
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_APP_SANDBOX = NO;
