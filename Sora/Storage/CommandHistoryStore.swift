@@ -67,6 +67,8 @@ final class CommandHistoryStore: ObservableObject {
             );
             CREATE INDEX IF NOT EXISTS idx_command_runs_finished_at
                 ON command_runs(finished_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_command_runs_command
+                ON command_runs(command);
             """
         )
         try reload()
@@ -113,6 +115,62 @@ final class CommandHistoryStore: ObservableObject {
 
     func reload() throws {
         recent = try recent(limit: 200)
+    }
+
+    func prefixStats(prefix: String, cwd: URL, limit: Int = 80) throws -> [HistoryCommandStat] {
+        guard !prefix.isEmpty else { return [] }
+        let sql = """
+            SELECT
+                r.command,
+                r.cwd,
+                s.frequency,
+                s.last_used,
+                s.same_cwd_count
+            FROM (
+                SELECT
+                    command,
+                    COUNT(*) AS frequency,
+                    MAX(finished_at) AS last_used,
+                    SUM(CASE WHEN cwd = ? THEN 1 ELSE 0 END) AS same_cwd_count
+                FROM command_runs
+                WHERE command LIKE ? ESCAPE '\\'
+                GROUP BY command
+                ORDER BY frequency DESC, last_used DESC
+                LIMIT ?
+            ) AS s
+            JOIN command_runs AS r
+                ON r.command = s.command AND r.finished_at = s.last_used;
+            """
+        let statement = try prepare(sql)
+        defer { sqlite3_finalize(statement) }
+        try bindText(statement, index: 1, cwd.path)
+        try bindText(statement, index: 2, Self.likePrefix(prefix))
+        sqlite3_bind_int(statement, 3, Int32(limit))
+
+        var stats: [HistoryCommandStat] = []
+        while sqlite3_step(statement) == SQLITE_ROW {
+            guard let command = sqlite3_column_text(statement, 0),
+                  let cwdText = sqlite3_column_text(statement, 1)
+            else {
+                continue
+            }
+            stats.append(HistoryCommandStat(
+                command: String(cString: command),
+                lastCwd: URL(fileURLWithPath: String(cString: cwdText)),
+                frequency: Int(sqlite3_column_int(statement, 2)),
+                lastUsed: Date(timeIntervalSince1970: sqlite3_column_double(statement, 3)),
+                sameCwdCount: Int(sqlite3_column_int(statement, 4))
+            ))
+        }
+        return stats
+    }
+
+    static func likePrefix(_ prefix: String) -> String {
+        let escaped = prefix
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "%", with: "\\%")
+            .replacingOccurrences(of: "_", with: "\\_")
+        return escaped + "%"
     }
 
     func recent(limit: Int) throws -> [CommandRun] {

@@ -84,6 +84,8 @@ If `command` is null, Ghostty launches the configured default shell.
 ### Input and clipboard
 
 - `ghostty_surface_key` / `ghostty_surface_text` / `ghostty_surface_preedit`
+- `ghostty_surface_ime_point` (top-left origin; x is cursor cell midpoint, y is cell bottom)
+- `GHOSTTY_ACTION_CELL_SIZE` (backing pixels; convert with `convertFromBacking`)
 - `ghostty_surface_mouse_button` / `ghostty_surface_mouse_pos` / `ghostty_surface_mouse_scroll`
 - `ghostty_surface_has_selection` / `ghostty_surface_read_selection` / `ghostty_surface_read_text`
 - Runtime callbacks on `ghostty_runtime_config_s`: `wakeup_cb`, `action_cb`, `read_clipboard_cb`, `confirm_read_clipboard_cb`, `write_clipboard_cb`, `close_surface_cb`
@@ -307,6 +309,7 @@ rather than porting Ghostty's full `NSTextInputClient` implementation on day one
 - **Do not destroy a surface when its `NSView` leaves the window.** Tab switching and SwiftUI churn must not reap the PTY. Destroy only when the tab or window is closed.
 - **Keep hidden tab views in the hierarchy** (`isHidden` + `ghostty_surface_set_occlusion`) rather than using a SwiftUI `TabView` that recreates `NSViewRepresentable` contents.
 - **OSC 133 D becomes `GHOSTTY_ACTION_COMMAND_FINISHED`** with exit code and duration only. Ghostty's zsh integration also writes the command to OSC 2 in preexec; capture that title when the finish action arrives. Do not scrape the screen.
+- **`ghostty_surface_ime_point` is top-left origin.** Convert with `y = viewHeight - imeY` for AppKit overlays. Ghost text is a hit-through subview; do not replace libghostty's layer.
 - Linking GhosttyKit requires `Carbon` (TIS keyboard APIs) in addition to Metal, CoreText, QuartzCore, and IOSurface.
 - Xcode 26.6 + Zig 0.16.0 produced a working native `GhosttyKit.xcframework` after `xcodebuild -downloadComponent MetalToolchain`.
 - Full third-party license inventory of the static archive is not complete.

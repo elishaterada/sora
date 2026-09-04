@@ -36,7 +36,7 @@ Prove the native terminal foundation with the smallest useful vertical slice:
 - manage terminal lifecycle cleanly
 - build and run reliably from Xcode
 
-AI, autocomplete, accounts, sync, cloud services, and polished styling are out of scope for V0.
+AI, accounts, sync, cloud services, and polished styling are out of scope for V0. Local history completion (Phase 4) is in.
 
 ## Build and run
 
@@ -53,8 +53,8 @@ Requirements:
 # 2. Build the app
 xcodebuild -project Sora.xcodeproj -scheme Sora -configuration Debug -destination 'platform=macOS' build
 
-# 3. Tests
-xcodebuild -project Sora.xcodeproj -scheme Sora -configuration Debug -destination 'platform=macOS' test
+# 3. Tests (do not link libghostty; serial to avoid duplicate xctest workers)
+xcodebuild -project Sora.xcodeproj -scheme Sora -configuration Debug -destination 'platform=macOS' -parallel-testing-enabled NO test
 ```
 
 The first launch starts a login `zsh` in a single window. Cmd+T opens a new tab; Cmd+W closes the current tab. The app is unsandboxed and ad-hoc signed for local use.
@@ -68,11 +68,11 @@ Ghostty is pinned to commit `c81f0b26871c7fbbe2fc35549fdad1f64ed29094`. See [`do
 - [`docs/architecture.md`](docs/architecture.md): target architecture and boundaries
 - [`docs/roadmap.md`](docs/roadmap.md): phased delivery plan
 - [`docs/libghostty-integration.md`](docs/libghostty-integration.md): integration research and decision checklist
-
-Open **Window → Command History** after running a command to confirm structured history.
 - [`docs/licensing.md`](docs/licensing.md): dependency and reference-project constraints
 - [`docs/naming.md`](docs/naming.md): working-name status
 
+Open **Window → Command History** after running a command to confirm structured history. Type a command prefix to see ghost text; Tab or Right Arrow accepts it.
+
 ## Current status
 
-Phase 3 shell semantics are in the tree: OSC 133 command boundaries persist to SQLite. AI is not implemented.
+Phase 4 local completion is in the tree: history- and path-based ghost text, accepted with Tab or Right Arrow. AI is not implemented.
