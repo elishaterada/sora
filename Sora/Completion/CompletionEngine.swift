@@ -75,8 +75,22 @@ enum CompletionEngine {
             return lhs.0.lastUsed > rhs.0.lastUsed
         }
         guard let best = ranked.first else { return nil }
-        let suffix = String(best.0.command.dropFirst(line.count))
+        var suffix = String(best.0.command.dropFirst(line.count))
         guard !suffix.isEmpty else { return nil }
+        // Keep a token separator when the typed prefix ends mid-command.
+        if !line.hasSuffix(" "),
+           !line.hasSuffix("\t"),
+           let boundary = best.0.command.index(
+               best.0.command.startIndex,
+               offsetBy: line.count,
+               limitedBy: best.0.command.endIndex
+           ),
+           boundary < best.0.command.endIndex,
+           best.0.command[boundary].isWhitespace,
+           let first = suffix.first,
+           !first.isWhitespace {
+            suffix = " " + suffix
+        }
         return CompletionSuggestion(insertSuffix: suffix, source: .history)
     }
 
