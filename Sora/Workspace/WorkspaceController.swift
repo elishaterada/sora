@@ -13,6 +13,10 @@ final class WorkspaceController: ObservableObject {
     @Published private(set) var tabs: [WorkspaceModel.Tab]
     @Published private(set) var selectedID: UUID
 
+    var selected: WorkspaceModel.Tab {
+        tabs.first { $0.id == selectedID } ?? tabs[0]
+    }
+
     init(
         runtime: GhosttyRuntime,
         snapshot: WorkspaceSnapshot,

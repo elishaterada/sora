@@ -62,7 +62,7 @@ Only create directories required by the current phase. Phase 5 creates
 - keyboard and pointer forwarding
 - resize and backing-scale propagation
 - clipboard: Cmd+C/V and Edit menu copy/paste via `ghostty_surface_read_selection` / `ghostty_surface_text`; OSC 52 via Ghostty runtime callbacks plus `NSPasteboard`
-- completion overlay: ghost text subview at `ghostty_surface_ime_point` (top-left → AppKit `y = height - y`). Do not install a `CAMetalLayer` on the host.
+- session chrome: dark sidebar, cwd/git badges, and a Sora color theme loaded from bundled `sora.ghostty`. libghostty still owns the grid.
 
 Unit tests must not link GhosttyKit. `GhosttyInput.swift` and `GhosttyClipboard.swift` stay Ghostty-free; `GhosttyInputKit.swift` and `GhosttyClipboardKit.swift` are app-only.
 

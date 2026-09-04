@@ -48,8 +48,17 @@ final class GhosttyRuntime: ObservableObject {
         guard let config = ghostty_config_new() else {
             throw GhosttyRuntimeError.configFailed
         }
-        // Blank config: do not load ~/.config/ghostty so Sora is reproducible.
+        // Blank config plus bundled Sora theme. Do not load ~/.config/ghostty.
+        if let theme = Bundle.main.path(forResource: "sora", ofType: "ghostty") {
+            theme.withCString { path in
+                ghostty_config_load_file(config, path)
+            }
+        }
         ghostty_config_finalize(config)
+        let problems = ghostty_config_diagnostics_count(config)
+        if problems > 0 {
+            Self.logger.error("sora.ghostty has \(problems) diagnostic(s)")
+        }
         self.config = config
         self.launchSnapshot = WorkspaceRestore.load()
 

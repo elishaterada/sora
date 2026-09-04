@@ -18,7 +18,16 @@ struct WorkspaceHostRepresentable: NSViewRepresentable {
 final class WorkspaceHostView: NSView {
     private var attachedIDs: Set<UUID> = []
 
-    override var isFlipped: Bool { false }
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layer?.backgroundColor = SoraTheme.nsInk.cgColor
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not supported")
+    }
 
     func sync(workspace: WorkspaceController) {
         for id in workspace.closedIDs(relativeTo: attachedIDs) {

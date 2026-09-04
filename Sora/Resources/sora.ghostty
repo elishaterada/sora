@@ -1,0 +1,32 @@
+background = #1e1c24
+foreground = #efe8dc
+cursor-color = #e0a15a
+cursor-text = #16141a
+cursor-style = bar
+cursor-style-blink = false
+selection-background = #3d3428
+selection-foreground = #efe8dc
+window-padding-x = 14
+window-padding-y = 12
+window-padding-balance = true
+adjust-cell-height = 8%
+font-size = 13
+font-family = "SF Mono"
+minimum-contrast = 1
+
+palette = 0=#2a2730
+palette = 1=#d16b6b
+palette = 2=#8fb894
+palette = 3=#e0a15a
+palette = 4=#8aa0c2
+palette = 5=#c492b0
+palette = 6=#7fb3b0
+palette = 7=#efe8dc
+palette = 8=#6d665c
+palette = 9=#e08a8a
+palette = 10=#a8d0ae
+palette = 11=#f0c07a
+palette = 12=#a8bce0
+palette = 13=#d8b0c8
+palette = 14=#9dcdc8
+palette = 15=#fff8ee
