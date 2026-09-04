@@ -1,0 +1,13 @@
+Sora includes software from Ghostty.
+
+Ghostty
+Copyright (c) 2024 Mitchell Hashimoto, Ghostty contributors
+License: MIT
+https://github.com/ghostty-org/ghostty/blob/main/LICENSE
+
+The MIT license text is reproduced in docs/licensing.md.
+
+GhosttyKit statically includes additional third-party libraries (including
+FreeType, HarfBuzz, fontconfig, and bundled fonts). A complete
+ThirdPartyNotices file is required before any public binary release.
+See docs/licensing.md.
