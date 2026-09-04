@@ -526,10 +526,16 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
             viewHeight: bounds.height,
             cellWidth: cellWidth
         )
+        let placement = GhosttyInput.ghostTextPlacement(
+            line: completion.buffer.text,
+            displayText: suggestion.displayText,
+            origin: origin,
+            cellWidth: cellWidth
+        )
         addSubview(ghostText)
         ghostText.show(
-            text: suggestion.displayText,
-            origin: origin,
+            text: placement.text,
+            origin: placement.origin,
             cellWidth: cellWidth,
             cellHeight: cellHeight,
             font: font,

@@ -42,6 +42,31 @@ final class GhosttyInputTests: XCTestCase {
         XCTAssertEqual(origin.y, 460)
     }
 
+    func testGhostTextPlacementPutsNextTokenAfterCursorCell() {
+        let origin = NSPoint(x: 100, y: 50)
+        let placed = GhosttyInput.ghostTextPlacement(
+            line: "git",
+            displayText: " status",
+            origin: origin,
+            cellWidth: 12
+        )
+        XCTAssertEqual(placed.text, "status")
+        XCTAssertEqual(placed.origin.x, 112)
+        XCTAssertEqual(placed.origin.y, 50)
+    }
+
+    func testGhostTextPlacementKeepsSuffixWhenLineAlreadyHasSpace() {
+        let origin = NSPoint(x: 100, y: 50)
+        let placed = GhosttyInput.ghostTextPlacement(
+            line: "git ",
+            displayText: "status",
+            origin: origin,
+            cellWidth: 12
+        )
+        XCTAssertEqual(placed.text, "status")
+        XCTAssertEqual(placed.origin, origin)
+    }
+
     func testGhostTextCellWidthUsesCELLSIZEWhenHeightsAgree() {
         let font = CTFontCreateWithName("SFMono-Regular" as CFString, 18, nil)
         let width = GhosttyInput.ghostTextCellWidth(

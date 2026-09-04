@@ -89,6 +89,40 @@ enum GhosttyInput {
         NSPoint(x: imeX - cellWidth / 2, y: viewHeight - imeY)
     }
 
+    /// Where to draw ghost text relative to the live cursor.
+    ///
+    /// When the typed line has no trailing space but the suggestion continues
+    /// with a new token (` status`), keep that space in `insertSuffix` for
+    /// accept, and draw the visible remainder in the cell *after* the cursor.
+    /// The cursor cell itself is the gap, so `status` never paints on top of
+    /// the caret as `gitstatus`.
+    static func ghostTextPlacement(
+        line: String,
+        displayText: String,
+        origin: NSPoint,
+        cellWidth: CGFloat
+    ) -> (text: String, origin: NSPoint) {
+        let lineEndsWithSpace = line.hasSuffix(" ") || line.hasSuffix("\t")
+        guard !lineEndsWithSpace, !displayText.isEmpty else {
+            return (displayText, origin)
+        }
+
+        if displayText.hasPrefix(" ") || displayText.hasPrefix("\t") {
+            let visible = String(displayText.drop(while: { $0 == " " || $0 == "\t" }))
+            guard !visible.isEmpty else { return (displayText, origin) }
+            return (
+                visible,
+                NSPoint(x: origin.x + cellWidth, y: origin.y)
+            )
+        }
+
+        // Suggestion omitted the separator — still keep the caret cell empty.
+        return (
+            displayText,
+            NSPoint(x: origin.x + cellWidth, y: origin.y)
+        )
+    }
+
     /// Baseline from the bottom of an unflipped cell. Matches Ghostty's
     /// `cell_baseline` after `adjust-cell-height` recenters the face.
     static func ghostTextBaseline(cellHeight: CGFloat, font: CTFont) -> CGFloat {
