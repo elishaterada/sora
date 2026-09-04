@@ -2,11 +2,16 @@
 # Source Ghostty's integration (do not copy it), then replace the stock macOS
 # prompt. Custom themes that change PS1 in .zshrc are left alone.
 
+_sora_dir="${${(%):-%x}:A:h}"
+
 if [[ -n "${GHOSTTY_RESOURCES_DIR}" && -r "${GHOSTTY_RESOURCES_DIR}/shell-integration/zsh/.zshenv" ]]; then
   builtin source "${GHOSTTY_RESOURCES_DIR}/shell-integration/zsh/.zshenv"
 fi
 
 if [[ -o interactive ]]; then
+  export CLICOLOR=1
+  export COLORTERM="${COLORTERM:-truecolor}"
+
   _sora_simplify_prompt() {
     builtin emulate -L zsh
     # Literal template from /etc/zshrc, not the expanded prompt.
@@ -18,4 +23,8 @@ if [[ -o interactive ]]; then
   }
   typeset -ag precmd_functions
   precmd_functions=(_sora_simplify_prompt ${precmd_functions[@]})
+
+  if [[ -r "${_sora_dir}/highlight.zsh" ]]; then
+    builtin source "${_sora_dir}/highlight.zsh"
+  fi
 fi

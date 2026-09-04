@@ -14,7 +14,7 @@ window-padding-balance = true
 adjust-cell-height = 12%
 font-size = 18
 font-family = "SF Mono"
-minimum-contrast = 1.1
+bold-color = bright
 window-theme = system
 
 palette = 0=#1c1c1e
