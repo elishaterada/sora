@@ -42,7 +42,7 @@ final class GhosttyInputTests: XCTestCase {
         XCTAssertEqual(origin.y, 460)
     }
 
-    func testGhostTextCellWidthRescalesCELLSIZEIntoIMEHeight() {
+    func testGhostTextCellWidthUsesCELLSIZEWhenHeightsAgree() {
         let font = CTFontCreateWithName("SFMono-Regular" as CFString, 18, nil)
         let width = GhosttyInput.ghostTextCellWidth(
             imeHeight: 20,
@@ -61,6 +61,18 @@ final class GhosttyInputTests: XCTestCase {
             font: font
         )
         XCTAssertEqual(width, 15, accuracy: 0.001)
+    }
+
+    func testGhostTextCellWidthFallsBackWhenIMEHeightIsDoubleScaled() {
+        let font = CTFontCreateWithName("SFMono-Regular" as CFString, 18, nil)
+        let advance = GhosttyInput.monospaceAdvance(font: font).rounded()
+        // CELL_SIZE already in points, but IME height still in backing pixels.
+        let width = GhosttyInput.ghostTextCellWidth(
+            imeHeight: 40,
+            cellSize: NSSize(width: 15, height: 20),
+            font: font
+        )
+        XCTAssertEqual(width, advance, accuracy: 0.001)
     }
 
     func testGhostTextBaselineCentersFaceInAdjustedCell() {
