@@ -2,6 +2,44 @@ import Foundation
 import XCTest
 
 final class OpenAIProviderTests: XCTestCase {
+    func testGrokRequestUsesDirectXAIEndpointAndExplicitConversation() throws {
+        let request = AIRequest(model: AIBackendID.grok.defaultModel,
+                                messages: [AIMessage(role: .user, text: "Explain pwd")])
+        let http = try HTTPAIProvider.urlRequest(kind: .grok, request: request, credential: "xai-fixture-key")
+        XCTAssertEqual(http.url?.absoluteString, "https://api.x.ai/v1/chat/completions")
+        XCTAssertEqual(http.value(forHTTPHeaderField: "Authorization"), "Bearer xai-fixture-key")
+        XCTAssertNil(http.value(forHTTPHeaderField: "x-api-key"))
+        XCTAssertEqual(http.timeoutInterval, 3600)
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: http.httpBody!) as? [String: Any])
+        XCTAssertEqual(body["model"] as? String, "grok-4.6")
+        XCTAssertEqual(body["stream"] as? Bool, true)
+        XCTAssertEqual(body["max_tokens"] as? Int, 4096)
+        XCTAssertEqual(body["messages"] as? [[String: String]], [
+            ["role": "system", "content": AIRequest.instructions],
+            ["role": "user", "content": "Explain pwd"]
+        ])
+        XCTAssertNil(body["tools"])
+        XCTAssertFalse(String(decoding: http.httpBody!, as: UTF8.self).contains("xai-fixture-key"))
+    }
+
+    func testGrokStreamsUnicodeAndSurfacesHTTPAndIncompleteResponses() async throws {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [AIHTTPFixture.self]
+        let session = URLSession(configuration: config)
+        defer { session.invalidateAndCancel() }
+        let provider = HTTPAIProvider(kind: .grok, session: session)
+        let request = AIRequest(model: "grok-4.6", messages: [AIMessage(role: .user, text: "hello")])
+        var events: [AIEvent] = []
+        for try await event in provider.events(for: request, credential: "fixture-success") { events.append(event) }
+        XCTAssertEqual(events, [.text("Hello 猫"), .completed])
+        for mode in ["fixture-401", "fixture-429", "fixture-eof", "fixture-length"] {
+            do {
+                for try await _ in provider.events(for: request, credential: mode) {}
+                XCTFail("Expected a visible failure for \(mode)")
+            } catch { XCTAssertTrue(error is AIError) }
+        }
+    }
+
     func testProviderSpecificEndpointsHeadersAndPayloads() throws {
         let request = AIRequest(model: "test-model", messages: [AIMessage(role: .user, text: "Explain pwd")])
         let anthropic = try HTTPAIProvider.urlRequest(kind: .anthropic, request: request, credential: "anthropic-key")
@@ -101,6 +139,13 @@ private final class AIHTTPFixture: URLProtocol {
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         var body = "event: response.output_text.delta\r\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"Hello 猫\"}\r\n\r\n"
         if !mode.hasSuffix("eof") { body += "data: {\"type\":\"response.completed\"}\n\n" }
+        if request.url?.host == "api.x.ai" {
+            body = "data: {\"choices\":[{\"delta\":{\"content\":\"Hello 猫\"},\"finish_reason\":null}]}\r\n\r\n"
+            if !mode.hasSuffix("eof") {
+                let reason = mode.hasSuffix("length") ? "length" : "stop"
+                body += "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"\(reason)\"}]}\n\ndata: [DONE]\n\n"
+            }
+        }
         for byte in body.utf8 { client?.urlProtocol(self, didLoad: Data([byte])) }
         client?.urlProtocolDidFinishLoading(self)
     }

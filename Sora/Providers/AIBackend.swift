@@ -1,7 +1,7 @@
 import Foundation
 
 enum AIBackendID: String, CaseIterable, Identifiable, Codable, Sendable {
-    case openai, codex, anthropic, gateway
+    case openai, codex, anthropic, gateway, grok
     var id: String { rawValue }
     var name: String {
         switch self {
@@ -9,6 +9,7 @@ enum AIBackendID: String, CaseIterable, Identifiable, Codable, Sendable {
         case .codex: return "Codex"
         case .anthropic: return "Anthropic API"
         case .gateway: return "Vercel AI Gateway"
+        case .grok: return "Grok (xAI)"
         }
     }
     var defaultModel: String {
@@ -17,6 +18,7 @@ enum AIBackendID: String, CaseIterable, Identifiable, Codable, Sendable {
         case .codex: return "" // Codex chooses from its account's model catalog.
         case .anthropic: return "claude-sonnet-4-6"
         case .gateway: return "openai/gpt-5.4"
+        case .grok: return "grok-4.6"
         }
     }
     var needsKey: Bool { self != .codex }
@@ -26,6 +28,7 @@ enum AIBackendID: String, CaseIterable, Identifiable, Codable, Sendable {
         case .codex: return "This Codex conversation uses your Codex sign-in."
         case .anthropic: return "This Anthropic conversation is sent to Anthropic."
         case .gateway: return "This Gateway conversation is sent through Vercel to the selected model provider."
+        case .grok: return "This Grok conversation is sent to xAI."
         }
     }
 }
@@ -44,6 +47,7 @@ struct AIBackend {
             case .codex: provider = CodexProvider()
             case .anthropic: provider = HTTPAIProvider(kind: .anthropic)
             case .gateway: provider = HTTPAIProvider(kind: .gateway)
+            case .grok: provider = HTTPAIProvider(kind: .grok)
             }
             let folder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
                 .appendingPathComponent("Sora")
