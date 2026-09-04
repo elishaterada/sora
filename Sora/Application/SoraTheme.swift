@@ -1,3 +1,5 @@
+import AppKit
+import CoreText
 import SwiftUI
 
 /// Semantic chrome. Terminal colors live in `Resources/sora.ghostty`.
@@ -26,5 +28,9 @@ enum SoraTheme {
         NSFont(name: "SFMono-Regular", size: terminalFontSize)
             ?? NSFont(name: "SF Mono", size: terminalFontSize)
             ?? NSFont.monospacedSystemFont(ofSize: terminalFontSize, weight: .regular)
+    }
+
+    static var terminalCTFont: CTFont {
+        terminalFont
     }
 }

@@ -1,4 +1,5 @@
 import AppKit
+import CoreText
 import GhosttyKit
 
 protocol GhosttySurfaceDelegate: AnyObject {
@@ -474,24 +475,39 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         var height: Double = 0
         ghostty_surface_ime_point(surface, &x, &y, &width, &height)
         _ = width
-        _ = height
         let cellWidth = cellSize.width > 0 ? cellSize.width : 8
-        let cellHeight = cellSize.height > 0 ? cellSize.height : 16
-        // ime_point x is the bar caret's leading edge; y is the cell bottom
-        // in Ghostty's top-left coordinates.
+        // Prefer the IME cell height; it matches the row Ghostty just measured.
+        let cellHeight: CGFloat = height > 0
+            ? CGFloat(height)
+            : (cellSize.height > 0 ? cellSize.height : 16)
+        // ime_point x is the cursor cell midpoint; y is the cell bottom.
         let origin = GhosttyInput.ghostTextOrigin(
             imeX: x,
             imeY: y,
-            viewHeight: bounds.height
+            viewHeight: bounds.height,
+            cellWidth: cellWidth
         )
+        let font = quicklookFont() ?? SoraTheme.terminalCTFont
         addSubview(ghostText)
         ghostText.show(
             text: suggestion.displayText,
             origin: origin,
             cellSize: NSSize(width: cellWidth, height: cellHeight),
-            font: SoraTheme.terminalFont,
+            font: font,
             predicted: suggestion.source == .prediction
         )
+    }
+
+    private func quicklookFont() -> CTFont? {
+        guard let surface,
+              let fontRaw = ghostty_surface_quicklook_font(surface)
+        else { return nil }
+        // Ghostty returns a +1 CTFont; takeUnretainedValue + release matches
+        // Ghostty's own AppKit surface view.
+        let font = Unmanaged<CTFont>.fromOpaque(fontRaw)
+        let value = font.takeUnretainedValue()
+        font.release()
+        return value
     }
 
     private func sendKey(_ event: NSEvent, action: ghostty_input_action_e) {
