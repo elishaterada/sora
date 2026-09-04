@@ -19,26 +19,37 @@ struct ContentView: View {
     }
 
     private var sidebarWidth: CGFloat {
-        sidebarVisible ? 220 : max(trafficLightWidth + 36, 80)
+        sidebarVisible ? 220 : 0
     }
 
     var body: some View {
         HStack(spacing: 0) {
-            WorkspaceTabBar(
-                workspace: workspace,
-                sidebarVisible: $sidebarVisible,
-                titlebarHeight: titlebarHeight,
-                trafficLightWidth: trafficLightWidth
-            )
-            .frame(width: sidebarWidth)
+            if sidebarVisible {
+                WorkspaceTabBar(
+                    workspace: workspace,
+                    sidebarVisible: $sidebarVisible,
+                    titlebarHeight: titlebarHeight,
+                    trafficLightWidth: trafficLightWidth
+                )
+                .frame(width: 220)
 
-            Rectangle()
-                .fill(Color.white.opacity(0.08))
-                .frame(width: 1)
+                Rectangle()
+                    .fill(Color.white.opacity(0.08))
+                    .frame(width: 1)
+            }
 
-            WorkspaceHostRepresentable(workspace: workspace)
-                .frame(minWidth: 480, maxWidth: .infinity, minHeight: 280, maxHeight: .infinity)
+            VStack(spacing: 0) {
+                TerminalChromeBar(
+                    workspace: workspace,
+                    sidebarVisible: $sidebarVisible,
+                    titlebarHeight: titlebarHeight,
+                    trafficLightWidth: trafficLightWidth
+                )
+                WorkspaceHostRepresentable(workspace: workspace)
+                    .frame(minWidth: 480, maxWidth: .infinity, minHeight: 280, maxHeight: .infinity)
+            }
         }
+        .animation(.easeOut(duration: 0.18), value: sidebarVisible)
         .background(WindowFrostRepresentable().ignoresSafeArea())
         .background(
             WindowChromeRepresentable(
