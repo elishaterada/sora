@@ -21,7 +21,7 @@ struct SoraApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView(runtime: runtime)
+            ContentView(runtime: runtime, ask: ask)
         }
         .defaultSize(width: 980, height: 620)
         .windowResizability(.contentMinSize)
@@ -34,11 +34,6 @@ struct SoraApp: App {
             // SecureField and the Ask composer. GhosttySurfaceView implements
             // the same copy/paste/selectAll actions for terminal focus.
         }
-
-        Window("Ask Sora", id: "ask-sora") {
-            AskView(session: ask)
-        }
-        .defaultSize(width: 640, height: 720)
 
         Window("History", id: "command-history") {
             CommandHistoryView(store: runtime.history)
@@ -60,12 +55,13 @@ private struct HistoryCommands: Commands {
 }
 
 private struct AskCommands: Commands {
-    @Environment(\.openWindow) private var openWindow
+    @FocusedValue(\.inlineAskAction) private var inlineAskAction
 
     var body: some Commands {
         CommandMenu("AI") {
-            Button("Ask Sora") { openWindow(id: "ask-sora") }
+            Button("Ask Sora") { inlineAskAction?.call() }
                 .keyboardShortcut("a", modifiers: [.command, .shift])
+                .disabled(inlineAskAction == nil)
         }
     }
 }

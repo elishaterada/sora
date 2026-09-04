@@ -3,13 +3,16 @@ import SwiftUI
 
 struct ContentView: View {
     @ObservedObject var runtime: GhosttyRuntime
+    @ObservedObject var ask: AskSession
     @StateObject private var workspace: WorkspaceController
     @State private var sidebarVisible = true
     @State private var titlebarHeight: CGFloat = 52
     @State private var trafficLightWidth: CGFloat = 78
+    @State private var agentTrigger = 0
 
-    init(runtime: GhosttyRuntime) {
+    init(runtime: GhosttyRuntime, ask: AskSession) {
         self.runtime = runtime
+        self.ask = ask
         _workspace = StateObject(
             wrappedValue: WorkspaceController(
                 runtime: runtime,
@@ -45,7 +48,7 @@ struct ContentView: View {
                     titlebarHeight: titlebarHeight,
                     trafficLightWidth: trafficLightWidth
                 )
-                WorkspaceHostRepresentable(workspace: workspace)
+                WorkspaceHostRepresentable(workspace: workspace, ask: ask, agentTrigger: agentTrigger)
                     .frame(minWidth: 480, maxWidth: .infinity, minHeight: 280, maxHeight: .infinity)
             }
         }
@@ -64,6 +67,7 @@ struct ContentView: View {
         .preferredColorScheme(.dark)
         .focusedSceneObject(workspace)
         .focusedSceneValue(\.sidebarVisible, $sidebarVisible)
+        .focusedSceneValue(\.inlineAskAction, InlineAskAction { agentTrigger += 1 })
         .onAppear {
             runtime.markRestoreConsumed()
             runtime.setFocus(NSApp.isActive)
@@ -78,10 +82,24 @@ private struct SidebarVisibleKey: FocusedValueKey {
     typealias Value = Binding<Bool>
 }
 
+struct InlineAskAction {
+    let call: () -> Void
+    init(_ call: @escaping () -> Void) { self.call = call }
+}
+
+private struct InlineAskActionKey: FocusedValueKey {
+    typealias Value = InlineAskAction
+}
+
 extension FocusedValues {
     var sidebarVisible: Binding<Bool>? {
         get { self[SidebarVisibleKey.self] }
         set { self[SidebarVisibleKey.self] = newValue }
+    }
+
+    var inlineAskAction: InlineAskAction? {
+        get { self[InlineAskActionKey.self] }
+        set { self[InlineAskActionKey.self] = newValue }
     }
 }
 

@@ -30,6 +30,9 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     private var scrollbarOffset: UInt64 = 0
     private var scrollbarLen: UInt64 = 0
     private var swallowedKeyCodes: Set<UInt16> = []
+    private var isShellPromptReady = false
+    private var promptIntent: PromptIntent?
+    var onAgentPrompt: ((String) -> Void)?
 
     override var isOpaque: Bool { false }
     override var acceptsFirstResponder: Bool { true }
@@ -128,6 +131,34 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     override func keyDown(with event: NSEvent) {
         captureGhostTextAnchor()
         let characters = event.characters ?? ""
+        let isReturn = event.keyCode == PromptEvent.returnKey
+            || event.keyCode == PromptEvent.keypadEnter
+            || characters == "\r" || characters == "\n"
+        if isShellPromptReady, isReturn {
+            let forceShell = event.modifierFlags.contains(.command)
+            switch PromptIntentClassifier.submission(for: completion.buffer.text, forceShell: forceShell) {
+            case .agent(let question) where !question.isEmpty:
+                swallowedKeyCodes.insert(event.keyCode)
+                // Remove the locally echoed line from zsh without submitting it.
+                clearPromptLine()
+                completion.reset()
+                ghostTextAnchor = nil
+                isShellPromptReady = true
+                refreshCompletion()
+                onAgentPrompt?(question)
+                return
+            case .shell where forceShell:
+                swallowedKeyCodes.insert(event.keyCode)
+                sendUnmodifiedReturn(from: event)
+                completion.reset()
+                ghostTextAnchor = nil
+                isShellPromptReady = false
+                refreshCompletion()
+                return
+            default:
+                isShellPromptReady = false
+            }
+        }
         switch completion.handleKeyDown(
             keyCode: event.keyCode,
             characters: characters,
@@ -358,6 +389,10 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
             return
         }
         surface = created
+        // A user cannot type until the created surface has presented its first
+        // prompt. Later submissions set this false until OSC 133 D reports the
+        // foreground command finished, so REPL/program input is never routed.
+        isShellPromptReady = true
         runtime.activeSurface = self
         runtime.tick()
         updateSurfaceMetrics()
@@ -409,6 +444,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     }
 
     func recordCommandFinished(exitCode: Int16, durationNanos: UInt64) {
+        isShellPromptReady = true
         let cwd = lastWorkingDirectory ?? currentWorkingDirectory() ?? initialWorkingDirectory
         let run = runtime.recordCommand(
             command: lastShellTitle,
@@ -496,6 +532,38 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         }
     }
 
+    /// Send an actual Control-U key event. `ghostty_surface_text` is for text
+    /// input and intentionally does not encode C0 control bytes for zsh.
+    private func clearPromptLine() {
+        guard let surface else { return }
+        var key = ghostty_input_key_s()
+        key.keycode = 32 // macOS hardware keycode for U
+        key.mods = GHOSTTY_MODS_CTRL
+        key.consumed_mods = GHOSTTY_MODS_NONE
+        key.unshifted_codepoint = UnicodeScalar("u").value
+        key.composing = false
+        key.text = nil
+        key.action = GHOSTTY_ACTION_PRESS
+        _ = ghostty_surface_key(surface, key)
+        key.action = GHOSTTY_ACTION_RELEASE
+        _ = ghostty_surface_key(surface, key)
+        runtime.tick()
+    }
+
+    /// Command-Return is an app-level routing override. Submit the line to the
+    /// shell as a plain Return so zsh does not receive the Command modifier.
+    private func sendUnmodifiedReturn(from event: NSEvent) {
+        guard let surface else { return }
+        var key = GhosttyInput.keyEvent(from: event, action: GHOSTTY_ACTION_PRESS)
+        key.mods = GHOSTTY_MODS_NONE
+        key.consumed_mods = GHOSTTY_MODS_NONE
+        key.text = nil
+        _ = ghostty_surface_key(surface, key)
+        key.action = GHOSTTY_ACTION_RELEASE
+        _ = ghostty_surface_key(surface, key)
+        runtime.tick()
+    }
+
     private func scheduleCompletionRefresh() {
         runtime.tick()
         DispatchQueue.main.async { [weak self] in
@@ -516,6 +584,10 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
             ?? initialWorkingDirectory
             ?? FileManager.default.homeDirectoryForCurrentUser
         completion.refresh(cwd: cwd, history: runtime.history)
+        let route = isShellPromptReady && completion.buffer.isTracking && !completion.buffer.text.isEmpty
+            ? PromptIntentClassifier.intent(for: completion.buffer.text)
+            : nil
+        promptIntent = route
         refreshStickyBar()
 
         let atLivePrompt = StickyPromptBarModel.isViewingLivePrompt(
@@ -620,6 +692,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
             line: line,
             predicted: predicted
         )
+        stickyBar.updateRoute(promptIntent)
     }
 
     func acceptStickyPrediction() {

@@ -108,6 +108,13 @@ snapshot from a public HTTPS HTML/text page, attach it to one Ask message, and
 inspect the saved source and text in conversation history. Pages are never
 rendered or executed. Terminal output attachment remains future work.
 
+**Inline routing slice (2026-09-04):** a conservative local classifier marks
+clear conversational text at a ready zsh prompt and routes it to Ask inside the
+same terminal tab. Cmd+Return forces shell submission, `/agent ` forces AI, and
+ambiguous input remains with the shell. Routing is disabled while a foreground
+command or interactive program owns input. This slice does not add tools or
+autonomous execution.
+
 ## Phase 7: agent mode and provider expansion
 
 - multi-step agent loop

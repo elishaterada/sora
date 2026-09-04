@@ -55,4 +55,11 @@ final class PromptBufferTests: XCTestCase {
         XCTAssertTrue(PromptEvent.isAcceptKey(keyCode: PromptEvent.rightArrow, modifiers: []))
         XCTAssertFalse(PromptEvent.isAcceptKey(keyCode: PromptEvent.tab, modifiers: [.shift]))
     }
+
+    func testPromptEventTracksUnicodeQuestions() {
+        XCTAssertEqual(
+            PromptEvent.from(keyCode: 0, characters: "¿Cómo?", modifiers: []),
+            .insert("¿Cómo?")
+        )
+    }
 }

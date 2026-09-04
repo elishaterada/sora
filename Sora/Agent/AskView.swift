@@ -3,6 +3,8 @@ import SwiftUI
 
 struct AskView: View {
     @ObservedObject var session: AskSession
+    var inline = false
+    var onClose: (() -> Void)?
     @StateObject private var codexLogin = CodexLogin()
     @State private var showingSetup = false
     @State private var keyDraft = ""
@@ -18,6 +20,10 @@ struct AskView: View {
                         .font(.callout).foregroundStyle(.secondary)
                 }
                 Spacer()
+                if inline {
+                    Button("Back to Terminal", systemImage: "terminal") { onClose?() }
+                        .keyboardShortcut(.cancelAction)
+                }
                 Button("Clear Conversation") { session.newConversation() }
                     .disabled(session.messages.isEmpty)
                 Button("Setup", systemImage: "slider.horizontal.3") { showingSetup.toggle() }
@@ -106,7 +112,7 @@ struct AskView: View {
             }
             .padding(20)
         }
-        .frame(minWidth: 540, minHeight: 560)
+        .frame(minWidth: inline ? 0 : 540, minHeight: inline ? 0 : 560)
         .preferredColorScheme(.dark)
         .sheet(isPresented: $showingWebpage) {
             WebpageAttachmentView(page: session.webpage, providerName: session.selectedProvider.name) {

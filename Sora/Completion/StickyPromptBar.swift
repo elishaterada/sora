@@ -11,8 +11,10 @@ final class StickyPromptBar: NSView {
     private let pathLabel = NSTextField(labelWithString: "")
     private let lineLabel = NSTextField(labelWithString: "")
     private let hintLabel = NSTextField(labelWithString: "")
+    private let routeLabel = NSTextField(labelWithString: "")
     private let effectView: NSView
     private let hairline = NSView()
+    private var showingPrediction = false
 
     override var isOpaque: Bool { false }
     override var acceptsFirstResponder: Bool { false }
@@ -43,10 +45,12 @@ final class StickyPromptBar: NSView {
         configureLabel(pathLabel, size: 11, color: .secondaryLabelColor)
         configureLabel(lineLabel, size: 13, color: .labelColor)
         configureLabel(hintLabel, size: 11, color: .tertiaryLabelColor)
+        configureLabel(routeLabel, size: 11, color: .controlAccentColor)
         lineLabel.font = SoraTheme.terminalFont.withSize(13)
         addSubview(pathLabel)
         addSubview(lineLabel)
         addSubview(hintLabel)
+        addSubview(routeLabel)
 
         let click = NSClickGestureRecognizer(target: self, action: #selector(focusTerminal))
         addGestureRecognizer(click)
@@ -75,7 +79,7 @@ final class StickyPromptBar: NSView {
         lineLabel.frame = NSRect(
             x: inset,
             y: 10,
-            width: max(0, bounds.width - inset * 2 - 120),
+            width: max(0, bounds.width - inset * 2 - 230),
             height: 18
         )
         hintLabel.frame = NSRect(
@@ -85,6 +89,13 @@ final class StickyPromptBar: NSView {
             height: 18
         )
         hintLabel.alignment = .right
+        routeLabel.frame = NSRect(
+            x: bounds.width - inset - 224,
+            y: 10,
+            width: 104,
+            height: 18
+        )
+        routeLabel.alignment = .right
     }
 
     func update(
@@ -93,6 +104,7 @@ final class StickyPromptBar: NSView {
         line: String?,
         predicted: Bool
     ) {
+        showingPrediction = predicted
         if let branch, !branch.isEmpty {
             pathLabel.stringValue = "\(path)  \(branch)"
         } else {
@@ -111,6 +123,23 @@ final class StickyPromptBar: NSView {
             hintLabel.stringValue = ""
             hintLabel.isHidden = true
         }
+        needsLayout = true
+    }
+
+    func updateRoute(_ intent: PromptIntent?) {
+        if intent == .agent {
+            routeLabel.stringValue = "AI prompt"
+            hintLabel.stringValue = "⌘↩ run shell"
+            hintLabel.isHidden = false
+        } else {
+            routeLabel.stringValue = ""
+            // Keep prediction's accept hint intact.
+            if !showingPrediction {
+                hintLabel.stringValue = ""
+                hintLabel.isHidden = true
+            }
+        }
+        routeLabel.isHidden = intent != .agent
         needsLayout = true
     }
 
