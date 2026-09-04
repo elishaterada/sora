@@ -69,6 +69,13 @@
 		AA0000000000000000000090 /* NextCommandEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000180 /* NextCommandEngine.swift */; };
 		AA0000000000000000000091 /* NextCommandEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000180 /* NextCommandEngine.swift */; };
 		AA0000000000000000000092 /* NextCommandEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000181 /* NextCommandEngineTests.swift */; };
+		AA00000000000000000000A1 /* HushLogin.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000190 /* HushLogin.swift */; };
+		AA00000000000000000000A2 /* SoraZshBootstrap.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000191 /* SoraZshBootstrap.swift */; };
+		AA00000000000000000000A3 /* zsh in Resources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000192 /* zsh */; };
+		AA00000000000000000000A4 /* HushLogin.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000190 /* HushLogin.swift */; };
+		AA00000000000000000000A5 /* SoraZshBootstrap.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000191 /* SoraZshBootstrap.swift */; };
+		AA00000000000000000000A6 /* HushLoginTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000193 /* HushLoginTests.swift */; };
+		AA00000000000000000000A7 /* SoraZshBootstrapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000194 /* SoraZshBootstrapTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -95,6 +102,11 @@
 		AA0000000000000000000109 /* terminfo */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Vendor/ghostty/zig-out/share/terminfo; sourceTree = "<group>"; };
 		AA0000000000000000000114 /* ghostty */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Vendor/ghostty/zig-out/share/ghostty; sourceTree = "<group>"; };
 		AA0000000000000000000118 /* sora.ghostty */ = {isa = PBXFileReference; lastKnownFileType = text; path = sora.ghostty; sourceTree = "<group>"; };
+		AA0000000000000000000190 /* HushLogin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HushLogin.swift; sourceTree = "<group>"; };
+		AA0000000000000000000191 /* SoraZshBootstrap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoraZshBootstrap.swift; sourceTree = "<group>"; };
+		AA0000000000000000000192 /* zsh */ = {isa = PBXFileReference; lastKnownFileType = folder; path = zsh; sourceTree = "<group>"; };
+		AA0000000000000000000193 /* HushLoginTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HushLoginTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000194 /* SoraZshBootstrapTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoraZshBootstrapTests.swift; sourceTree = "<group>"; };
 		AA0000000000000000000110 /* GhosttyInputTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyInputTests.swift; sourceTree = "<group>"; };
 		AA0000000000000000000111 /* GhosttyClipboardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyClipboardTests.swift; sourceTree = "<group>"; };
 		AA0000000000000000000120 /* WorkspaceSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceSnapshot.swift; sourceTree = "<group>"; };
@@ -185,6 +197,8 @@
 				AA0000000000000000000101 /* SoraApp.swift */,
 				AA0000000000000000000102 /* ContentView.swift */,
 				AA0000000000000000000105 /* SoraTheme.swift */,
+				AA0000000000000000000190 /* HushLogin.swift */,
+				AA0000000000000000000191 /* SoraZshBootstrap.swift */,
 			);
 			path = Application;
 			sourceTree = "<group>";
@@ -193,6 +207,7 @@
 			isa = PBXGroup;
 			children = (
 				AA0000000000000000000118 /* sora.ghostty */,
+				AA0000000000000000000192 /* zsh */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -282,6 +297,8 @@
 				AA0000000000000000000173 /* GitRepositoryTests.swift */,
 				AA0000000000000000000174 /* CompletionSessionTests.swift */,
 				AA0000000000000000000181 /* NextCommandEngineTests.swift */,
+				AA0000000000000000000193 /* HushLoginTests.swift */,
+				AA0000000000000000000194 /* SoraZshBootstrapTests.swift */,
 			);
 			path = SoraTests;
 			sourceTree = "<group>";
@@ -369,6 +386,7 @@
 				AA0000000000000000000009 /* terminfo in Resources */,
 				AA0000000000000000000013 /* ghostty in Resources */,
 				AA0000000000000000000018 /* sora.ghostty in Resources */,
+				AA00000000000000000000A3 /* zsh in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -382,6 +400,8 @@
 				AA0000000000000000000001 /* SoraApp.swift in Sources */,
 				AA0000000000000000000002 /* ContentView.swift in Sources */,
 				AA0000000000000000000005 /* SoraTheme.swift in Sources */,
+				AA00000000000000000000A1 /* HushLogin.swift in Sources */,
+				AA00000000000000000000A2 /* SoraZshBootstrap.swift in Sources */,
 				AA0000000000000000000003 /* GhosttyRuntime.swift in Sources */,
 				AA0000000000000000000004 /* GhosttySurfaceView.swift in Sources */,
 				AA0000000000000000000006 /* GhosttyInput.swift in Sources */,
@@ -444,6 +464,10 @@
 				AA0000000000000000000084 /* CompletionSession.swift in Sources */,
 				AA0000000000000000000091 /* NextCommandEngine.swift in Sources */,
 				AA0000000000000000000092 /* NextCommandEngineTests.swift in Sources */,
+				AA00000000000000000000A4 /* HushLogin.swift in Sources */,
+				AA00000000000000000000A5 /* SoraZshBootstrap.swift in Sources */,
+				AA00000000000000000000A6 /* HushLoginTests.swift in Sources */,
+				AA00000000000000000000A7 /* SoraZshBootstrapTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

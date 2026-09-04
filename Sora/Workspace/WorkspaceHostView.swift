@@ -21,8 +21,10 @@ final class WorkspaceHostView: NSView {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
-        layer?.backgroundColor = SoraTheme.nsInk.cgColor
+        layer?.backgroundColor = SoraTheme.nsClear.cgColor
     }
+
+    override var isOpaque: Bool { false }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) {

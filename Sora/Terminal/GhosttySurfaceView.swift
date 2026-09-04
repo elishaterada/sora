@@ -25,7 +25,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     private let ghostText = GhostTextView()
     private var swallowedKeyCodes: Set<UInt16> = []
 
-    override var isOpaque: Bool { true }
+    override var isOpaque: Bool { false }
     override var acceptsFirstResponder: Bool { true }
     override var isFlipped: Bool { false }
 
@@ -50,12 +50,14 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         if let window {
-            // SwiftUI windows often use fullSizeContentView, which draws the
-            // terminal under the title bar and clips the first line.
+            // fullSizeContentView draws the grid under the title bar and clips
+            // the first prompt. Keep the titlebar, but let Ghostty glass show
+            // through a clear window.
             window.styleMask.remove(.fullSizeContentView)
-            window.titlebarAppearsTransparent = false
+            window.titlebarAppearsTransparent = true
+            window.isOpaque = false
+            window.backgroundColor = SoraTheme.nsClear
             window.appearance = NSAppearance(named: .darkAqua)
-            window.backgroundColor = SoraTheme.nsInk
             createSurfaceIfNeeded()
             updateSurfaceMetrics()
             setOccluded(isHidden)
@@ -291,15 +293,23 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         config.wait_after_command = false
         config.context = GHOSTTY_SURFACE_CONTEXT_TAB
 
-        let created: ghostty_surface_t?
-        if let initialWorkingDirectory {
-            created = initialWorkingDirectory.path.withCString { pointer in
-                config.working_directory = pointer
-                return ghostty_surface_new(runtime.app, &config)
+        let zdotdir = SoraZshBootstrap.defaultDirectory().path
+        let created: ghostty_surface_t? = "ZDOTDIR".withCString { keyPtr in
+            zdotdir.withCString { valuePtr in
+                var env = ghostty_env_var_s(key: keyPtr, value: valuePtr)
+                return withUnsafeMutablePointer(to: &env) { envPtr in
+                    config.env_vars = envPtr
+                    config.env_var_count = 1
+                    if let initialWorkingDirectory {
+                        return initialWorkingDirectory.path.withCString { pointer in
+                            config.working_directory = pointer
+                            return ghostty_surface_new(runtime.app, &config)
+                        }
+                    }
+                    config.working_directory = nil
+                    return ghostty_surface_new(runtime.app, &config)
+                }
             }
-        } else {
-            config.working_directory = nil
-            created = ghostty_surface_new(runtime.app, &config)
         }
 
         guard let created else {
@@ -477,7 +487,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
             viewHeight: bounds.height,
             cellWidth: cellWidth
         )
-        let fontSize = min(max(cellHeight * 0.72, 11), 22)
+        let fontSize = min(max(cellHeight * 0.72, 13), 28)
         let base = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
         let font: NSFont
         if suggestion.source == .prediction {

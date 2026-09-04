@@ -7,6 +7,8 @@ struct SoraApp: App {
     init() {
         do {
             let history = try CommandHistoryStore()
+            try HushLogin.ensure()
+            _ = try SoraZshBootstrap.prepare()
             let runtime = try GhosttyRuntime(history: history)
             _runtime = StateObject(wrappedValue: runtime)
         } catch {
@@ -20,6 +22,7 @@ struct SoraApp: App {
         }
         .defaultSize(width: 980, height: 620)
         .windowResizability(.contentMinSize)
+        .windowToolbarStyle(.unified)
         .commands {
             WorkspaceCommands()
             HistoryCommands()
