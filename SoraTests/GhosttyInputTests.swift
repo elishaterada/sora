@@ -42,37 +42,37 @@ final class GhosttyInputTests: XCTestCase {
         XCTAssertEqual(origin.y, 460)
     }
 
-    func testGhostTextCellWidthPrefersRescaledWhenCloseToAdvance() {
+    func testGhostTextCellWidthRescalesCELLSIZEIntoIMEHeight() {
         let font = CTFontCreateWithName("SFMono-Regular" as CFString, 18, nil)
-        let advance = GhosttyInput.monospaceAdvance(font: font)
-        XCTAssertGreaterThan(advance, 0)
-        // Exact match in point space: CELL_SIZE already matches IME height.
         let width = GhosttyInput.ghostTextCellWidth(
             imeHeight: 20,
-            cellSize: NSSize(width: advance, height: 20),
+            cellSize: NSSize(width: 15, height: 20),
             font: font
         )
-        XCTAssertEqual(width, advance, accuracy: 0.001)
+        XCTAssertEqual(width, 15, accuracy: 0.001)
     }
 
-    func testGhostTextCellWidthFallsBackToAdvanceWhenCELLSIZEDisgrees() {
+    func testGhostTextCellWidthRescalesWhenBackingUnitsDiffer() {
         let font = CTFontCreateWithName("SFMono-Regular" as CFString, 18, nil)
-        let advance = GhosttyInput.monospaceAdvance(font: font)
+        // CELL_SIZE left in backing pixels while IME height is in points.
         let width = GhosttyInput.ghostTextCellWidth(
             imeHeight: 20,
-            cellSize: NSSize(width: advance * 3, height: 20),
+            cellSize: NSSize(width: 30, height: 40),
             font: font
         )
-        XCTAssertEqual(width, advance, accuracy: 0.001)
+        XCTAssertEqual(width, 15, accuracy: 0.001)
     }
 
-    func testGhostTextBaselineCentersEmBoxInCell() {
+    func testGhostTextBaselineCentersFaceInAdjustedCell() {
         let font = CTFontCreateWithName("SFMono-Regular" as CFString, 18, nil)
         let ascent = CTFontGetAscent(font)
         let descent = CTFontGetDescent(font)
-        let cellHeight = (ascent + descent) * 1.12
+        let leading = CTFontGetLeading(font)
+        let faceHeight = ascent + descent + leading
+        let cellHeight = faceHeight * 1.12
         let baseline = GhosttyInput.ghostTextBaseline(cellHeight: cellHeight, font: font)
-        XCTAssertEqual(baseline, (cellHeight - ascent + descent) / 2, accuracy: 0.001)
+        let expected = descent + leading / 2 + (cellHeight - faceHeight) / 2
+        XCTAssertEqual(baseline, expected, accuracy: 0.001)
         XCTAssertGreaterThan(baseline, 0)
         XCTAssertLessThan(baseline, cellHeight)
     }

@@ -48,25 +48,19 @@ enum GhosttyInput {
     }
 
     /// Cell width in the same point space as `ghostty_surface_ime_point`.
-    /// Use the font advance first (Ghostty's `cell_width` is the face width).
-    /// If CELL_SIZE is available, prefer the rescaled width when it agrees
-    /// with the font within 15% — that keeps the half-cell IME offset exact.
+    /// Prefer Ghostty's CELL_SIZE (rescaled into IME-height space) so the
+    /// half-cell IME offset and per-column pitch match the rendered grid.
     static func ghostTextCellWidth(
         imeHeight: CGFloat,
         cellSize: NSSize,
         font: CTFont
     ) -> CGFloat {
-        let advance = monospaceAdvance(font: font)
         if imeHeight > 0, cellSize.width > 0, cellSize.height > 0 {
-            let rescaled = cellSize.width * (imeHeight / cellSize.height)
-            if advance > 0 {
-                let delta = abs(rescaled - advance) / advance
-                if delta <= 0.15 { return rescaled }
-                return advance
-            }
-            return rescaled
+            return cellSize.width * (imeHeight / cellSize.height)
         }
-        return advance > 0 ? advance : 8
+        if cellSize.width > 0 { return cellSize.width }
+        let advance = monospaceAdvance(font: font)
+        return advance > 0 ? advance.rounded() : 8
     }
 
     /// `ghostty_surface_ime_point` is top-left origin. `x` is the cursor
@@ -82,16 +76,20 @@ enum GhosttyInput {
     }
 
     /// Baseline from the bottom of an unflipped cell. Matches Ghostty's
-    /// vertically centered face inside `adjust-cell-height` growth.
+    /// `cell_baseline` after `adjust-cell-height` recenters the face.
     static func ghostTextBaseline(cellHeight: CGFloat, font: CTFont) -> CGFloat {
         let ascent = CTFontGetAscent(font)
         let descent = CTFontGetDescent(font)
-        // Leading cancels when the face is centered; keep the em-box center.
-        return (cellHeight - ascent + descent) / 2
+        let leading = CTFontGetLeading(font)
+        let faceHeight = ascent + descent + leading
+        let faceBaseline = descent + leading / 2
+        return faceBaseline + (cellHeight - faceHeight) / 2
     }
 
     static func monospaceAdvance(font: CTFont) -> CGFloat {
-        let glyph = CTFontGetGlyphWithName(font, "M" as CFString)
+        var unichar: UniChar = 0x4D // "M"
+        var glyph: CGGlyph = 0
+        CTFontGetGlyphsForCharacters(font, &unichar, &glyph, 1)
         var advance = CGSize.zero
         _ = CTFontGetAdvancesForGlyphs(font, .default, [glyph], &advance, 1)
         if advance.width > 0 { return advance.width }
