@@ -66,4 +66,38 @@ final class CommandHistoryStoreTests: XCTestCase {
         XCTAssertEqual(escaped, [])
         XCTAssertEqual(CommandHistoryStore.likePrefix("a%b_c"), "a\\%b\\_c%")
     }
+
+    func testTransitionStatsRanksBySameCwd() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sora-history-transition-\(UUID().uuidString).sqlite")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let store = try CommandHistoryStore(url: url)
+        let project = URL(fileURLWithPath: "/tmp/project")
+        let other = URL(fileURLWithPath: "/tmp/other")
+        try store.recordTransition(
+            previous: "git status",
+            next: "git push",
+            cwd: other,
+            at: Date(timeIntervalSince1970: 10)
+        )
+        try store.recordTransition(
+            previous: "git status",
+            next: "git add -A",
+            cwd: project,
+            at: Date(timeIntervalSince1970: 20)
+        )
+        try store.recordTransition(
+            previous: "git status",
+            next: "git add -A",
+            cwd: project,
+            at: Date(timeIntervalSince1970: 30)
+        )
+
+        let stats = try store.transitionStats(previous: "git status", cwd: project)
+        XCTAssertEqual(stats.map(\.next).sorted(), ["git add -A", "git push"])
+        let add = try XCTUnwrap(stats.first { $0.next == "git add -A" })
+        XCTAssertEqual(add.frequency, 2)
+        XCTAssertEqual(add.sameCwdCount, 2)
+        XCTAssertEqual(try store.transitionStats(previous: "ls", cwd: project), [])
+    }
 }

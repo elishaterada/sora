@@ -76,6 +76,12 @@ Tab and Right Arrow accept, unmodified Tab still reaches zsh.
 
 Exit: next-command prediction is separate from text completion and useful without AI.
 
+**Status (2026-09-03):** implemented. Successful commands in a tab record
+`previous → next` transitions in SQLite. An empty prompt shows a distinct italic
+accent `→` suggestion, ranked by cwd, git root, frequency, and recency. Tab or
+Right Arrow inserts the full next command. Prefix completion still owns typed
+input. Human check remaining.
+
 ## Phase 6: native AI runtime
 
 - provider-neutral request and streaming event model

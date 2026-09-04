@@ -15,7 +15,7 @@ These rules apply to every coding agent working in this repository.
 
 - Complete one phase or vertical slice at a time.
 - Phase 0 through Phase 4 are complete. Do not reopen them unless a regression appears.
-- Do not implement AI, next-command prediction, accounts, sync, or cloud services yet.
+- Do not implement AI, accounts, sync, or cloud services yet.
 - Do not add speculative abstractions for future cross-platform support.
 - Do not introduce Rust, Zig, UniFFI, or another application-owned FFI layer during V0.
 - Native interoperability required by `libghostty` is allowed.

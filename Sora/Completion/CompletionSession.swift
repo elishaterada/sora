@@ -12,6 +12,8 @@ enum CompletionKeyResult: Equatable {
 final class CompletionSession {
     private(set) var buffer = PromptBuffer()
     private(set) var suggestion: CompletionSuggestion?
+    private(set) var lastSuccessfulCommand: String?
+    private var predictionDismissed = false
 
     func handleKeyDown(
         keyCode: UInt16,
@@ -28,6 +30,12 @@ final class CompletionSession {
 
         if let event = PromptEvent.from(keyCode: keyCode, characters: characters, modifiers: modifiers) {
             buffer.apply(event)
+            if keyCode == PromptEvent.escape
+                || keyCode == PromptEvent.leftArrow
+                || keyCode == PromptEvent.upArrow
+                || keyCode == PromptEvent.downArrow {
+                predictionDismissed = true
+            }
         }
         if !buffer.isTracking {
             suggestion = nil
@@ -47,11 +55,17 @@ final class CompletionSession {
     func stopTracking() {
         buffer.apply(.stopTracking)
         suggestion = nil
+        predictionDismissed = true
     }
 
     func reset() {
         buffer.apply(.reset)
         suggestion = nil
+    }
+
+    func rememberSuccessfulCommand(_ command: String) {
+        lastSuccessfulCommand = command
+        predictionDismissed = false
     }
 
     func refresh(cwd: URL, history: CommandHistoryStore, now: Date = Date()) {
@@ -60,8 +74,8 @@ final class CompletionSession {
             return
         }
         let line = buffer.text
-        guard !line.isEmpty else {
-            suggestion = nil
+        if line.isEmpty {
+            suggestion = emptyPromptSuggestion(cwd: cwd, history: history, now: now)
             return
         }
 
@@ -86,6 +100,23 @@ final class CompletionSession {
             now: now,
             history: stats,
             pathMatches: pathMatches
+        )
+    }
+
+    private func emptyPromptSuggestion(
+        cwd: URL,
+        history: CommandHistoryStore,
+        now: Date
+    ) -> CompletionSuggestion? {
+        guard !predictionDismissed, let previous = lastSuccessfulCommand else {
+            return nil
+        }
+        let stats = (try? history.transitionStats(previous: previous, cwd: cwd)) ?? []
+        return NextCommandEngine.suggest(
+            previous: previous,
+            cwd: cwd,
+            now: now,
+            transitions: stats
         )
     }
 }
