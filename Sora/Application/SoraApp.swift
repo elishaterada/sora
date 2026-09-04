@@ -3,11 +3,7 @@ import SwiftUI
 @main
 struct SoraApp: App {
     @StateObject private var runtime: GhosttyRuntime
-    @StateObject private var ask = AskSession(
-        provider: OpenAIProvider(),
-        credentials: KeychainAICredentialStore(),
-        conversations: FileAIConversationStore()
-    )
+    @StateObject private var ask = AskSession(backends: AIBackend.live())
 
     init() {
         do {

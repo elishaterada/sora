@@ -1,69 +1,121 @@
-# Native Ask: first AI vertical slice
+# Native Ask: optional AI providers
 
-Authorized on 2026-09-04 by the user's request to implement AI. This supersedes
-the earlier no-AI scope restriction for this slice. It does not authorize
-accounts, sync, a hosted backend, or an autonomous command runner.
+Authorized on 2026-09-04 by the user's requests to implement AI with OpenAI API,
+Codex, Anthropic API, and Vercel AI Gateway. This supersedes the earlier no-AI
+scope restriction for this slice. Accounts, sync, a hosted backend, and
+an autonomous command runner remain deferred.
 
 ## User flow
 
-Open **AI → Ask Sora** or **Cmd+Shift+A**. AI starts disabled. Enable it in
-Setup, enter your OpenAI API key in the secure field, save it, and choose a
-model ID. The default is `gpt-5.4-mini`. **Cmd+Return** sends a question;
-**Stop**, disabling AI, or closing Ask cancels the current request. A stopped
-answer stays visible as partial text. Copy copies the answer without executing
-anything. Standard Edit commands target the focused native field or terminal.
+Open **AI → Ask Sora** or **Cmd+Shift+A**. AI starts disabled. Select a provider,
+open Setup, enable AI, and configure credentials and a model:
 
-Only text explicitly entered into Ask and prior completed Ask turns are sent.
-There is no automatic terminal, repository, working-directory, environment, or
-command-history collection. There are no AI calls from typing in the terminal.
+| Provider | Authentication | Default model |
+| --- | --- | --- |
+| OpenAI API | OpenAI API key | `gpt-5.4-mini` |
+| Codex | Installed Codex CLI/app, ChatGPT sign-in | Account default (blank model field) |
+| Anthropic API | Anthropic API key | `claude-sonnet-4-6` |
+| Vercel AI Gateway | Vercel AI Gateway key | `openai/gpt-5.4` |
+
+Model IDs are editable; Gateway uses `provider/model` IDs. API keys are saved
+from secure fields to Keychain. **Cmd+Return** sends a question. **Stop**,
+disabling AI, closing Ask, or switching providers cancels the current answer.
+Partial answers stay visible. Copy copies text without executing anything.
+Standard Edit commands target the focused native field or terminal.
+
+Switching providers restores that provider's own conversation, draft, and model.
+Conversations are not transferred between services. Only explicitly entered Ask
+text and prior completed Ask turns are sent. There is no automatic terminal,
+repository, working-directory, environment, or command-history collection.
+There are no AI calls from typing in the terminal.
+
+## Codex setup and boundaries
+
+Install version 0.153.0 or newer of the official Codex CLI or desktop app.
+**Check Sign-In** queries its Keychain-backed account status. **Sign In with
+ChatGPT** opens official browser login and reports completion in Sora. Sora
+does not read or copy token files. A CLI login stored only in a file requires
+signing in again through this Keychain configuration. The executable is found
+in Homebrew's standard bin locations or the Codex/ChatGPT application bundle.
+
+Codex runs through the official stdio app-server, one process per Ask request
+or sign-in operation. Ask uses an ephemeral thread with empty environments,
+workspace roots, capability roots, and dynamic tools. Process-local settings
+disable shell, hooks, plugins, apps, MCP servers, web search, host skill
+discovery, and memory. It uses a temporary working directory and replaces base
+instructions. Server-originated tool/approval requests are rejected. Global
+Codex configuration is not edited. This is a text-only Ask adapter.
+
+The minimum version is enforced because this configuration uses experimental
+app-server environment and capability controls. JSON-RPC requests time out;
+cancellation closes the process. Short replies are consumed as they arrive,
+without waiting for a full pipe buffer. Stderr and raw RPC errors are not logged.
 
 ## Ownership and data
 
-- `Agent/AIProvider.swift`: internal messages, requests, events, errors, and
-  adapter protocol. No provider SDK schema crosses this boundary.
-- `Agent/AskSession.swift`: conversation state, explicit send, cancellation,
-  duplicate-send prevention, and stale-event protection using request IDs.
-- `Providers/OpenAIProvider.swift`: fixed official HTTPS endpoint, ephemeral
-  URLSession, text/refusal deltas, completion and failure events. Stream errors
-  are surfaced. Credentials and raw server error bodies are not logged.
+- `Agent/AIProvider.swift`: internal messages, requests, events, and errors.
+  Provider-owned schemas do not cross this boundary.
+- `Agent/AskSession.swift`: explicit send, cancellation, completed-turn context,
+  duplicate-send prevention, and request IDs that reject stale events.
+- `Providers/AIBackend.swift`: provider list, defaults, destinations, and stores.
+- `Providers/HTTPAIProvider.swift` and `OpenAIProvider.swift`: fixed official
+  HTTPS endpoints, ephemeral URLSession transport, and distinct Responses,
+  Messages, and Chat Completions streaming event decoders. Stream errors and
+  truncation are surfaced; credentials and raw server errors are not logged.
+- `Providers/CodexConnection.swift`, `CodexProvider.swift`, and `CodexLogin.swift`:
+  local process transport, ephemeral Ask requests, and explicit browser sign-in.
 - `Storage/AICredentialStore.swift`: non-synchronizing generic-password Keychain
-  item, service `dev.sora.app.ai`, account `openai`. Saving updates the existing
-  item; removing a key cancels any in-flight request. No key in UserDefaults,
-  JSON, SQLite, or source control.
-- `Storage/AIConversationStore.swift`: one current conversation in
-  `~/Library/Application Support/Sora/ask.json`, atomically written with 0600
-  file permissions. It is local plaintext, not encrypted chat storage.
-  Clear Conversation replaces it with an empty conversation. Interrupted
+  service `dev.sora.app.ai`, accounts `openai`, `anthropic`, and `gateway`.
+  Codex manages its own Keychain credentials. Saving updates an existing item;
+  removing a key cancels any request. No secrets in UserDefaults, JSON, SQLite,
+  or source control.
+- `Storage/AIConversationStore.swift`: one conversation per provider under
+  `~/Library/Application Support/Sora/`. OpenAI preserves `ask.json`; others use
+  `ask-codex.json`, `ask-anthropic.json`, and `ask-gateway.json`. Writes are
+  atomic with 0600 permissions. These are local plaintext files. Clear
+  Conversation empties the selected provider's conversation. Interrupted
   streaming messages load as stopped. Corrupt files produce a visible error
   and are not overwritten by a send.
 
-AI initialization neither reads Keychain nor contacts the network. Loading
-Ask history happens only when opening Ask. Keychain reads occur on explicit
-send. A failed AI setup or request cannot block the Ghostty terminal lifecycle.
+Initialization neither reads Keychain nor contacts the network. History loads
+when Ask opens. Keychain reads occur on explicit send or Codex account setup.
+Selected provider and per-provider model settings use UserDefaults; drafts stay
+in memory. A failed AI setup or request cannot block the Ghostty terminal.
 
-The OpenAI request sets `store: false`, requests streaming text, and caps output
-at 4,096 tokens. This controls Responses application-state storage, not all
-provider retention policies. Input over 100,000 UTF-8 bytes is rejected locally
-with a request to start a new conversation, rather than silently dropping
-context. Failed and stopped turns remain visible but are excluded from later
-provider context.
+OpenAI requests set `store: false`; this controls Responses application-state
+storage, not all provider retention policies. All HTTP adapters cap output at
+4,096 tokens; Codex uses the account/model's output limits. Input over 100,000
+UTF-8 bytes is rejected locally rather than silently dropping context. Failed
+and stopped turns remain visible but are excluded from later provider context.
 
 ## Verification and remaining work
 
-Tests cover disabled/missing-key behavior, streaming state, completion,
-cancellation, stale events, partial-turn exclusion, persistence failure and
-recovery, request serialization, SSE Unicode split across bytes, HTTP auth/rate
-errors, malformed events, refusals, and premature stream termination. HTTP tests
-use an isolated URLProtocol fixture, never a live key or paid request.
+81 tests pass, including provider isolation, keys/models/drafts, disabled and
+missing-key behavior, streaming completion and cancellation, stale events,
+partial-turn exclusion, persistence errors, request serialization, Unicode SSE,
+HTTP auth/rate errors, truncation, and Codex RPC pipe handling and configuration.
+HTTP tests use an isolated URLProtocol fixture. The Codex transport regression
+uses a local shell fixture with short replies and an open stdout pipe.
 
-Live OpenAI account/model access still needs a user-supplied key and an actual
-request. The current UI displays selectable plain text, including Markdown
-source. It retains one conversation and offers no transcript browser. Automatic
-context attachments, structured command cards, tools, permissions, and agent
-loops are separate future slices. No external dependency was added.
+The installed Codex 0.153.0 app-server initialization and account/read handshake
+were exercised locally and in the app. Provider menus, model defaults, secure
+fields, and the Codex missing-sign-in state were checked manually. No paid model
+request was made. Live responses and browser login completion still require
+user-supplied API keys or ChatGPT sign-in. The installed Codex currently reports
+no Keychain sign-in.
 
-## Official API references
+The UI displays selectable plain text, including Markdown source. There is one
+conversation per provider and no transcript browser. Explicit context attachments,
+command cards, tools, permissions, and agent loops are future slices.
+No external dependency was added.
 
-- [Responses API](https://developers.openai.com/api/reference/resources/responses/methods/create)
-- [Streaming events](https://developers.openai.com/api/reference/resources/responses/streaming-events)
-- [GPT-5.4 Mini](https://developers.openai.com/api/docs/models/gpt-5.4-mini)
+## Official references
+
+- [OpenAI Responses](https://developers.openai.com/api/reference/resources/responses/methods/create)
+- [OpenAI streaming events](https://developers.openai.com/api/reference/resources/responses/streaming-events)
+- [Codex app-server](https://developers.openai.com/codex/app-server)
+- [Codex configuration](https://learn.chatgpt.com/docs/config-file/config-reference)
+- [Anthropic API](https://platform.claude.com/docs/en/api/overview)
+- [Anthropic streaming](https://platform.claude.com/docs/en/build-with-claude/streaming)
+- [Vercel Chat Completions](https://vercel.com/docs/ai-gateway/sdks-and-apis/openai-chat-completions/rest-api)
+- [Vercel model catalog](https://ai-gateway.vercel.sh/v1/models)

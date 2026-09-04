@@ -7,6 +7,16 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		DD00000000000000000000C8 /* AIBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD0000000000000000000064 /* AIBackend.swift */; };
+		DD000000000000000000012C /* AIBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD0000000000000000000064 /* AIBackend.swift */; };
+		DD00000000000000000000C9 /* HTTPAIProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD0000000000000000000065 /* HTTPAIProvider.swift */; };
+		DD000000000000000000012D /* HTTPAIProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD0000000000000000000065 /* HTTPAIProvider.swift */; };
+		DD00000000000000000000CA /* CodexConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD0000000000000000000066 /* CodexConnection.swift */; };
+		DD000000000000000000012E /* CodexConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD0000000000000000000066 /* CodexConnection.swift */; };
+		DD00000000000000000000CB /* CodexProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD0000000000000000000067 /* CodexProvider.swift */; };
+		DD000000000000000000012F /* CodexProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD0000000000000000000067 /* CodexProvider.swift */; };
+		DD00000000000000000000CC /* CodexLogin.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD0000000000000000000068 /* CodexLogin.swift */; };
+		DD0000000000000000000130 /* CodexLogin.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD0000000000000000000068 /* CodexLogin.swift */; };
 		CC00000000000000000000C8 /* AIProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0000000000000000000064 /* AIProvider.swift */; };
 		CC000000000000000000012C /* AIProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0000000000000000000064 /* AIProvider.swift */; };
 		CC00000000000000000000C9 /* AskSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0000000000000000000065 /* AskSession.swift */; };
@@ -110,6 +120,11 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		DD0000000000000000000064 /* AIBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIBackend.swift; sourceTree = "<group>"; };
+		DD0000000000000000000065 /* HTTPAIProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPAIProvider.swift; sourceTree = "<group>"; };
+		DD0000000000000000000066 /* CodexConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexConnection.swift; sourceTree = "<group>"; };
+		DD0000000000000000000067 /* CodexProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexProvider.swift; sourceTree = "<group>"; };
+		DD0000000000000000000068 /* CodexLogin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexLogin.swift; sourceTree = "<group>"; };
 		CC0000000000000000000064 /* AIProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIProvider.swift; sourceTree = "<group>"; };
 		CC0000000000000000000065 /* AskSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AskSession.swift; sourceTree = "<group>"; };
 		CC0000000000000000000066 /* AskView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AskView.swift; sourceTree = "<group>"; };
@@ -201,6 +216,11 @@
 		CC00000000000000000001F5 /* Providers */ = {
 			isa = PBXGroup;
 			children = (
+				DD0000000000000000000064 /* AIBackend.swift */,
+				DD0000000000000000000065 /* HTTPAIProvider.swift */,
+				DD0000000000000000000066 /* CodexConnection.swift */,
+				DD0000000000000000000067 /* CodexProvider.swift */,
+				DD0000000000000000000068 /* CodexLogin.swift */,
 				CC0000000000000000000067 /* OpenAIProvider.swift */,
 			);
 			path = Providers;
@@ -461,6 +481,11 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				DD00000000000000000000C8 /* AIBackend.swift in Sources */,
+				DD00000000000000000000C9 /* HTTPAIProvider.swift in Sources */,
+				DD00000000000000000000CA /* CodexConnection.swift in Sources */,
+				DD00000000000000000000CB /* CodexProvider.swift in Sources */,
+				DD00000000000000000000CC /* CodexLogin.swift in Sources */,
 				CC00000000000000000000C8 /* AIProvider.swift in Sources */,
 				CC00000000000000000000C9 /* AskSession.swift in Sources */,
 				CC00000000000000000000CA /* AskView.swift in Sources */,
@@ -508,6 +533,11 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				DD000000000000000000012C /* AIBackend.swift in Sources */,
+				DD000000000000000000012D /* HTTPAIProvider.swift in Sources */,
+				DD000000000000000000012E /* CodexConnection.swift in Sources */,
+				DD000000000000000000012F /* CodexProvider.swift in Sources */,
+				DD0000000000000000000130 /* CodexLogin.swift in Sources */,
 				CC000000000000000000012C /* AIProvider.swift in Sources */,
 				CC000000000000000000012D /* AskSession.swift in Sources */,
 				CC000000000000000000012F /* OpenAIProvider.swift in Sources */,

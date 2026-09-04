@@ -96,10 +96,16 @@ The host does not implement VT parsing, glyph rendering, or PTY spawn.
 
 The first Phase 6 slice uses `AskSession` for main-actor conversation state and
 request cancellation, `AIProvider`/`AIRequest`/`AIEvent` for provider-neutral text
-streaming, and `OpenAIProvider` for URLSession transport and Responses event
-translation. `AskView` is a native SwiftUI window opened from AI → Ask Sora.
-Storage is injected; credentials use Keychain, and the current conversation is
-saved locally. No tool interface is exposed in this slice. See [AI Ask](ai-ask.md).
+streaming, and `AIBackend` for the four available providers. `HTTPAIProvider`
+shares URLSession transport across OpenAI Responses, Anthropic Messages, and
+Vercel Chat Completions; adapters translate their distinct event schemas.
+`CodexProvider` uses `CodexConnection` to run the installed official app-server
+over stdio with an ephemeral, text-only thread. `CodexLogin` owns sign-in setup.
+`AskView` is a native SwiftUI window opened from AI → Ask Sora. Storage is
+injected; credentials use Keychain, and conversations are saved locally per
+provider. Switching providers cancels outstanding work and restores that
+provider's draft, model, and history. No tool interface is exposed in this slice.
+See [AI Ask](ai-ask.md).
 
 The remaining target responsibilities are:
 
@@ -156,4 +162,3 @@ The future app owns context, tools, permissions, session state, and the agent lo
 ### AI is optional
 
 Disabling or removing every provider must not affect shell startup, rendering, history, completion, workspace features, or settings unrelated to AI.
-
