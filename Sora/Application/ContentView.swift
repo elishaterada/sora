@@ -22,6 +22,7 @@ struct ContentView: View {
             WorkspaceHostRepresentable(workspace: workspace)
                 .padding(12)
                 .frame(minWidth: 480, minHeight: 280)
+                .background(.clear)
                 .toolbar {
                     ToolbarItem(placement: .principal) {
                         SessionHeader(workingDirectory: workspace.selected.workingDirectory)

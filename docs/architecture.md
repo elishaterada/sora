@@ -62,7 +62,7 @@ Only create directories required by the current phase. Phase 5 creates
 - keyboard and pointer forwarding
 - resize and backing-scale propagation
 - clipboard: Cmd+C/V and Edit menu copy/paste via `ghostty_surface_read_selection` / `ghostty_surface_text`; OSC 52 via Ghostty runtime callbacks plus `NSPasteboard`
-- session chrome: `NavigationSplitView` sidebar, cwd/git toolbar badges, bundled `sora.ghostty` (18pt, macOS glass background). libghostty still owns the grid.
+- session chrome: `NavigationSplitView` sidebar, cwd/git toolbar badges, bundled `sora.ghostty` (18pt). Sora hosts `NSGlassEffectView` behind the grid because libghostty does not install liquid glass in the embedder.
 - shell presentation: `~/.hushlogin` suppresses `login(1)` "Last login"; a Sora `ZDOTDIR` sources Ghostty's zsh integration then replaces the stock macOS `user@host` prompt. Custom prompts are left alone.
 
 Unit tests must not link GhosttyKit. `GhosttyInput.swift` and `GhosttyClipboard.swift` stay Ghostty-free; `GhosttyInputKit.swift` and `GhosttyClipboardKit.swift` are app-only.

@@ -56,7 +56,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
             window.styleMask.remove(.fullSizeContentView)
             window.titlebarAppearsTransparent = true
             window.isOpaque = false
-            window.backgroundColor = SoraTheme.nsClear
+            window.backgroundColor = SoraTheme.nsWindowFill
             window.appearance = NSAppearance(named: .darkAqua)
             createSurfaceIfNeeded()
             updateSurfaceMetrics()
