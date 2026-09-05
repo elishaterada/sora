@@ -70,6 +70,10 @@
 		AA0000000000000000000023 /* WorkspaceController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000123 /* WorkspaceController.swift */; };
 		AA0000000000000000000024 /* WorkspaceTabBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000124 /* WorkspaceTabBar.swift */; };
 		AA0000000000000000000028 /* SessionHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000128 /* SessionHeader.swift */; };
+		AA000000000000000000002A /* PathActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000012A /* PathActions.swift */; };
+		AA000000000000000000002B /* ContextChip.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000012B /* ContextChip.swift */; };
+		AA000000000000000000002C /* PathActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000012A /* PathActions.swift */; };
+		AA0000000000000000000038 /* PathLinkParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000134 /* PathLinkParserTests.swift */; };
 		AA0000000000000000000025 /* WorkspaceHostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000125 /* WorkspaceHostView.swift */; };
 		AA0000000000000000000029 /* TerminalPaneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000129 /* TerminalPaneView.swift */; };
 		AA0000000000000000000026 /* ForegroundWorkingDirectory.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000126 /* ForegroundWorkingDirectory.swift */; };
@@ -184,6 +188,9 @@
 		AA0000000000000000000123 /* WorkspaceController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceController.swift; sourceTree = "<group>"; };
 		AA0000000000000000000124 /* WorkspaceTabBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceTabBar.swift; sourceTree = "<group>"; };
 		AA0000000000000000000128 /* SessionHeader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionHeader.swift; sourceTree = "<group>"; };
+		AA000000000000000000012A /* PathActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PathActions.swift; sourceTree = "<group>"; };
+		AA000000000000000000012B /* ContextChip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContextChip.swift; sourceTree = "<group>"; };
+		AA0000000000000000000134 /* PathLinkParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PathLinkParserTests.swift; sourceTree = "<group>"; };
 		AA0000000000000000000125 /* WorkspaceHostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceHostView.swift; sourceTree = "<group>"; };
 		AA0000000000000000000129 /* TerminalPaneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalPaneView.swift; sourceTree = "<group>"; };
 		AA0000000000000000000126 /* ForegroundWorkingDirectory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForegroundWorkingDirectory.swift; sourceTree = "<group>"; };
@@ -340,6 +347,8 @@
 				AA0000000000000000000123 /* WorkspaceController.swift */,
 				AA0000000000000000000124 /* WorkspaceTabBar.swift */,
 				AA0000000000000000000128 /* SessionHeader.swift */,
+				AA000000000000000000012A /* PathActions.swift */,
+				AA000000000000000000012B /* ContextChip.swift */,
 				AA0000000000000000000125 /* WorkspaceHostView.swift */,
 				AA0000000000000000000129 /* TerminalPaneView.swift */,
 				AA0000000000000000000126 /* ForegroundWorkingDirectory.swift */,
@@ -401,6 +410,7 @@
 				AA0000000000000000000111 /* GhosttyClipboardTests.swift */,
 				AA0000000000000000000130 /* WorkspaceSnapshotTests.swift */,
 				AA0000000000000000000131 /* WorkspaceModelTests.swift */,
+				AA0000000000000000000134 /* PathLinkParserTests.swift */,
 				AA0000000000000000000132 /* WorkspaceRestoreTests.swift */,
 				AA0000000000000000000133 /* ForegroundWorkingDirectoryTests.swift */,
 				AA0000000000000000000150 /* CommandRunFactoryTests.swift */,
@@ -549,6 +559,8 @@
 				AA0000000000000000000023 /* WorkspaceController.swift in Sources */,
 				AA0000000000000000000024 /* WorkspaceTabBar.swift in Sources */,
 				AA0000000000000000000028 /* SessionHeader.swift in Sources */,
+				AA000000000000000000002A /* PathActions.swift in Sources */,
+				AA000000000000000000002B /* ContextChip.swift in Sources */,
 				AA0000000000000000000025 /* WorkspaceHostView.swift in Sources */,
 				AA0000000000000000000029 /* TerminalPaneView.swift in Sources */,
 				AA0000000000000000000026 /* ForegroundWorkingDirectory.swift in Sources */,
@@ -600,6 +612,8 @@
 				AA0000000000000000000015 /* GhosttyClipboard.swift in Sources */,
 				AA0000000000000000000030 /* WorkspaceSnapshotTests.swift in Sources */,
 				AA0000000000000000000031 /* WorkspaceModelTests.swift in Sources */,
+				AA0000000000000000000038 /* PathLinkParserTests.swift in Sources */,
+				AA000000000000000000002C /* PathActions.swift in Sources */,
 				AA0000000000000000000032 /* WorkspaceRestoreTests.swift in Sources */,
 				AA0000000000000000000033 /* ForegroundWorkingDirectoryTests.swift in Sources */,
 				AA0000000000000000000034 /* WorkspaceSnapshot.swift in Sources */,

@@ -8,7 +8,8 @@ final class StickyPromptBar: NSView {
     var onFocusTerminal: (() -> Void)?
     var onAcceptPrediction: (() -> Void)?
 
-    private let pathLabel = NSTextField(labelWithString: "")
+    private let pathButton = NSButton(title: "", target: nil, action: nil)
+    private let branchButton = NSButton(title: "", target: nil, action: nil)
     private let lineLabel = NSTextField(labelWithString: "")
     private let hintLabel = NSTextField(labelWithString: "")
     private let routeLabel = NSTextField(labelWithString: "")
@@ -16,6 +17,8 @@ final class StickyPromptBar: NSView {
     private let hairline = NSView()
     private var showingPrediction = false
     private var agentResumeAvailable = false
+    private var currentDirectory: URL?
+    private var currentBranch: String?
 
     override var isOpaque: Bool { false }
     override var acceptsFirstResponder: Bool { false }
@@ -43,12 +46,14 @@ final class StickyPromptBar: NSView {
         hairline.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.10).cgColor
         addSubview(hairline)
 
-        configureLabel(pathLabel, size: 11, color: .secondaryLabelColor)
+        configureChipButton(pathButton, action: #selector(showPathMenu(_:)))
+        configureChipButton(branchButton, action: #selector(showBranchMenu(_:)))
         configureLabel(lineLabel, size: 13, color: .labelColor)
         configureLabel(hintLabel, size: 11, color: .tertiaryLabelColor)
         configureLabel(routeLabel, size: 11, color: .controlAccentColor)
         lineLabel.font = SoraTheme.terminalFont.withSize(13)
-        addSubview(pathLabel)
+        addSubview(pathButton)
+        addSubview(branchButton)
         addSubview(lineLabel)
         addSubview(hintLabel)
         addSubview(routeLabel)
@@ -71,12 +76,13 @@ final class StickyPromptBar: NSView {
         hairline.frame = NSRect(x: 0, y: bounds.height - 1, width: bounds.width, height: 1)
         let inset: CGFloat = 14
         let top = bounds.height - 18
-        pathLabel.frame = NSRect(
-            x: inset,
-            y: top - 12,
-            width: max(0, bounds.width - inset * 2),
-            height: 14
-        )
+        pathButton.sizeToFit()
+        branchButton.sizeToFit()
+        let pathWidth = min(pathButton.fittingSize.width + 8, bounds.width * 0.45)
+        pathButton.frame = NSRect(x: inset, y: top - 14, width: pathWidth, height: 18)
+        let branchX = pathButton.frame.maxX + 6
+        let branchWidth = branchButton.isHidden ? 0 : min(branchButton.fittingSize.width + 8, 160)
+        branchButton.frame = NSRect(x: branchX, y: top - 14, width: branchWidth, height: 18)
         lineLabel.frame = NSRect(
             x: inset,
             y: 10,
@@ -101,15 +107,23 @@ final class StickyPromptBar: NSView {
 
     func update(
         path: String,
+        directory: URL?,
         branch: String?,
         line: String?,
         predicted: Bool
     ) {
         showingPrediction = predicted
+        currentDirectory = directory
+        currentBranch = branch
+        pathButton.title = path
+        pathButton.toolTip = directory?.path ?? path
         if let branch, !branch.isEmpty {
-            pathLabel.stringValue = "\(path)  \(branch)"
+            branchButton.title = branch
+            branchButton.isHidden = false
+            branchButton.toolTip = "Branch \(branch)"
         } else {
-            pathLabel.stringValue = path
+            branchButton.title = ""
+            branchButton.isHidden = true
         }
 
         if let line, !line.isEmpty {
@@ -168,6 +182,71 @@ final class StickyPromptBar: NSView {
     @objc private func acceptIfPossible() {
         onAcceptPrediction?()
         onFocusTerminal?()
+    }
+
+    @objc private func showPathMenu(_ sender: NSButton) {
+        guard let directory = currentDirectory else {
+            onFocusTerminal?()
+            return
+        }
+        let menu = NSMenu()
+        menu.addItem(withTitle: "Reveal in Finder", action: #selector(revealDirectory), keyEquivalent: "")
+        menu.addItem(withTitle: "Copy Path", action: #selector(copyDirectoryPath), keyEquivalent: "")
+        menu.addItem(withTitle: "Copy Display Path", action: #selector(copyDirectoryDisplayPath), keyEquivalent: "")
+        for item in menu.items { item.target = self }
+        let location = NSPoint(x: 0, y: sender.bounds.height + 2)
+        menu.popUp(positioning: nil, at: location, in: sender)
+    }
+
+    @objc private func showBranchMenu(_ sender: NSButton) {
+        guard let branch = currentBranch else { return }
+        let menu = NSMenu()
+        menu.addItem(withTitle: "Copy Branch Name", action: #selector(copyBranchName), keyEquivalent: "")
+        if currentDirectory.flatMap({ GitRepository.root(containing: $0) }) != nil {
+            menu.addItem(NSMenuItem.separator())
+            menu.addItem(withTitle: "Reveal Repository", action: #selector(revealRepository), keyEquivalent: "")
+        }
+        for item in menu.items where item.action != nil { item.target = self }
+        _ = branch
+        let location = NSPoint(x: 0, y: sender.bounds.height + 2)
+        menu.popUp(positioning: nil, at: location, in: sender)
+    }
+
+    @objc private func revealDirectory() {
+        guard let directory = currentDirectory else { return }
+        PathActions.reveal(directory)
+    }
+
+    @objc private func copyDirectoryPath() {
+        guard let directory = currentDirectory else { return }
+        PathActions.copyPath(directory)
+    }
+
+    @objc private func copyDirectoryDisplayPath() {
+        guard let directory = currentDirectory else { return }
+        PathActions.copyDisplayPath(directory)
+    }
+
+    @objc private func copyBranchName() {
+        guard let branch = currentBranch else { return }
+        PathActions.copy(branch)
+    }
+
+    @objc private func revealRepository() {
+        guard let directory = currentDirectory,
+              let root = GitRepository.root(containing: directory) else { return }
+        PathActions.reveal(root)
+    }
+
+    private func configureChipButton(_ button: NSButton, action: Selector) {
+        button.target = self
+        button.action = action
+        button.bezelStyle = .inline
+        button.isBordered = false
+        button.font = .systemFont(ofSize: 11, weight: .medium)
+        button.contentTintColor = .secondaryLabelColor
+        button.alignment = .left
+        button.setButtonType(.momentaryChange)
     }
 
     private func configureLabel(_ label: NSTextField, size: CGFloat, color: NSColor) {

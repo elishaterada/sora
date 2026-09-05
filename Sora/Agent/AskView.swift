@@ -112,11 +112,21 @@ struct AskView: View {
                 Spacer(minLength: 8)
 
                 if inline, let title = conversationTitle, !title.isEmpty {
-                    Text(title)
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .frame(maxWidth: 280)
+                    ContextChip(
+                        title: AgentResumeSummary.title(from: title),
+                        help: title,
+                        actions: [
+                            ContextChipAction(title: "Copy Title") {
+                                PathActions.copy(AgentResumeSummary.title(from: title))
+                            },
+                            ContextChipAction(title: "Copy Prompt") {
+                                PathActions.copy(title)
+                            }
+                        ]
+                    )
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: 280)
                 }
 
                 Spacer(minLength: 8)
@@ -205,20 +215,42 @@ struct AskView: View {
     private var statusBar: some View {
         HStack(spacing: 8) {
             if let directory = session.agentDirectory {
-                Text(StickyPromptBarModel.displayPath(for: directory))
-                    .help(directory.path)
+                ContextChip(
+                    title: StickyPromptBarModel.displayPath(for: directory),
+                    systemImage: "folder",
+                    help: directory.path,
+                    actions: ContextChipActions.path(directory)
+                )
+                if let branch = GitRepository.branchName(containing: directory) {
+                    ContextChip(
+                        title: branch,
+                        systemImage: "arrow.triangle.branch",
+                        help: "Branch \(branch)",
+                        actions: ContextChipActions.branch(
+                            branch,
+                            repositoryRoot: GitRepository.root(containing: directory)
+                        )
+                    )
+                }
+                Text("·").foregroundStyle(.tertiary)
             }
-            Text("·").foregroundStyle(.tertiary)
             Picker("Provider", selection: Binding(get: { session.selectedProvider }, set: { session.selectProvider($0) })) {
                 ForEach(session.availableProviders) { id in Text(id.name).tag(id) }
             }
             .labelsHidden()
             .pickerStyle(.menu)
             .fixedSize()
-            if !session.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Text("·").foregroundStyle(.tertiary)
-                Text(session.model).lineLimit(1)
+            .help("Choose AI provider")
+            Button {
+                showingSetup = true
+            } label: {
+                Text(session.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                      ? "Choose model"
+                      : session.model)
+                    .lineLimit(1)
             }
+            .buttonStyle(.plain)
+            .help("Choose an agent model")
             Spacer(minLength: 0)
             Text(session.selectedProvider.disclosure)
                 .lineLimit(1)
@@ -301,7 +333,7 @@ struct AskView: View {
                           AgentWebpageProposalParser.isStreamingEnvelope(message.text) {
                     ProgressView("Preparing a webpage…").controlSize(.small)
                 } else {
-                    Text(message.text).textSelection(.enabled)
+                    LinkedText(text: message.text, relativeTo: session.agentDirectory)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
@@ -335,8 +367,11 @@ struct AskView: View {
             }
             if let result = message.commandResult {
                 DisclosureGroup("Command output · exit \(result.exitCode)" + (result.truncated ? " · excerpt" : "")) {
-                    Text(result.output.isEmpty ? "No output" : result.output)
-                        .font(.system(.callout, design: .monospaced)).textSelection(.enabled)
+                    LinkedText(
+                        text: result.output.isEmpty ? "No output" : result.output,
+                        relativeTo: session.agentDirectory,
+                        monospaced: true
+                    )
                 }
             }
             if session.isRunningCommand, message.id == session.messages.last?.id {
@@ -359,10 +394,16 @@ struct AskView: View {
             Text("/agent")
                 .font(.system(.body, design: .monospaced).weight(.semibold))
                 .foregroundStyle(Color.accentColor)
+                .contextMenu {
+                    Button("Copy /agent") { PathActions.copy("/agent") }
+                }
             Text(text)
                 .font(.system(.body, design: .monospaced))
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .contextMenu {
+                    Button("Copy Prompt") { PathActions.copy(text) }
+                }
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Agent prompt: \(text)")
@@ -403,10 +444,13 @@ struct AskView: View {
                     .foregroundStyle(.secondary)
             }
             ScrollView(.horizontal) {
-                Text(proposal.command)
-                    .font(.system(.body, design: .monospaced))
-                    .textSelection(.enabled)
-                    .padding(10)
+                ContextChip(
+                    title: proposal.command,
+                    help: "Command actions",
+                    actions: ContextChipActions.command(proposal.command)
+                )
+                .font(.system(.body, design: .monospaced))
+                .padding(10)
             }
             .background(Color.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 8))
         }
