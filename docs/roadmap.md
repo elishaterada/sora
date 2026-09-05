@@ -143,3 +143,9 @@ Exit: agents can perform bounded work with visible actions and consistent permis
 - extension marketplace
 - unofficial or scraped provider authentication
 - AI calls on every keystroke
+
+**Persistent agent slice (2026-09-05):** supersedes the earlier autonomous-execution
+restriction for bounded native agent tasks. Agent mode stays open, captures command
+results, and continues automatically for routine read-only listings. Other commands
+require approval. Six commands per turn, 60 seconds per command, bounded output,
+and Stop apply. Interactive commands and persistent shell-state changes remain open.

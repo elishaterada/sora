@@ -9,11 +9,13 @@ final class TerminalPaneView: NSView {
     private var agentHost: NSHostingView<AskView>!
     private(set) var isShowingAgent = false
     private var isPaneActive = false
+    private weak var ask: AskSession?
 
     override var isOpaque: Bool { false }
 
     init(surface: GhosttySurfaceView, ask: AskSession) {
         self.surface = surface
+        self.ask = ask
         super.init(frame: .zero)
         wantsLayer = true
         layer?.backgroundColor = SoraTheme.nsClear.cgColor
@@ -23,15 +25,10 @@ final class TerminalPaneView: NSView {
             session: ask,
             inline: true,
             onClose: { [weak self] in self?.hideAgent() },
-            onRunCommand: { [weak self, weak ask] messageID in
-                guard let self, let ask else { return }
-                guard surface.canRunAgentCommand else {
-                    ask.reportCommandUnavailable()
-                    return
-                }
-                guard let proposal = ask.approveCommand(messageID: messageID) else { return }
-                hideAgent()
-                _ = surface.runApprovedCommand(proposal.command)
+            onRunCommand: { [weak ask] messageID in
+                guard let ask else { return }
+                ask.configureAgent(directory: surface.currentWorkingDirectory() ?? surface.initialWorkingDirectory)
+                ask.runCommand(messageID: messageID)
             }
         ))
         agentHost.isHidden = true
@@ -50,6 +47,7 @@ final class TerminalPaneView: NSView {
         surface.onAgentPrompt = { [weak self, weak ask] question in
             guard let self, let ask else { return }
             showAgent()
+            ask.configureAgent(directory: surface.currentWorkingDirectory() ?? surface.initialWorkingDirectory)
             ask.draft = question
             ask.send()
         }
@@ -67,6 +65,7 @@ final class TerminalPaneView: NSView {
     }
 
     func showAgent() {
+        ask?.configureAgent(directory: surface.currentWorkingDirectory() ?? surface.initialWorkingDirectory)
         isShowingAgent = true
         agentHost.isHidden = false
         stickyBar.isHidden = true

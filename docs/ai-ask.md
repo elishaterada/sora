@@ -2,8 +2,9 @@
 
 Authorized on 2026-09-04 by the user's requests to implement AI with OpenAI API,
 Codex, Anthropic API, Vercel AI Gateway, and Grok (xAI). This supersedes the earlier no-AI
-scope restriction for this slice. Accounts, sync, a hosted backend, and
-an autonomous command runner remain deferred.
+scope restriction for this slice. On 2026-09-05 the user authorized persistent
+agent mode, bounded command execution, and automatic troubleshooting. Accounts,
+sync, and a hosted backend remain deferred.
 
 ## User flow
 
@@ -48,28 +49,31 @@ repository, working-directory, environment, or command-history collection.
 The local classifier makes no AI calls. A terminal sentence is sent only after
 the **AI prompt** label appears and the user presses Return.
 
-### Command approval
+### Persistent agent commands
 
-When one shell command can directly advance a request, providers can return a
-Sora command proposal. The inline conversation shows the model's purpose and
-the exact single-line command in a bordered approval card. **Dismiss** records
-the rejection and leaves the terminal untouched. **Run in Terminal** first
-persists the approval, returns to the current terminal, inserts the displayed
-command, and submits it to zsh. A proposal cannot be approved twice.
+Agent mode stays visible until **Back to Terminal**. Each command starts in the
+active tab's directory captured when its proposal was generated. Commands use a
+separate noninteractive zsh, not the user's PTY; interactive input, shell aliases,
+and persistent cd/environment changes are unsupported. The command runner uses
+system executables on a fixed PATH and skips user zsh configuration.
 
-The provider never executes the proposal. Sora accepts only its exact internal
-envelope, a nonempty summary of at most 600 UTF-8 bytes, and one command of at
-most 4,096 UTF-8 bytes with no control, formatting, or line-separator
-characters. This prevents hidden input and misleading bidirectional display.
-Surrounding model prose, malformed JSON, and multi-line commands remain ordinary
-text and receive no Run button. The terminal must still be at a ready, empty
-shell prompt when approval is clicked.
+Sora automatically runs a narrow set of read-only listings: pwd, constrained ls
+and du options, find with -type f and -print/-print0, and constrained pipelines
+through xargs -0 du -h, sort, and head. Substitutions, redirections, and commands
+outside this grammar require **Run Command** approval. Approval is persisted
+before execution. This is a conservative permission check, not an OS sandbox.
+Approved commands have the user's filesystem permissions.
 
-The request handoff uses a terminal interrupt to cancel zsh's complete edit
-buffer before opening AI. This avoids a race with zsh syntax-highlighting
-redraws that can make cursor-relative line deletion leave a suffix behind.
-The model does not receive command output after execution in this slice, and
-there is no multi-step agent loop.
+Output (up to 32 KiB), working directory, and exit code stay in the conversation
+and are sent to the selected AI provider as untrusted result data. The AI reviews
+results, proposes a next command when needed, or summarizes findings and a next
+step. Each user turn permits at most six commands; each command has a 60-second
+time limit. Stop terminates the command process group and cancels continuation.
+A time limit pauses for user follow-up. Commands are never resumed on relaunch.
+
+Providers only propose commands through Sora's strict single-line envelope.
+Malformed envelopes and control characters are rejected. The initial prompt
+handoff still uses a terminal interrupt to cancel the shell edit buffer.
 
 ### Attach webpage
 
@@ -192,10 +196,9 @@ from that Gateway model. Other live responses and browser login completion still
 require user-supplied API keys or ChatGPT sign-in. The installed Codex currently reports
 no Keychain sign-in.
 
-The router grants no background tools and every command requires a visible
-approval. The UI displays selectable plain text, including Markdown source. There is one
-conversation per provider and no transcript browser. Terminal context attachments,
-command-output capture, filesystem tools, and agent loops are future slices.
+The UI displays selectable plain text, including Markdown source. There is one
+conversation per provider and no transcript browser. General terminal scrollback
+attachments and interactive agent commands remain future work.
 Grok connects directly to `https://api.x.ai/v1/chat/completions` using Bearer
 authentication. This supported legacy endpoint reuses the existing stateless
 Chat Completions transport for this text-only slice. xAI recommends Responses

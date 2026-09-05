@@ -16,7 +16,8 @@ These rules apply to every coding agent working in this repository.
 - Complete one phase or vertical slice at a time.
 - Phase 0 through Phase 4 are complete. Do not reopen them unless a regression appears.
 - Phase 6 Ask AI is authorized: ship one optional native Ask slice at a time.
-- Accounts, sync, hosted backends, and autonomous command execution remain out of scope.
+- Persistent agent mode with bounded command execution and result-driven follow-ups is authorized. Routine read-only commands may run automatically; other commands require approval.
+- Accounts, sync, and hosted backends remain out of scope.
 - Do not add speculative abstractions for future cross-platform support.
 - Do not introduce Rust, Zig, UniFFI, or another application-owned FFI layer during V0.
 - Native interoperability required by `libghostty` is allowed.
