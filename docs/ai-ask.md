@@ -39,7 +39,7 @@ Setup, enable AI, and configure credentials and a model:
 | Grok (xAI) | xAI API key | `grok-4.6` |
 
 Model IDs are editable; Gateway uses `provider/model` IDs. API keys are saved
-from secure fields to Keychain. **Cmd+Return** sends a question from the Ask
+from secure fields to Keychain. **Return** sends a follow-up from the Ask
 composer. **Stop**, disabling AI, closing Sora, or switching providers cancels
 the current answer.
 Partial answers stay visible. Copy copies text without executing anything.

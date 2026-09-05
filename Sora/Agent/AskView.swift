@@ -189,22 +189,27 @@ struct AskView: View {
                 }
             }
             TextField(inline ? "Ask a follow up…" : "Ask about a command or paste an error…",
-                      text: $session.draft, axis: .vertical)
-                .lineLimit(2...5)
+                      text: $session.draft, axis: inline ? .horizontal : .vertical)
+                .lineLimit(inline ? 1...3 : 2...5)
                 .textFieldStyle(.plain)
                 .focused($composerFocused)
                 .accessibilityLabel("Question")
+                .onSubmit { submitComposer() }
             HStack {
                 if !inline {
                     Text(session.selectedProvider.disclosure)
                         .font(.caption).foregroundStyle(.secondary)
+                } else {
+                    Text("↵ send")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
                 }
                 Spacer()
                 if session.isSending || session.isRunningCommand {
                     Button("Stop", systemImage: "stop.fill") { session.stop() }
                 } else {
-                    Button("Send", systemImage: "arrow.up") { session.send() }
-                        .keyboardShortcut(.return, modifiers: .command)
+                    Button("Send", systemImage: "arrow.up") { submitComposer() }
+                        .keyboardShortcut(.return, modifiers: [])
                         .disabled(!session.canSend)
                 }
             }
@@ -212,6 +217,11 @@ struct AskView: View {
         .padding(.horizontal, 16)
         .padding(.top, 10)
         .padding(.bottom, inline ? 6 : 16)
+    }
+
+    private func submitComposer() {
+        guard session.canSend else { return }
+        session.send()
     }
 
     private var statusBar: some View {
