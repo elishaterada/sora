@@ -101,9 +101,10 @@ shares URLSession transport across OpenAI Responses, Anthropic Messages, and
 Vercel and xAI Chat Completions; adapters translate their distinct event schemas.
 `CodexProvider` uses `CodexConnection` to run the installed official app-server
 over stdio with an ephemeral, text-only thread. `CodexLogin` owns sign-in setup.
-`AskView` is a native SwiftUI window opened from AI → Ask Sora. Storage is
-injected; credentials use Keychain, and conversations are saved locally per
-provider. Switching providers cancels outstanding work and restores that
+`AskView` is the inline agent continuation inside the active terminal tab
+(AI → Ask Sora or prompt routing). Terminal scrollback stays visible above it.
+Storage is injected; credentials use Keychain, and conversations are saved locally
+per provider. Switching providers cancels outstanding work and restores that
 provider's draft, model, and history. No tool interface is exposed in this slice.
 See [AI Ask](ai-ask.md).
 

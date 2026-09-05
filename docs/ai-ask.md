@@ -9,17 +9,17 @@ sync, and a hosted backend remain deferred.
 ## User flow
 
 At a ready shell prompt, type a clear conversational request such as
-`Help me find the largest files` and press Return. Sora labels the line
-**AI prompt** while typing, cancels it as shell input, and opens Ask in
-the same terminal tab. **Back to Terminal** or Escape returns to the unchanged
-terminal session. The canceled request may remain visible in terminal
-scrollback, but it is never submitted as a command. No separate Ask window is
-created.
+`Help me find the largest files`. Sora labels the line **↵ agent** while
+typing. Press Return to cancel it as shell input and continue into Ask in the
+same terminal tab: recent scrollback stays visible above the conversation, the
+prompt is shown as `/agent …`, and **ESC for terminal** (or Escape) returns to
+the unchanged session. Press **Cmd+Return** to force a detected sentence to run
+in the shell. The canceled request may remain visible in terminal scrollback,
+but it is never submitted as a command. No separate Ask window is created.
 
 Routing is conservative and local. Known command names, executable paths,
 assignments, shell operators, short input, and ambiguous text remain shell
-input. Press **Cmd+Return** to force a detected sentence to run in the shell.
-Start a line with `/agent ` to force command-like text to AI; the prefix is
+input. Start a line with `/agent ` to force command-like text to AI; the prefix is
 removed before sending. Routing only occurs at a ready zsh prompt. Input to a
 foreground command, REPL, or other program always goes to that program.
 
@@ -47,11 +47,11 @@ Conversations are not transferred between services. Only explicitly entered Ask
 text and prior completed Ask turns are sent. There is no automatic terminal,
 repository, working-directory, environment, or command-history collection.
 The local classifier makes no AI calls. A terminal sentence is sent only after
-the **AI prompt** label appears and the user presses Return.
+the **↵ agent** label appears and the user presses Return.
 
 ### Persistent agent commands
 
-Agent mode stays visible until **Back to Terminal**. Each command starts in the
+Agent mode stays visible until **ESC for terminal**. Each command starts in the
 active tab's directory captured when its proposal was generated. Commands use a
 separate noninteractive zsh, not the user's PTY; interactive input, shell aliases,
 and persistent cd/environment changes are unsupported. The command runner uses

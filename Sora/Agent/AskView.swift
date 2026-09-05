@@ -12,65 +12,35 @@ struct AskView: View {
     @State private var showingWebpage = false
     @FocusState private var composerFocused: Bool
 
+    private var visibleMessages: [AIMessage] {
+        session.messages.filter { $0.isAgentContinuation != true }
+    }
+
+    private var conversationTitle: String? {
+        visibleMessages.first(where: { $0.role == .user })?.text
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Ask Sora").font(.title2.weight(.semibold))
-                    Text("Commands, results, and follow-ups in one conversation.")
-                        .font(.callout).foregroundStyle(.secondary)
-                }
-                Spacer()
-                if inline {
-                    Button("Back to Terminal", systemImage: "terminal") { onClose?() }
-                        .keyboardShortcut(.cancelAction)
-                }
-                Button("Clear Conversation") { session.newConversation() }
-                    .disabled(session.messages.isEmpty)
-                Button("Setup", systemImage: "slider.horizontal.3") { showingSetup.toggle() }
-            }
-            .padding(20)
-            HStack {
-                Picker("Provider", selection: Binding(get: { session.selectedProvider }, set: { session.selectProvider($0) })) {
-                    ForEach(session.availableProviders) { id in Text(id.name).tag(id) }
-                }
-                .frame(maxWidth: 350)
-                Spacer()
-                if let directory = session.agentDirectory {
-                    Text(directory.path).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                        .help("Routine read-only commands run automatically here. Other commands require approval. Output is sent to the selected AI provider.")
-                }
-            }
-            .padding(.horizontal, 20).padding(.bottom, 12)
-            Divider()
-
+            header
             if showingSetup || !session.enabled {
                 setup
-                Divider()
+                Divider().opacity(0.35)
             }
 
             ScrollViewReader { proxy in
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 22) {
-                        if session.messages.isEmpty {
-                            VStack(alignment: .leading, spacing: 12) {
-                                Text("What would you like to do?").font(.title3.weight(.medium))
-                                Text("Ask about a command, describe a task, or paste an error you want help understanding.")
-                                    .foregroundStyle(.secondary)
-                                Button("How do I find the largest files in a folder?") {
-                                    session.draft = "How do I find the largest files in a folder on macOS?"
-                                    composerFocused = true
-                                }
-                                .buttonStyle(.link)
-                            }
-                            .padding(.vertical, 28)
+                    LazyVStack(alignment: .leading, spacing: 18) {
+                        if visibleMessages.isEmpty {
+                            emptyState
                         }
-                        ForEach(session.messages.filter { $0.isAgentContinuation != true }) { message in
+                        ForEach(visibleMessages) { message in
                             messageView(message)
                         }
                         Color.clear.frame(height: 1).id("bottom")
                     }
-                    .padding(20)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 14)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .onChange(of: session.messages.last?.text) { _ in proxy.scrollTo("bottom", anchor: .bottom) }
@@ -78,45 +48,17 @@ struct AskView: View {
             }
 
             if let error = session.errorMessage {
-                Text(error).font(.callout).foregroundStyle(.red)
+                Text(error).font(.caption).foregroundStyle(.red)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 20).padding(.bottom, 10)
+                    .padding(.horizontal, 16).padding(.bottom, 8)
                     .accessibilityLabel("AI error: \(error)")
             }
-            Divider()
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Button(session.webpage == nil ? "Attach webpage" : "Review webpage", systemImage: "link") {
-                        showingWebpage = true
-                    }
-                    .disabled(session.isSending)
-                    if let page = session.webpage {
-                        Text(page.url.host ?? page.title).font(.caption).lineLimit(1)
-                        Spacer()
-                        Button("Remove", systemImage: "xmark") { session.attachWebpage(nil) }
-                            .disabled(session.isSending)
-                    }
-                }
-                TextField("Ask about a command or paste an error…", text: $session.draft, axis: .vertical)
-                    .lineLimit(2...6)
-                    .textFieldStyle(.plain)
-                    .focused($composerFocused)
-                    .accessibilityLabel("Question")
-                HStack {
-                    Text(session.selectedProvider.disclosure)
-                        .font(.caption).foregroundStyle(.secondary)
-                    Spacer()
-                    if session.isSending || session.isRunningCommand {
-                        Button("Stop", systemImage: "stop.fill") { session.stop() }
-                    } else {
-                        Button("Send", systemImage: "arrow.up") { session.send() }
-                            .keyboardShortcut(.return, modifiers: .command)
-                            .disabled(!session.canSend)
-                    }
-                }
-            }
-            .padding(20)
+
+            Divider().opacity(0.35)
+            composer
+            statusBar
         }
+        .background(inlineBackground)
         .frame(minWidth: inline ? 0 : 540, minHeight: inline ? 0 : 560)
         .preferredColorScheme(.dark)
         .sheet(isPresented: $showingWebpage) {
@@ -138,6 +80,167 @@ struct AskView: View {
             if !enabled { showingWebpage = false }
         }
         .onDisappear { session.stop(); codexLogin.cancel(); keyDraft = ""; showingWebpage = false }
+    }
+
+    private var inlineBackground: some View {
+        ZStack {
+            Color.black.opacity(inline ? 0.72 : 0.88)
+            if inline {
+                Rectangle()
+                    .fill(.ultraThinMaterial)
+                    .opacity(0.35)
+            }
+        }
+    }
+
+    private var header: some View {
+        VStack(spacing: 0) {
+            if inline {
+                Rectangle()
+                    .fill(Color.white.opacity(0.10))
+                    .frame(height: 1)
+            }
+            HStack(spacing: 10) {
+                if inline {
+                    Button {
+                        onClose?()
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "chevron.left")
+                            Text("ESC for terminal")
+                        }
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.accentColor)
+                    }
+                    .buttonStyle(.plain)
+                    .keyboardShortcut(.cancelAction)
+                    .help("Return to the terminal session")
+                } else {
+                    Text("Ask Sora").font(.title2.weight(.semibold))
+                }
+
+                Spacer(minLength: 8)
+
+                if inline, let title = conversationTitle, !title.isEmpty {
+                    Text(title)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .frame(maxWidth: 280)
+                }
+
+                Spacer(minLength: 8)
+
+                if !inline {
+                    Button("Clear Conversation") { session.newConversation() }
+                        .disabled(session.messages.isEmpty)
+                }
+                Menu {
+                    Button(showingSetup ? "Hide Setup" : "Setup") { showingSetup.toggle() }
+                    Button("Clear Conversation") { session.newConversation() }
+                        .disabled(session.messages.isEmpty)
+                    if !inline {
+                        Button("Close", role: .cancel) { onClose?() }
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .menuStyle(.borderlessButton)
+                .frame(width: 28)
+                .help("Conversation options")
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, inline ? 8 : 14)
+        }
+    }
+
+    private var emptyState: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(inline ? "Continue from this terminal" : "What would you like to do?")
+                .font(inline ? .callout.weight(.medium) : .title3.weight(.medium))
+            Text(inline
+                 ? "Ask about a command, describe a task, or paste an error. Escape returns to the same prompt."
+                 : "Ask about a command, describe a task, or paste an error you want help understanding.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if !inline {
+                Button("How do I find the largest files in a folder?") {
+                    session.draft = "How do I find the largest files in a folder on macOS?"
+                    composerFocused = true
+                }
+                .buttonStyle(.link)
+            }
+        }
+        .padding(.vertical, inline ? 8 : 28)
+    }
+
+    private var composer: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Button(session.webpage == nil ? "Attach webpage" : "Review webpage", systemImage: "link") {
+                    showingWebpage = true
+                }
+                .disabled(session.isSending || session.isRunningCommand)
+                if let page = session.webpage {
+                    Text(page.url.host ?? page.title).font(.caption).lineLimit(1)
+                    Spacer()
+                    Button("Remove", systemImage: "xmark") { session.attachWebpage(nil) }
+                        .disabled(session.isSending || session.isRunningCommand)
+                }
+            }
+            TextField(inline ? "Ask a follow up…" : "Ask about a command or paste an error…",
+                      text: $session.draft, axis: .vertical)
+                .lineLimit(2...5)
+                .textFieldStyle(.plain)
+                .focused($composerFocused)
+                .accessibilityLabel("Question")
+            HStack {
+                if !inline {
+                    Text(session.selectedProvider.disclosure)
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                if session.isSending || session.isRunningCommand {
+                    Button("Stop", systemImage: "stop.fill") { session.stop() }
+                } else {
+                    Button("Send", systemImage: "arrow.up") { session.send() }
+                        .keyboardShortcut(.return, modifiers: .command)
+                        .disabled(!session.canSend)
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 10)
+        .padding(.bottom, inline ? 6 : 16)
+    }
+
+    private var statusBar: some View {
+        HStack(spacing: 8) {
+            if let directory = session.agentDirectory {
+                Text(StickyPromptBarModel.displayPath(for: directory))
+                    .help(directory.path)
+            }
+            Text("·").foregroundStyle(.tertiary)
+            Picker("Provider", selection: Binding(get: { session.selectedProvider }, set: { session.selectProvider($0) })) {
+                ForEach(session.availableProviders) { id in Text(id.name).tag(id) }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .fixedSize()
+            if !session.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text("·").foregroundStyle(.tertiary)
+                Text(session.model).lineLimit(1)
+            }
+            Spacer(minLength: 0)
+            Text(session.selectedProvider.disclosure)
+                .lineLimit(1)
+                .foregroundStyle(.tertiary)
+        }
+        .font(.caption2)
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 10)
+        .help("Routine read-only commands run automatically in this directory. Other commands require approval.")
     }
 
     private var setup: some View {
@@ -181,30 +284,35 @@ struct AskView: View {
                 .font(.caption).foregroundStyle(.secondary)
         }
         .textFieldStyle(.roundedBorder)
-        .padding(20)
+        .padding(16)
     }
 
     private func messageView(_ message: AIMessage) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(message.role == .user ? "You" : "Sora").font(.callout.weight(.semibold))
-                Spacer()
-                if message.role == .assistant, !message.text.isEmpty {
-                    Button("Copy") {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(message.text, forType: .string)
-                    }
-                    .buttonStyle(.borderless)
-                }
-            }
-            if message.text.isEmpty && message.status == .streaming {
-                ProgressView("Thinking…").controlSize(.small)
-            } else if message.status == .streaming,
-                      AgentCommandProposalParser.isStreamingEnvelope(message.text) {
-                ProgressView("Preparing a command…").controlSize(.small)
+            if message.role == .user {
+                userPrompt(message.text)
             } else {
-                Text(message.text).textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                HStack {
+                    Text("Sora").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    Spacer()
+                    if !message.text.isEmpty {
+                        Button("Copy") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(message.text, forType: .string)
+                        }
+                        .buttonStyle(.borderless)
+                        .font(.caption)
+                    }
+                }
+                if message.text.isEmpty && message.status == .streaming {
+                    ProgressView("Thinking…").controlSize(.small)
+                } else if message.status == .streaming,
+                          AgentCommandProposalParser.isStreamingEnvelope(message.text) {
+                    ProgressView("Preparing a command…").controlSize(.small)
+                } else {
+                    Text(message.text).textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
             if let proposal = message.commandProposal {
                 commandCard(proposal, messageID: message.id)
@@ -238,35 +346,64 @@ struct AskView: View {
         }
     }
 
+    private func userPrompt(_ text: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text("/agent")
+                .font(.system(.body, design: .monospaced).weight(.semibold))
+                .foregroundStyle(Color.accentColor)
+            Text(text)
+                .font(.system(.body, design: .monospaced))
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Agent prompt: \(text)")
+    }
+
     private func commandCard(_ proposal: AgentCommandProposal, messageID: UUID) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Image(systemName: proposal.status == .pending ? "terminal" :
-                      proposal.status == .approved ? "checkmark.circle.fill" : "xmark.circle")
-                Text(proposal.status == .pending ? "Approve this command?" :
-                     proposal.status == .approved ? "Approved" : "Command dismissed")
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Text(proposal.status == .pending ? "OK if I run this command and read the output?" :
+                     proposal.status == .approved ? "Running command" : "Command dismissed")
                     .font(.callout.weight(.semibold))
-                Spacer()
+                Spacer(minLength: 8)
+                if proposal.status == .pending {
+                    Button {
+                        session.dismissCommand(messageID: messageID)
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Dismiss")
+                    Button {
+                        onRunCommand?(messageID)
+                    } label: {
+                        Image(systemName: "checkmark")
+                            .fontWeight(.bold)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(onRunCommand == nil || session.isSending || session.isRunningCommand)
+                    .help("Run Command")
+                } else if proposal.status == .approved {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                }
+            }
+            if proposal.status == .pending {
+                Text(proposal.summary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             ScrollView(.horizontal) {
                 Text(proposal.command)
                     .font(.system(.body, design: .monospaced))
                     .textSelection(.enabled)
-                    .padding(12)
+                    .padding(10)
             }
-            .background(Color.black.opacity(0.28), in: RoundedRectangle(cornerRadius: 7))
-            if proposal.status == .pending {
-                HStack {
-                    Button("Dismiss") { session.dismissCommand(messageID: messageID) }
-                    Spacer()
-                    Button("Run Command", systemImage: "play.fill") { onRunCommand?(messageID) }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(onRunCommand == nil || session.isSending || session.isRunningCommand)
-                }
-            }
+            .background(Color.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 8))
         }
-        .padding(14)
-        .background(Color.accentColor.opacity(0.10), in: RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.accentColor.opacity(0.55)))
+        .padding(12)
+        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.accentColor.opacity(0.65), lineWidth: 1))
     }
 }
