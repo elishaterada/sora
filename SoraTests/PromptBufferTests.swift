@@ -77,6 +77,32 @@ final class PromptBufferTests: XCTestCase {
         }
     }
 
+    func testMouseFocusOnEmptyReadyPromptResumesTrackingForAgentRouting() {
+        let session = CompletionSession()
+        session.stopTracking()
+        XCTAssertFalse(session.buffer.isTracking)
+
+        session.applyMouseFocus(isShellPromptReady: true)
+        XCTAssertTrue(session.buffer.isTracking)
+        XCTAssertEqual(session.buffer.text, "")
+
+        _ = session.handleKeyDown(keyCode: 4, characters: "Help me find the largest files", modifiers: [])
+        XCTAssertEqual(
+            PromptIntentClassifier.submission(for: session.buffer.text),
+            .agent("Help me find the largest files")
+        )
+    }
+
+    func testMouseFocusAfterTypedTextStopsTracking() {
+        let session = CompletionSession()
+        _ = session.handleKeyDown(keyCode: 0, characters: "Help me", modifiers: [])
+        session.applyMouseFocus(isShellPromptReady: true)
+        XCTAssertFalse(session.buffer.isTracking)
+        _ = session.handleKeyDown(keyCode: 0, characters: " find files", modifiers: [])
+        XCTAssertEqual(session.buffer.text, "")
+        XCTAssertEqual(PromptIntentClassifier.submission(for: session.buffer.text), .shell)
+    }
+
     func testPartialControlEditsDoNotTrackOnlyTheQuestionSuffix() {
         for character in ["a", "e", "k", "w", "\u{01}", "\u{05}", "\u{0b}", "\u{17}"] {
             XCTAssertEqual(

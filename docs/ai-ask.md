@@ -215,10 +215,15 @@ key. No external dependency was added.
 
 Prompt tracking recognizes macOS control characters for Control-C and Control-U,
 so cancelling or clearing a line allows the next conversational prompt to route
-to Ask AI. Control-A/E/K/W remain conservative: these move the cursor or delete
-only part of a line, so tracking stops rather than classifying a suffix as the
-whole command. History navigation and unsupported edits still require a fresh
-prompt (Control-C) before automatic AI detection resumes.
+to Ask AI. Clicking an empty ready prompt (or the sticky footer) focuses the
+terminal and keeps tracking, so typing `Help me find the largest files` still
+shows **↵ agent** and Return opens Ask. Clicking after text is already present
+stops tracking, because the click may move zsh's caret; use Control-C for a
+fresh line before automatic AI detection resumes. Control-A/E/K/W remain
+conservative: these move the cursor or delete only part of a line, so tracking
+stops rather than classifying a suffix as the whole command. History navigation
+and unsupported edits still require a fresh prompt (Control-C) before automatic
+AI detection resumes.
 
 ## Official references
 

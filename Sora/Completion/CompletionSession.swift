@@ -15,6 +15,16 @@ final class CompletionSession {
     private(set) var lastSuccessfulCommand: String?
     private var predictionDismissed = false
 
+    func applyMouseFocus(isShellPromptReady: Bool) {
+        if let event = PromptEvent.mouseFocusEvent(isShellPromptReady: isShellPromptReady, buffer: buffer) {
+            buffer.apply(event)
+            if !buffer.isTracking {
+                suggestion = nil
+                predictionDismissed = true
+            }
+        }
+    }
+
     func handleKeyDown(
         keyCode: UInt16,
         characters: String,
