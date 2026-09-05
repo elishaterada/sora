@@ -17,7 +17,7 @@ struct AskView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Ask Sora").font(.title2.weight(.semibold))
-                    Text("Command help, one question at a time.")
+                    Text("Commands, results, and follow-ups in one conversation.")
                         .font(.callout).foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -36,6 +36,10 @@ struct AskView: View {
                 }
                 .frame(maxWidth: 350)
                 Spacer()
+                if let directory = session.agentDirectory {
+                    Text(directory.path).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                        .help("Routine read-only commands run automatically here. Other commands require approval. Output is sent to the selected AI provider.")
+                }
             }
             .padding(.horizontal, 20).padding(.bottom, 12)
             Divider()
@@ -61,7 +65,7 @@ struct AskView: View {
                             }
                             .padding(.vertical, 28)
                         }
-                        ForEach(session.messages) { message in
+                        ForEach(session.messages.filter { $0.isAgentContinuation != true }) { message in
                             messageView(message)
                         }
                         Color.clear.frame(height: 1).id("bottom")
@@ -102,7 +106,7 @@ struct AskView: View {
                     Text(session.selectedProvider.disclosure)
                         .font(.caption).foregroundStyle(.secondary)
                     Spacer()
-                    if session.isSending {
+                    if session.isSending || session.isRunningCommand {
                         Button("Stop", systemImage: "stop.fill") { session.stop() }
                     } else {
                         Button("Send", systemImage: "arrow.up") { session.send() }
@@ -214,6 +218,18 @@ struct AskView: View {
                     }
                 }
             }
+            if let state = message.commandState, state == "stopped" || state == "failed" {
+                Text("Command " + state).font(.caption).foregroundStyle(.secondary)
+            }
+            if let result = message.commandResult {
+                DisclosureGroup("Command output · exit \(result.exitCode)" + (result.truncated ? " · excerpt" : "")) {
+                    Text(result.output.isEmpty ? "No output" : result.output)
+                        .font(.system(.callout, design: .monospaced)).textSelection(.enabled)
+                }
+            }
+            if session.isRunningCommand, message.id == session.messages.last?.id {
+                ProgressView("Running command…").controlSize(.small)
+            }
             if message.status == .stopped || message.status == .failed {
                 Text(message.status == .stopped ? "Stopped — partial answer" : "Answer incomplete")
                     .font(.caption).foregroundStyle(.secondary)
@@ -226,8 +242,8 @@ struct AskView: View {
             HStack {
                 Image(systemName: proposal.status == .pending ? "terminal" :
                       proposal.status == .approved ? "checkmark.circle.fill" : "xmark.circle")
-                Text(proposal.status == .pending ? "Run this command in the terminal?" :
-                     proposal.status == .approved ? "Approved and sent to the terminal" : "Command dismissed")
+                Text(proposal.status == .pending ? "Approve this command?" :
+                     proposal.status == .approved ? "Approved" : "Command dismissed")
                     .font(.callout.weight(.semibold))
                 Spacer()
             }
@@ -242,9 +258,9 @@ struct AskView: View {
                 HStack {
                     Button("Dismiss") { session.dismissCommand(messageID: messageID) }
                     Spacer()
-                    Button("Run in Terminal", systemImage: "play.fill") { onRunCommand?(messageID) }
+                    Button("Run Command", systemImage: "play.fill") { onRunCommand?(messageID) }
                         .buttonStyle(.borderedProminent)
-                        .disabled(onRunCommand == nil)
+                        .disabled(onRunCommand == nil || session.isSending || session.isRunningCommand)
                 }
             }
         }

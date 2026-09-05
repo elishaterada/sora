@@ -19,6 +19,7 @@ struct FileAIConversationStore: AIConversationStore {
         let data = try Data(contentsOf: url)
         return try JSONDecoder().decode([AIMessage].self, from: data).map { message in
             var message = message
+            if message.commandState == "running" { message.commandState = "stopped" }
             if message.status == .streaming { message.status = .stopped }
             return message
         }

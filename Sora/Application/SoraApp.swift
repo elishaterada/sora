@@ -22,6 +22,7 @@ struct SoraApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView(runtime: runtime, ask: ask)
+                .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in ask.stop() }
         }
         .defaultSize(width: 980, height: 620)
         .windowResizability(.contentMinSize)

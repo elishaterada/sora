@@ -17,6 +17,18 @@ final class AskSession: ObservableObject {
     }
     @Published private(set) var messages: [AIMessage] = []
     @Published private(set) var isSending = false
+    @Published private(set) var isRunningCommand = false
+    @Published private(set) var agentDirectory: URL?
+    private var commandRunner: AgentCommandRunner?
+    private var commandTask: Task<Void, Never>?
+    private var commandGeneration: UUID?
+    private var commandCount = 0
+    private var runningMessageID: UUID?
+
+    func configureAgent(directory: URL?) {
+        guard !isSending, !isRunningCommand else { return }
+        agentDirectory = directory
+    }
     @Published private(set) var isUpdatingKey = false
     @Published private(set) var errorMessage: String?
     @Published private(set) var setupMessage: String?
@@ -71,10 +83,10 @@ final class AskSession: ObservableObject {
         load()
     }
 
-    deinit { task?.cancel() }
+    deinit { task?.cancel(); commandTask?.cancel(); commandRunner?.cancel() }
 
     var canSend: Bool {
-        enabled && !isSending && !isUpdatingKey && !loadFailed && !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        enabled && !isSending && !isRunningCommand && !isUpdatingKey && !loadFailed && !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     func load() {
@@ -126,11 +138,17 @@ final class AskSession: ObservableObject {
     }
 
     func send() {
+        guard !isSending, !isRunningCommand else { return }
+        commandCount = 0
+        send(continuation: nil)
+    }
+
+    private func send(continuation: String?) {
         load()
-        guard !isSending, !isUpdatingKey else { return }
+        guard !isSending, !isRunningCommand, !isUpdatingKey else { return }
         guard enabled else { errorMessage = AIError.disabled.localizedDescription; return }
         guard !loadFailed else { return }
-        let question = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let question = (continuation ?? draft).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !question.isEmpty else { return }
         let model = model.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !selectedProvider.needsKey || !model.isEmpty else { errorMessage = AIError.invalidModel.localizedDescription; return }
@@ -143,22 +161,27 @@ final class AskSession: ObservableObject {
                 guard index > 0, messages[index - 1].role == .user else { continue }
                 context.append(contentsOf: [messages[index - 1], messages[index]])
             }
-            let user = AIMessage(role: .user, text: question, webpage: webpage)
+            let user = AIMessage(role: .user, text: question, webpage: continuation == nil ? webpage : nil, isAgentContinuation: continuation != nil)
             context.append(user)
             guard try context.reduce(0, { $0 + (try $1.contentForProvider()).utf8.count }) <= 100_000 else {
                 throw AIError.contextTooLarge
             }
-            let response = AIMessage(role: .assistant, text: "", status: .streaming)
+            let response = AIMessage(role: .assistant, text: "", status: .streaming, commandDirectory: agentDirectory?.path)
             let updated = messages + [user, response]
             try conversations.save(updated)
             messages = updated
-            draft = ""
-            webpage = nil
-            webpages[selectedProvider] = nil
+            if continuation == nil {
+                draft = ""
+                webpage = nil
+                webpages[selectedProvider] = nil
+            }
             errorMessage = nil
             isSending = true
             let token = UUID()
             generation = token
+            if let agentDirectory {
+                context[context.count - 1].text += "\n\nAgent working directory: " + agentDirectory.path
+            }
             let request = AIRequest(model: model, messages: context)
             let provider = provider
             let credentials = credentials
@@ -201,6 +224,17 @@ final class AskSession: ObservableObject {
     }
 
     func stop() {
+        if let id = runningMessageID, let index = messages.firstIndex(where: { $0.id == id }) {
+            messages[index].commandState = "stopped"
+            persist()
+        }
+        runningMessageID = nil
+        commandGeneration = nil
+        commandRunner?.cancel()
+        commandRunner = nil
+        commandTask?.cancel()
+        commandTask = nil
+        isRunningCommand = false
         generation = nil
         task?.cancel()
         task = nil
@@ -280,6 +314,67 @@ final class AskSession: ObservableObject {
         }
         errorMessage = error
         persist()
+        if status == .complete, errorMessage == nil, agentDirectory != nil,
+           let proposal = messages.first(where: { $0.id == responseID })?.commandProposal,
+           AgentCommandPermission.allowsAutomatically(proposal.command) {
+            runCommand(messageID: responseID)
+        }
+    }
+
+    func runCommand(messageID: UUID) {
+        guard enabled, !isSending, !isRunningCommand,
+              let message = messages.first(where: { $0.id == messageID }),
+              let path = message.commandDirectory ?? agentDirectory?.path else { return }
+        let directory = URL(fileURLWithPath: path)
+        agentDirectory = directory
+        guard commandCount < 6 else {
+            errorMessage = "Paused after six commands. Send a follow-up to continue."
+            return
+        }
+        guard let proposal = approveCommand(messageID: messageID) else { return }
+        commandCount += 1
+        let runner = AgentCommandRunner()
+        let token = UUID()
+        commandRunner = runner
+        commandGeneration = token
+        isRunningCommand = true
+        runningMessageID = messageID
+        if let index = messages.firstIndex(where: { $0.id == messageID }) {
+            messages[index].commandState = "running"
+        }
+        commandTask = Task { [weak self] in
+            do {
+                let result = try await runner.run(command: proposal.command, directory: directory)
+                guard let self, self.commandGeneration == token else { return }
+                self.isRunningCommand = false
+                self.commandRunner = nil
+                self.commandTask = nil
+                self.commandGeneration = nil
+                guard let index = self.messages.firstIndex(where: { $0.id == messageID }) else { return }
+                self.messages[index].commandResult = result
+                self.messages[index].commandState = result.interrupted ? "stopped" : "finished"
+                self.runningMessageID = nil
+                self.persist()
+                guard self.errorMessage == nil else { return }
+                if result.interrupted {
+                    self.errorMessage = "Command stopped after reaching its time limit. Send a follow-up to continue."
+                } else {
+                    self.send(continuation: "Review the command result, continue the original task if needed, and summarize findings with a useful next step when done.")
+                }
+            } catch {
+                guard let self, self.commandGeneration == token else { return }
+                self.isRunningCommand = false
+                self.commandRunner = nil
+                self.commandTask = nil
+                self.commandGeneration = nil
+                if let index = self.messages.firstIndex(where: { $0.id == messageID }) {
+                    self.messages[index].commandState = "failed"
+                }
+                self.runningMessageID = nil
+                self.persist()
+                self.errorMessage = "Command could not run: \(error.localizedDescription)"
+            }
+        }
     }
 
     private func persist() {

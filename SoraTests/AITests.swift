@@ -189,6 +189,77 @@ final class AskSessionTests: XCTestCase {
         AskSession(provider: provider, credentials: key, conversations: store, defaults: defaults)
     }
 
+    func testAgentRunsCommandAndFeedsOutputBackBeforeSummarizing() async {
+        let provider = ControlledProvider()
+        let session = makeSession(provider)
+        session.enabled = true
+        session.configureAgent(directory: URL(fileURLWithPath: "/private/tmp"))
+        session.draft = "Show me the current directory"
+        session.send()
+        await waitFor { provider.requests.count == 1 }
+        provider.emit(.text("<SORA_COMMAND>{\"summary\":\"Read directory\",\"command\":\"pwd\"}</SORA_COMMAND>"))
+        provider.emit(.completed)
+        provider.finish()
+        await waitFor { provider.requests.count == 2 }
+        let result = session.messages.compactMap(\.commandResult).first
+        XCTAssertEqual(result?.exitCode, 0)
+        XCTAssertTrue(result?.output.contains("/private/tmp") == true)
+        XCTAssertTrue((try? provider.requests.last?.messages.map { try $0.contentForProvider() }.joined().contains("Command result")) == true)
+        provider.emit(.text("The directory is /private/tmp. Next, list its contents."))
+        provider.emit(.completed)
+        provider.finish()
+        await waitFor { !session.isSending }
+        XCTAssertFalse(session.isRunningCommand)
+        XCTAssertTrue(session.messages.last?.text.contains("Next") == true)
+    }
+
+    func testAgentFeedsFailureBackAndStopsAtCommandLimit() async {
+        let provider = ControlledProvider()
+        let session = makeSession(provider)
+        session.enabled = true
+        session.configureAgent(directory: URL(fileURLWithPath: "/private/tmp"))
+        session.draft = "Help me inspect files"
+        session.send()
+        for step in 1...6 {
+            await waitFor { provider.requests.count == step }
+            let command = step == 1 ? "ls /sora-test-nonexistent-directory" : "pwd"
+            provider.emit(.text("<SORA_COMMAND>{\"summary\":\"Inspect files\",\"command\":\"" + command + "\"}</SORA_COMMAND>"))
+            provider.emit(.completed)
+            provider.finish()
+        }
+        await waitFor { provider.requests.count == 7 }
+        XCTAssertNotEqual(session.messages.compactMap(\.commandResult).first?.exitCode, 0)
+        provider.emit(.text("<SORA_COMMAND>{\"summary\":\"Inspect again\",\"command\":\"pwd\"}</SORA_COMMAND>"))
+        provider.emit(.completed)
+        provider.finish()
+        await waitFor { !session.isSending }
+        XCTAssertEqual(session.messages.compactMap(\.commandResult).count, 6)
+        XCTAssertTrue(session.errorMessage?.contains("six commands") == true)
+        XCTAssertFalse(session.isRunningCommand)
+    }
+
+    func testAutomaticCommandPolicyRejectsShellEscapesAndMutations() {
+        for command in ["pwd", "ls -lah", "du -sh .", "find . -type f -print0 | xargs -0 du -h | sort -hr | head -20"] {
+            XCTAssertTrue(AgentCommandPermission.allowsAutomatically(command), command)
+        }
+        for command in ["rm file", "find . -delete", "find . -exec rm {} +", "ls; rm file", "ls $(touch file)", "ls > file", "xargs sh", "ls | xargs sh", "ls\npwd", "curl example.com", "ls --help"] {
+            XCTAssertFalse(AgentCommandPermission.allowsAutomatically(command), command)
+        }
+    }
+
+    func testRunnerCapturesFailuresBoundsOutputAndStopsPipelines() async throws {
+        let directory = URL(fileURLWithPath: "/private/tmp")
+        let failed = try await AgentCommandRunner().run(command: "printf failure >&2; exit 7", directory: directory)
+        XCTAssertEqual(failed.exitCode, 7)
+        XCTAssertEqual(failed.output, "failure")
+        let bounded = try await AgentCommandRunner().run(command: "yes text | head -10000", directory: directory)
+        XCTAssertTrue(bounded.truncated)
+        XCTAssertLessThanOrEqual(bounded.output.utf8.count, 32_768)
+        let timed = try await AgentCommandRunner().run(command: "sleep 30 | cat", directory: directory, timeout: 0.1)
+        XCTAssertTrue(timed.interrupted)
+        XCTAssertNotEqual(timed.exitCode, 0)
+    }
+
     func testStopWhileWaitingForKeychainPreventsLateNetworkRequest() async {
         let key = DelayedKey()
         let provider = ControlledProvider()
