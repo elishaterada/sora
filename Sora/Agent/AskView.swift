@@ -228,7 +228,8 @@ struct AskView: View {
                 }
             }
             if session.isRunningCommand, message.id == session.messages.last?.id {
-                ProgressView("Running command…").controlSize(.small)
+                ProgressView(message.commandState == "stopped" ? "Stopping command…" : "Running command…")
+                    .controlSize(.small)
             }
             if message.status == .stopped || message.status == .failed {
                 Text(message.status == .stopped ? "Stopped — partial answer" : "Answer incomplete")

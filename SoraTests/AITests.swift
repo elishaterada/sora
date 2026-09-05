@@ -260,6 +260,77 @@ final class AskSessionTests: XCTestCase {
         XCTAssertNotEqual(timed.exitCode, 0)
     }
 
+    func testCancelKillsPipelineWithoutWaitingForTimeout() async throws {
+        let directory = URL(fileURLWithPath: "/private/tmp")
+        let runner = AgentCommandRunner()
+        let task = Task {
+            try await runner.run(command: "sleep 30 | cat", directory: directory, timeout: 60)
+        }
+        try await Task.sleep(nanoseconds: 50_000_000)
+        runner.cancel()
+        let result = try await task.value
+        XCTAssertTrue(result.interrupted)
+        XCTAssertNotEqual(result.exitCode, 0)
+    }
+
+    func testStopDuringAgentCommandKillsPipelineAndSkipsContinuation() async {
+        let provider = ControlledProvider()
+        let session = makeSession(provider)
+        session.enabled = true
+        session.configureAgent(directory: URL(fileURLWithPath: "/private/tmp"))
+        session.draft = "Sleep for a while"
+        session.send()
+        await waitFor { provider.requests.count == 1 }
+        provider.emit(.text("<SORA_COMMAND>{\"summary\":\"Wait briefly\",\"command\":\"sleep 30 | cat\"}</SORA_COMMAND>"))
+        provider.emit(.completed)
+        provider.finish()
+        await waitFor {
+            !session.isSending && session.messages.last?.commandProposal?.status == .pending
+        }
+        guard let messageID = session.messages.last?.id else {
+            return XCTFail("Missing command proposal")
+        }
+        session.runCommand(messageID: messageID)
+        await waitFor { session.isRunningCommand }
+        // Give posix_spawn a moment so Stop exercises process-group kill, not
+        // only the pre-spawn cancellation path.
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        session.stop()
+        XCTAssertEqual(session.messages.last?.commandState, "stopped")
+        XCTAssertTrue(session.isRunningCommand)
+        await waitFor { !session.isRunningCommand }
+        XCTAssertEqual(provider.requests.count, 1)
+        XCTAssertEqual(session.messages.last?.commandState, "stopped")
+        XCTAssertEqual(session.messages.last?.commandResult?.interrupted, true)
+        XCTAssertNil(session.errorMessage)
+        XCTAssertFalse(session.isSending)
+    }
+
+    func testImmediateStopBeforeSpawnStillRecordsInterruptedResult() async {
+        let provider = ControlledProvider()
+        let session = makeSession(provider)
+        session.enabled = true
+        session.configureAgent(directory: URL(fileURLWithPath: "/private/tmp"))
+        session.draft = "Sleep for a while"
+        session.send()
+        await waitFor { provider.requests.count == 1 }
+        provider.emit(.text("<SORA_COMMAND>{\"summary\":\"Wait briefly\",\"command\":\"sleep 30 | cat\"}</SORA_COMMAND>"))
+        provider.emit(.completed)
+        provider.finish()
+        await waitFor {
+            !session.isSending && session.messages.last?.commandProposal?.status == .pending
+        }
+        guard let messageID = session.messages.last?.id else {
+            return XCTFail("Missing command proposal")
+        }
+        session.runCommand(messageID: messageID)
+        session.stop()
+        await waitFor { !session.isRunningCommand }
+        XCTAssertEqual(provider.requests.count, 1)
+        XCTAssertEqual(session.messages.last?.commandResult?.interrupted, true)
+        XCTAssertEqual(session.messages.last?.commandState, "stopped")
+    }
+
     func testStopWhileWaitingForKeychainPreventsLateNetworkRequest() async {
         let key = DelayedKey()
         let provider = ControlledProvider()
