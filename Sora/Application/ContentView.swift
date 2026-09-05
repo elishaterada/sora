@@ -32,7 +32,8 @@ struct ContentView: View {
                     workspace: workspace,
                     sidebarVisible: $sidebarVisible,
                     titlebarHeight: titlebarHeight,
-                    trafficLightWidth: trafficLightWidth
+                    trafficLightWidth: trafficLightWidth,
+                    onAsk: { agentTrigger += 1 }
                 )
                 .frame(width: 220)
 
@@ -46,7 +47,8 @@ struct ContentView: View {
                     workspace: workspace,
                     sidebarVisible: $sidebarVisible,
                     titlebarHeight: titlebarHeight,
-                    trafficLightWidth: trafficLightWidth
+                    trafficLightWidth: trafficLightWidth,
+                    onAsk: { agentTrigger += 1 }
                 )
                 WorkspaceHostRepresentable(workspace: workspace, ask: ask, agentTrigger: agentTrigger)
                     .frame(minWidth: 480, maxWidth: .infinity, minHeight: 280, maxHeight: .infinity)

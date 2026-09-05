@@ -22,6 +22,7 @@ struct WorkspaceHostRepresentable: NSViewRepresentable {
 final class WorkspaceHostView: NSView {
     private var panes: [UUID: TerminalPaneView] = [:]
     private var lastAgentTrigger = 0
+    private weak var workspace: WorkspaceController?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -38,6 +39,7 @@ final class WorkspaceHostView: NSView {
     }
 
     func sync(workspace: WorkspaceController, ask: AskSession, agentTrigger: Int) {
+        self.workspace = workspace
         let liveIDs = Set(workspace.tabs.map(\.id))
         for id in panes.keys where !liveIDs.contains(id) {
             panes[id]?.removeFromSuperview()
@@ -54,6 +56,9 @@ final class WorkspaceHostView: NSView {
                 pane = TerminalPaneView(surface: surface, ask: ask, tabID: tab.id)
                 panes[tab.id] = pane
                 addSubview(pane)
+            }
+            pane.onActivityTitleChange = { [weak self] id, title in
+                self?.workspace?.updateActivityTitle(title, id: id)
             }
             if pane.superview !== self {
                 addSubview(pane)

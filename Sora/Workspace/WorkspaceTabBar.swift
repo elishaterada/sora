@@ -5,6 +5,7 @@ struct WorkspaceTabBar: View {
     @Binding var sidebarVisible: Bool
     var titlebarHeight: CGFloat
     var trafficLightWidth: CGFloat
+    var onAsk: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -24,6 +25,19 @@ struct WorkspaceTabBar: View {
             .help("New Tab")
             .padding(.horizontal, 6)
             .padding(.top, 4)
+
+            Button(action: onAsk) {
+                Label("Agent", systemImage: "bubble.left.and.text.bubble.right.fill")
+                    .font(.system(size: 13, weight: .medium))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Open Agent (⌘⇧A)")
+            .padding(.horizontal, 6)
+            .padding(.top, 2)
 
             Text("Sessions")
                 .font(.system(size: 11, weight: .semibold))
@@ -69,9 +83,11 @@ struct WorkspaceTabBar: View {
             workspace.select(tab.id)
         } label: {
             HStack(spacing: 8) {
-                Image(systemName: "terminal")
+                Image(systemName: tab.hasAgentActivity
+                      ? "bubble.left.and.text.bubble.right.fill"
+                      : "terminal")
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(tab.hasAgentActivity ? Color.accentColor : .secondary)
                     .frame(width: 16)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(tab.displayTitle)

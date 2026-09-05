@@ -26,8 +26,12 @@ input. Start a line with `/agent ` to force command-like text to AI; the prefix 
 removed before sending. Routing only occurs at a ready zsh prompt. Input to a
 foreground command, REPL, or other program always goes to that program.
 
-Open **AI → Ask Sora** or press **Cmd+Shift+A** to open the inline Ask panel
-without submitting terminal text. AI starts disabled. Select a provider, open
+Open **Agent** in the chrome bar or sidebar, use **AI → Ask Sora**, or press
+**Cmd+Shift+A** to open the inline Ask panel without submitting terminal text.
+After an agent turn, that tab's sidebar title becomes the first question (for
+example `Find the largest files`) with an agent icon so sessions stay
+distinguishable; shell tabs still show the folder name or last command.
+AI starts disabled. Select a provider, open
 Setup, enable AI, and configure credentials and a model:
 
 | Provider | Authentication | Default model |

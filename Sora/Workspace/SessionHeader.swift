@@ -73,6 +73,7 @@ struct TerminalChromeBar: View {
     @Binding var sidebarVisible: Bool
     var titlebarHeight: CGFloat
     var trafficLightWidth: CGFloat
+    var onAsk: () -> Void
 
     var body: some View {
         HStack(spacing: 6) {
@@ -85,6 +86,8 @@ struct TerminalChromeBar: View {
             sessionTitle
 
             Spacer(minLength: 8)
+
+            agentButton
 
             SessionHeader(workingDirectory: workspace.selected.workingDirectory)
 
@@ -143,6 +146,32 @@ struct TerminalChromeBar: View {
                     .lineLimit(1)
             }
         }
+    }
+
+    private var agentButton: some View {
+        Button(action: onAsk) {
+            HStack(spacing: 5) {
+                Image(systemName: "bubble.left.and.text.bubble.right.fill")
+                    .font(.system(size: 11, weight: .semibold))
+                Text("Agent")
+                    .font(.system(size: 12, weight: .semibold))
+            }
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 10)
+            .frame(height: 28)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Color.accentColor.opacity(0.22))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .strokeBorder(Color.accentColor.opacity(0.45), lineWidth: 1)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Open Agent (⌘⇧A)")
+        .accessibilityLabel("Open Agent")
     }
 
     private var newTabButton: some View {

@@ -79,9 +79,38 @@ final class WorkspaceModelTests: XCTestCase {
     func testDisplayTitleUsesLastPathComponent() {
         let tab = WorkspaceModel.Tab(
             id: UUID(),
-            title: "ignored",
+            title: "Tab",
+            activityTitle: nil,
             workingDirectory: URL(fileURLWithPath: "/Users/elisha/repos/sora")
         )
         XCTAssertEqual(tab.displayTitle, "sora")
+    }
+
+    func testDisplayTitlePrefersAgentActivityThenShellCommand() {
+        let cwd = URL(fileURLWithPath: "/Users/elisha/repos/sora")
+        var tab = WorkspaceModel.Tab(
+            id: UUID(),
+            title: "git status",
+            activityTitle: nil,
+            workingDirectory: cwd
+        )
+        XCTAssertEqual(tab.displayTitle, "git status")
+
+        tab.activityTitle = "Find the largest files"
+        XCTAssertEqual(tab.displayTitle, "Find the largest files")
+        XCTAssertTrue(tab.hasAgentActivity)
+
+        tab.activityTitle = nil
+        tab.title = cwd.path
+        XCTAssertEqual(tab.displayTitle, "sora")
+    }
+
+    func testUpdateActivityTitleStoresTrimmedLabel() {
+        let model = WorkspaceModel(snapshot: .empty)
+        let id = model.selectedID
+        model.updateActivityTitle("  Help me tidy this  ", id: id)
+        XCTAssertEqual(model.selected.activityTitle, "Help me tidy this")
+        model.updateActivityTitle("   ", id: id)
+        XCTAssertNil(model.selected.activityTitle)
     }
 }

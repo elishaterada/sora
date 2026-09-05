@@ -4,16 +4,35 @@ import Foundation
 final class WorkspaceModel {
     struct Tab: Identifiable, Equatable {
         let id: UUID
+        /// Shell OSC / Ghostty title (often the last command).
         var title: String
+        /// Agent thread label from the first user question; wins over shell title.
+        var activityTitle: String?
         var workingDirectory: URL?
 
+        var hasAgentActivity: Bool {
+            activityTitle.map { !$0.isEmpty } ?? false
+        }
+
+        /// Prefer agent task → recent shell title → folder name.
         var displayTitle: String {
+            if let activityTitle, !activityTitle.isEmpty {
+                return activityTitle
+            }
+            let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty, trimmed != "Tab", trimmed != "Sora" {
+                if let workingDirectory,
+                   CommandRunFactory.isWorkingDirectoryTitle(trimmed, cwd: workingDirectory) {
+                    // fall through to folder name
+                } else {
+                    return trimmed
+                }
+            }
             if let workingDirectory {
                 let name = workingDirectory.lastPathComponent
                 return name.isEmpty ? workingDirectory.path : name
             }
-            if title.isEmpty { return "Tab" }
-            return title
+            return "Tab"
         }
     }
 
@@ -36,7 +55,7 @@ final class WorkspaceModel {
     init(snapshot: WorkspaceSnapshot) {
         tabs = snapshot.directories.map { path in
             let url = path.isEmpty ? nil : URL(fileURLWithPath: path)
-            return Tab(id: UUID(), title: "Tab", workingDirectory: url)
+            return Tab(id: UUID(), title: "Tab", activityTitle: nil, workingDirectory: url)
         }
         selectedID = tabs[snapshot.selectedIndex].id
     }
@@ -46,6 +65,7 @@ final class WorkspaceModel {
         let tab = Tab(
             id: UUID(),
             title: "Tab",
+            activityTitle: nil,
             workingDirectory: workingDirectory
         )
         tabs.insert(tab, at: selectedIndex + 1)
@@ -119,6 +139,16 @@ final class WorkspaceModel {
     func updateTitle(_ title: String, id: UUID) {
         guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
         tabs[index].title = title
+    }
+
+    @discardableResult
+    func updateActivityTitle(_ title: String?, id: UUID) -> Bool {
+        guard let index = tabs.firstIndex(where: { $0.id == id }) else { return false }
+        let trimmed = title?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let next = (trimmed?.isEmpty == false) ? trimmed : nil
+        guard tabs[index].activityTitle != next else { return false }
+        tabs[index].activityTitle = next
+        return true
     }
 
     func updateWorkingDirectory(_ url: URL, id: UUID) {
