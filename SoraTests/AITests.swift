@@ -20,6 +20,18 @@ final class OpenAIProviderTests: XCTestCase {
         XCTAssertFalse(AgentCommandProposal.isValidCommand("echo safe\u{202E}txt"))
     }
 
+    func testWebpageProposalEnvelopeRequiresPublicHTTPS() {
+        let valid = #"<SORA_WEBPAGE>{"summary":"Read the docs landing page","url":"https://example.com/docs"}</SORA_WEBPAGE>"#
+        XCTAssertEqual(
+            AgentWebpageProposalParser.parse(valid),
+            AgentWebpageProposal(summary: "Read the docs landing page", url: "https://example.com/docs")
+        )
+        XCTAssertTrue(AgentWebpageProposalParser.isStreamingEnvelope("<SORA_WEBPAGE>"))
+        XCTAssertNil(AgentWebpageProposalParser.parse(#"<SORA_WEBPAGE>{"summary":"Local","url":"http://example.com"}</SORA_WEBPAGE>"#))
+        XCTAssertNil(AgentWebpageProposalParser.parse(#"<SORA_WEBPAGE>{"summary":"Local","url":"https://localhost/docs"}</SORA_WEBPAGE>"#))
+        XCTAssertNil(AgentWebpageProposalParser.parse(#"<SORA_WEBPAGE>{"summary":"","url":"https://example.com"}</SORA_WEBPAGE>"#))
+    }
+
     func testGrokRequestUsesDirectXAIEndpointAndExplicitConversation() throws {
         let request = AIRequest(model: AIBackendID.grok.defaultModel,
                                 messages: [AIMessage(role: .user, text: "Explain pwd")])
@@ -234,7 +246,7 @@ final class AskSessionTests: XCTestCase {
         provider.finish()
         await waitFor { !session.isSending }
         XCTAssertEqual(session.messages.compactMap(\.commandResult).count, 6)
-        XCTAssertTrue(session.errorMessage?.contains("six commands") == true)
+        XCTAssertTrue(session.errorMessage?.contains("six agent actions") == true)
         XCTAssertFalse(session.isRunningCommand)
     }
 
@@ -399,6 +411,39 @@ final class AskSessionTests: XCTestCase {
         await waitFor { !session.isSending }
         XCTAssertEqual(session.resumeSummary?.title, "Find the largest files")
         XCTAssertEqual(session.resumeSummary?.latestFollowUp, "How about in ~/Downloads?")
+    }
+
+    func testAgentFetchesWebpageAndFeedsSnapshotBack() async {
+        let provider = ControlledProvider()
+        let page = WebpageAttachment(
+            url: URL(string: "https://example.com/docs")!,
+            title: "Docs",
+            text: "Installation steps for Sora.",
+            fetchedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            isExcerpt: false
+        )
+        let session = AskSession(
+            provider: provider,
+            credentials: MemoryKey(),
+            conversations: MemoryConversation(),
+            defaults: defaults,
+            webpageFetcher: FixedWebpageFetcher(page: page)
+        )
+        session.enabled = true
+        session.bindTab(UUID())
+        session.beginTerminalAgent(question: "Summarize https://example.com/docs", directory: URL(fileURLWithPath: "/private/tmp"))
+        await waitFor { provider.requests.count == 1 }
+        provider.emit(.text(#"<SORA_WEBPAGE>{"summary":"Read the docs page","url":"https://example.com/docs"}</SORA_WEBPAGE>"#))
+        provider.emit(.completed)
+        provider.finish()
+        await waitFor { provider.requests.count == 2 }
+        XCTAssertEqual(session.messages.compactMap(\.webpage).first?.title, "Docs")
+        XCTAssertTrue((try? provider.requests.last?.messages.map { try $0.contentForProvider() }.joined().contains("Webpage snapshot")) == true)
+        provider.emit(.text("The docs cover installation steps."))
+        provider.emit(.completed)
+        provider.finish()
+        await waitFor { !session.isSending }
+        XCTAssertTrue(session.messages.last?.text.contains("installation") == true)
     }
 
     func testStopWhileWaitingForKeychainPreventsLateNetworkRequest() async {
@@ -751,4 +796,9 @@ private final class DelayedKey: AICredentialStore {
     }
     func save(_ value: String) throws {}
     func delete() throws {}
+}
+
+private struct FixedWebpageFetcher: WebpageFetching {
+    let page: WebpageAttachment
+    func fetch(_ address: String) async throws -> WebpageAttachment { page }
 }

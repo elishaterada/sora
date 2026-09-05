@@ -73,3 +73,55 @@ enum WebpageText {
         return result as String
     }
 }
+
+struct AgentWebpageProposal: Codable, Equatable, Sendable {
+    enum Status: String, Codable, Sendable {
+        case pending, approved, dismissed, failed
+    }
+
+    let summary: String
+    let url: String
+    var status: Status = .pending
+}
+
+/// Agent-owned HTTPS fetch. Sora fetches a static text snapshot; the model never
+/// browses with cookies or executes page scripts.
+enum AgentWebpageProposalParser {
+    static let openingTag = "<SORA_WEBPAGE>"
+    static let closingTag = "</SORA_WEBPAGE>"
+
+    private struct Payload: Decodable {
+        let summary: String
+        let url: String
+    }
+
+    static func parse(_ text: String) -> AgentWebpageProposal? {
+        let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard value.hasPrefix(openingTag), value.hasSuffix(closingTag) else { return nil }
+        let jsonStart = value.index(value.startIndex, offsetBy: openingTag.count)
+        let jsonEnd = value.index(value.endIndex, offsetBy: -closingTag.count)
+        guard jsonStart <= jsonEnd else { return nil }
+        let json = String(value[jsonStart..<jsonEnd]).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let payload = try? JSONDecoder().decode(Payload.self, from: Data(json.utf8)) else { return nil }
+        let summary = payload.summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        let url = payload.url.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !summary.isEmpty, summary.utf8.count <= 600,
+              summary.unicodeScalars.allSatisfy({ scalar in
+                  switch scalar.properties.generalCategory {
+                  case .control, .format, .lineSeparator, .paragraphSeparator:
+                      return false
+                  default:
+                      return true
+                  }
+              }),
+              (try? WebpageFetcher.url(url)) != nil
+        else { return nil }
+        return AgentWebpageProposal(summary: summary, url: url)
+    }
+
+    static func isStreamingEnvelope(_ text: String) -> Bool {
+        let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return false }
+        return openingTag.hasPrefix(value) || value.hasPrefix(openingTag)
+    }
+}

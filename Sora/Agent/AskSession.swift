@@ -113,6 +113,7 @@ final class AskSession: ObservableObject {
     private var provider: any AIProvider { backends[selectedProvider]!.provider }
     private var credentials: any AICredentialStore { backends[selectedProvider]!.credentials }
     private var conversations: any AIConversationStore { backends[selectedProvider]!.conversations }
+    private let webpageFetcher: any WebpageFetching
     private var drafts: [AIBackendID: String] = [:]
     private var webpages: [AIBackendID: WebpageAttachment] = [:]
     private let defaults: UserDefaults
@@ -122,15 +123,19 @@ final class AskSession: ObservableObject {
     private var loadFailed = false
 
     convenience init(provider: any AIProvider, credentials: any AICredentialStore,
-                     conversations: any AIConversationStore, defaults: UserDefaults = .standard) {
+                     conversations: any AIConversationStore, defaults: UserDefaults = .standard,
+                     webpageFetcher: any WebpageFetching = WebpageFetcher()) {
         self.init(backends: [AIBackend(id: .openai, provider: provider, credentials: credentials,
-                                     conversations: conversations)], defaults: defaults)
+                                     conversations: conversations)], defaults: defaults,
+                  webpageFetcher: webpageFetcher)
     }
 
-    init(backends: [AIBackend], defaults: UserDefaults = .standard) {
+    init(backends: [AIBackend], defaults: UserDefaults = .standard,
+         webpageFetcher: any WebpageFetching = WebpageFetcher()) {
         precondition(!backends.isEmpty)
         self.backends = Dictionary(uniqueKeysWithValues: backends.map { ($0.id, $0) })
         self.defaults = defaults
+        self.webpageFetcher = webpageFetcher
         let saved = AIBackendID(rawValue: defaults.string(forKey: "ai.provider") ?? "openai")
         let selected = backends.first(where: { $0.id == saved })?.id ?? backends[0].id
         self.selectedProvider = selected
@@ -299,13 +304,14 @@ final class AskSession: ObservableObject {
     func stop() {
         // Kill the process group immediately, but keep isRunningCommand set until
         // the runner finishes so a second command cannot start over a dying one.
-        if isRunningCommand || commandRunner != nil {
+        if isRunningCommand || commandRunner != nil || commandTask != nil {
             commandStopRequested = true
             if let id = runningMessageID, let index = messages.firstIndex(where: { $0.id == id }) {
                 messages[index].commandState = "stopped"
                 persist()
             }
             commandRunner?.cancel()
+            commandTask?.cancel()
         }
         generation = nil
         task?.cancel()
@@ -379,19 +385,86 @@ final class AskSession: ObservableObject {
         isSending = false
         if let index = messages.firstIndex(where: { $0.id == responseID }) {
             messages[index].status = status
-            if status == .complete,
-               let proposal = AgentCommandProposalParser.parse(messages[index].text) {
-                messages[index].text = proposal.summary
-                messages[index].commandProposal = proposal
+            if status == .complete {
+                if let proposal = AgentCommandProposalParser.parse(messages[index].text) {
+                    messages[index].text = proposal.summary
+                    messages[index].commandProposal = proposal
+                } else if let page = AgentWebpageProposalParser.parse(messages[index].text) {
+                    messages[index].text = page.summary
+                    messages[index].webpageProposal = page
+                }
             }
         }
         errorMessage = error
         persist()
-        if status == .complete, errorMessage == nil, agentDirectory != nil,
-           let proposal = messages.first(where: { $0.id == responseID })?.commandProposal,
+        guard status == .complete, errorMessage == nil else { return }
+        let message = messages.first(where: { $0.id == responseID })
+        if agentDirectory != nil,
+           let proposal = message?.commandProposal,
            AgentCommandPermission.allowsAutomatically(proposal.command) {
             runCommand(messageID: responseID)
+        } else if message?.webpageProposal != nil {
+            fetchWebpage(messageID: responseID)
         }
+    }
+
+    func fetchWebpage(messageID: UUID) {
+        guard enabled, !isSending, !isRunningCommand,
+              let index = messages.firstIndex(where: { $0.id == messageID }),
+              var proposal = messages[index].webpageProposal,
+              proposal.status == .pending
+        else { return }
+        guard commandCount < 6 else {
+            errorMessage = "Paused after six agent actions. Send a follow-up to continue."
+            return
+        }
+        proposal.status = .approved
+        messages[index].webpageProposal = proposal
+        messages[index].commandState = "fetching"
+        persist()
+        commandCount += 1
+        let token = UUID()
+        commandGeneration = token
+        commandStopRequested = false
+        isRunningCommand = true
+        runningMessageID = messageID
+        let address = proposal.url
+        let fetcher = webpageFetcher
+        commandTask = Task { [weak self] in
+            do {
+                let page = try await fetcher.fetch(address)
+                guard let self, self.commandGeneration == token else { return }
+                let stoppedByUser = self.commandStopRequested
+                if let index = self.messages.firstIndex(where: { $0.id == messageID }) {
+                    self.messages[index].webpage = page
+                    self.messages[index].commandState = stoppedByUser ? "stopped" : "finished"
+                }
+                self.finishAgentAction(token: token)
+                guard self.errorMessage == nil, !stoppedByUser else { return }
+                self.send(continuation: "Review the webpage snapshot, continue the original task if needed, and summarize findings with a useful next step when done.")
+            } catch {
+                guard let self, self.commandGeneration == token else { return }
+                let stoppedByUser = self.commandStopRequested || error is CancellationError
+                if let index = self.messages.firstIndex(where: { $0.id == messageID }) {
+                    self.messages[index].webpageProposal?.status = .failed
+                    self.messages[index].commandState = stoppedByUser ? "stopped" : "failed"
+                }
+                self.finishAgentAction(token: token)
+                guard self.errorMessage == nil, !stoppedByUser else { return }
+                self.send(continuation: "The webpage fetch failed (\(error.localizedDescription)). Continue with a different public HTTPS URL or answer without it.")
+            }
+        }
+    }
+
+    private func finishAgentAction(token: UUID) {
+        guard commandGeneration == token else { return }
+        commandStopRequested = false
+        isRunningCommand = false
+        commandRunner = nil
+        commandTask = nil
+        commandGeneration = nil
+        runningMessageID = nil
+        persist()
     }
 
     func runCommand(messageID: UUID) {
@@ -401,7 +474,7 @@ final class AskSession: ObservableObject {
         let directory = URL(fileURLWithPath: path)
         agentDirectory = directory
         guard commandCount < 6 else {
-            errorMessage = "Paused after six commands. Send a follow-up to continue."
+            errorMessage = "Paused after six agent actions. Send a follow-up to continue."
             return
         }
         guard let proposal = approveCommand(messageID: messageID) else { return }

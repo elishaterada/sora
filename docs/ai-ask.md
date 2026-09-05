@@ -52,7 +52,7 @@ repository, working-directory, environment, or command-history collection.
 The local classifier makes no AI calls. A terminal sentence is sent only after
 the **↵ agent** label appears and the user presses Return.
 
-### Persistent agent commands
+### Persistent agent actions
 
 Agent mode stays visible until **ESC for terminal**. Each command starts in the
 active tab's directory captured when its proposal was generated. Commands use a
@@ -67,45 +67,34 @@ outside this grammar require **Run Command** approval. Approval is persisted
 before execution. This is a conservative permission check, not an OS sandbox.
 Approved commands have the user's filesystem permissions.
 
+When the agent needs a public HTTPS page, it proposes a `<SORA_WEBPAGE>` envelope.
+Sora fetches a static text snapshot automatically (no cookies, credentials, or
+script execution), using the same limits as the earlier manual attach path
+(2 MB download, 50 KB text, HTTPS-only public hosts). The snapshot is stored on
+the conversation turn and fed back to the model as untrusted reference data.
+There is no manual **Attach webpage** control in the composer; the agent owns
+fetching when a page is required.
+
 Output (up to 32 KiB), working directory, and exit code stay in the conversation
 and are sent to the selected AI provider as untrusted result data. The AI reviews
-results, proposes a next command when needed, or summarizes findings and a next
-step. Each user turn permits at most six commands; each command has a 60-second
-time limit. Stop marks the command stopped, kills its process group, keeps Ask
-busy until the runner exits, stores any captured output, and cancels continuation
-so a second command cannot overlap a dying pipeline. A time limit pauses for
-user follow-up without treating the pause as a user Stop. Commands are never
-resumed on relaunch.
+results, proposes a next command or webpage when needed, or summarizes findings
+and a next step. Each user turn permits at most six agent actions (commands or
+webpage fetches); each command has a 60-second time limit. Stop marks the
+command stopped, kills its process group, keeps Ask busy until the runner exits,
+stores any captured output, and cancels continuation so a second command cannot
+overlap a dying pipeline. A time limit pauses for user follow-up without treating
+the pause as a user Stop. Commands are never resumed on relaunch.
 
-Providers only propose commands through Sora's strict single-line envelope.
-Malformed envelopes and control characters are rejected. The initial prompt
-handoff still uses a terminal interrupt to cancel the shell edit buffer.
+Providers only propose commands and webpages through Sora's strict single-line
+envelopes. Malformed envelopes and control characters are rejected. The initial
+prompt handoff still uses a terminal interrupt to cancel the shell edit buffer.
 
-### Attach webpage
+### Webpage snapshots
 
-Choose **Attach webpage**, enter a public HTTPS address (typing a hostname adds
-`https://`), and choose **Fetch Page**. This contacts the website without saved
-cookies or credentials, downloads at most 2 MB, and accepts HTML or plain text.
-HTML is never rendered and page scripts or subresources are never run or loaded.
-Script, style, template, SVG, head, comments, and markup are removed to create a
-static text snapshot. The preview is the exact text that can be attached.
-
-Readable text is capped at 50,000 UTF-8 bytes on a Unicode scalar boundary and
-is labeled as an excerpt when capped. Review it, then choose **Attach to
-Question**. The page title/host appears beside the composer; Review and Remove
-remain available until sending. The attachment is not sent on fetch or attach.
-It is sent with the next question only, stored with that user message, and shown
-in an expandable conversation disclosure afterward. Switching providers keeps
-unsent attachments isolated with that provider, and clearing its conversation
-also clears its pending attachment.
-
-The model receives the question plus a JSON snapshot labeled as external
-reference data, including URL, title, fetch time, excerpt flag, and text. System
-instructions require providers to treat embedded page content as untrusted data,
-cite the source URL, and avoid inventing missing content. Redirects must remain
-HTTPS. Unsupported encodings, binary files, large responses, empty extracted
-text, HTTP errors, and timeouts are visible to the user. Sites that require
-JavaScript or sign-in may return little readable text in this static first slice.
+Redirects must remain HTTPS. Unsupported encodings, binary files, large
+responses, empty extracted text, HTTP errors, and timeouts are visible to the
+model on the next turn. Sites that require JavaScript or sign-in may return
+little readable text in this static first slice.
 
 ## Codex setup and boundaries
 
