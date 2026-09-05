@@ -50,9 +50,10 @@ final class TerminalPaneView: NSView {
         agentHost.autoresizingMask = []
         terminalDim.autoresizingMask = []
         surface.attachStickyPromptBar(stickyBar)
-        stickyBar.onFocusTerminal = { [weak surface] in
-            guard let surface else { return }
-            surface.window?.makeFirstResponder(surface)
+        stickyBar.onFocusTerminal = { [weak self] in
+            guard let self else { return }
+            self.window?.makeFirstResponder(self.surface)
+            self.surface.applyStickyBarFocus()
         }
         stickyBar.onAcceptPrediction = { [weak surface] in
             surface?.acceptStickyPrediction()

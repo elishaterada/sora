@@ -293,11 +293,24 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
 
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
-        completion.stopTracking()
+        // Focusing an empty ready prompt must not kill AI routing. Clicks after
+        // the user has typed may move zsh's caret, so those still stop tracking.
+        applyPromptMouseFocus()
         ghostTextAnchor = nil
         ghostText.hide()
+        refreshCompletion()
         sendMousePosition(event)
         sendMouseButton(event, state: GHOSTTY_MOUSE_PRESS, button: GHOSTTY_MOUSE_LEFT)
+    }
+
+    func applyStickyBarFocus() {
+        window?.makeFirstResponder(self)
+        applyPromptMouseFocus()
+        refreshCompletion()
+    }
+
+    private func applyPromptMouseFocus() {
+        completion.applyMouseFocus(isShellPromptReady: isShellPromptReady)
     }
 
     override func mouseUp(with event: NSEvent) {

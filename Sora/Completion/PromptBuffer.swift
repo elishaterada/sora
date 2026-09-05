@@ -46,6 +46,19 @@ enum PromptEvent {
         return modifiers.isDisjoint(with: [.command, .control, .option, .shift])
     }
 
+    /// Mouse focus on an empty ready prompt must keep (or resume) tracking so
+    /// conversational Return routing still sees the typed line. A click after
+    /// text is present may move the shell caret, so tracking stops.
+    static func mouseFocusEvent(isShellPromptReady: Bool, buffer: PromptBuffer) -> PromptBuffer.Event? {
+        if isShellPromptReady, buffer.text.isEmpty {
+            return .reset
+        }
+        if !buffer.text.isEmpty {
+            return .stopTracking
+        }
+        return nil
+    }
+
     static func from(keyCode: UInt16, characters: String, modifiers: NSEvent.ModifierFlags) -> PromptBuffer.Event? {
         if modifiers.contains(.command) {
             return nil
