@@ -90,6 +90,12 @@ final class WorkspaceController: ObservableObject {
         publish()
     }
 
+    /// Agent conversation label for the sidebar/chrome (first user question).
+    func updateActivityTitle(_ title: String?, id: UUID) {
+        guard model.updateActivityTitle(title, id: id) else { return }
+        publish()
+    }
+
     func closedIDs(relativeTo attached: Set<UUID>) -> [UUID] {
         let live = Set(model.tabs.map(\.id))
         return attached.filter { !live.contains($0) }

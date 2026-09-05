@@ -15,6 +15,8 @@ final class TerminalPaneView: NSView {
     private weak var ask: AskSession?
     private var askObservation: AnyCancellable?
     let tabID: UUID
+    /// Publishes the agent thread title for sidebar / chrome labeling.
+    var onActivityTitleChange: ((UUID, String?) -> Void)?
 
     override var isOpaque: Bool { false }
 
@@ -74,8 +76,12 @@ final class TerminalPaneView: NSView {
         }
         askObservation = ask.objectWillChange
             .receive(on: RunLoop.main)
-            .sink { [weak self] _ in self?.refreshResumeStrip() }
+            .sink { [weak self] _ in
+                self?.refreshResumeStrip()
+                self?.publishActivityTitleIfActive()
+            }
         refreshResumeStrip()
+        publishActivityTitleIfActive()
     }
 
     @available(*, unavailable)
@@ -89,6 +95,7 @@ final class TerminalPaneView: NSView {
         if active {
             ask?.bindTab(tabID)
             refreshResumeStrip()
+            publishActivityTitleIfActive()
         }
         surface.setActive(active && !isShowingAgent)
     }
@@ -123,6 +130,11 @@ final class TerminalPaneView: NSView {
         guard ask?.resumeSummary != nil else { return false }
         showAgent()
         return true
+    }
+
+    private func publishActivityTitleIfActive() {
+        guard isPaneActive else { return }
+        onActivityTitleChange?(tabID, ask?.resumeSummary?.title)
     }
 
     private func refreshResumeStrip() {
