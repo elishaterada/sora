@@ -17,6 +17,7 @@ final class AskSession: ObservableObject {
     }
     @Published private(set) var messages: [AIMessage] = []
     @Published private(set) var isSending = false
+    @Published private(set) var isUpdatingKey = false
     @Published private(set) var errorMessage: String?
     @Published private(set) var setupMessage: String?
 
@@ -73,7 +74,7 @@ final class AskSession: ObservableObject {
     deinit { task?.cancel() }
 
     var canSend: Bool {
-        enabled && !isSending && !loadFailed && !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        enabled && !isSending && !isUpdatingKey && !loadFailed && !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     func load() {
@@ -86,14 +87,19 @@ final class AskSession: ObservableObject {
         }
     }
 
-    func saveKey(_ key: String) -> Bool {
-        guard selectedProvider.needsKey else { return false }
+    func saveKey(_ key: String) async -> Bool {
+        guard selectedProvider.needsKey, !isUpdatingKey, !isSending else { return false }
+        let id = selectedProvider
+        isUpdatingKey = true
+        defer { isUpdatingKey = false }
         do {
-            try credentials.save(key)
+            try await credentials.save(key)
+            guard selectedProvider == id else { return false }
             setupMessage = "API key saved in Keychain."
             errorMessage = nil
             return true
         } catch {
+            guard selectedProvider == id else { return false }
             errorMessage = error.localizedDescription
             return false
         }
@@ -104,18 +110,24 @@ final class AskSession: ObservableObject {
         webpage = page
     }
 
-    func removeKey() {
-        guard selectedProvider.needsKey else { return }
+    func removeKey() async {
+        guard selectedProvider.needsKey, !isUpdatingKey else { return }
+        let id = selectedProvider
+        isUpdatingKey = true
+        defer { isUpdatingKey = false }
         stop()
         do {
-            try credentials.delete()
+            try await credentials.delete()
+            guard selectedProvider == id else { return }
             setupMessage = "API key removed."
-        } catch { errorMessage = error.localizedDescription }
+        } catch {
+            if selectedProvider == id { errorMessage = error.localizedDescription }
+        }
     }
 
     func send() {
         load()
-        guard !isSending else { return }
+        guard !isSending, !isUpdatingKey else { return }
         guard enabled else { errorMessage = AIError.disabled.localizedDescription; return }
         guard !loadFailed else { return }
         let question = draft.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -124,11 +136,6 @@ final class AskSession: ObservableObject {
         guard !selectedProvider.needsKey || !model.isEmpty else { errorMessage = AIError.invalidModel.localizedDescription; return }
 
         do {
-            let key: String
-            if selectedProvider.needsKey {
-                guard let savedKey = try credentials.read(), !savedKey.isEmpty else { throw AIError.missingKey }
-                key = savedKey
-            } else { key = "" }
             // Send only complete question/answer pairs. Stopped or failed turns
             // stay visible locally but cannot masquerade as complete answers.
             var context: [AIMessage] = []
@@ -154,8 +161,19 @@ final class AskSession: ObservableObject {
             generation = token
             let request = AIRequest(model: model, messages: context)
             let provider = provider
+            let credentials = credentials
+            let needsKey = selectedProvider.needsKey
             task = Task { [weak self] in
                 do {
+                    let key: String
+                    if needsKey {
+                        guard let savedKey = try await credentials.read(), !savedKey.isEmpty else {
+                            throw AIError.missingKey
+                        }
+                        key = savedKey
+                    } else { key = "" }
+                    try Task.checkCancellation()
+                    guard self?.generation == token else { return }
                     var completed = false
                     for try await event in provider.events(for: request, credential: key) {
                         try Task.checkCancellation()

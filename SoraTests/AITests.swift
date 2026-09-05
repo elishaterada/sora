@@ -189,7 +189,28 @@ final class AskSessionTests: XCTestCase {
         AskSession(provider: provider, credentials: key, conversations: store, defaults: defaults)
     }
 
-    func testDisabledAndMissingKeyNeverStartNetworkRequests() {
+    func testStopWhileWaitingForKeychainPreventsLateNetworkRequest() async {
+        let key = DelayedKey()
+        let provider = ControlledProvider()
+        let session = AskSession(provider: provider, credentials: key,
+                                 conversations: MemoryConversation(), defaults: defaults)
+        session.enabled = true
+        session.draft = "Help me find large files"
+        session.send()
+        await waitFor { key.continuation != nil }
+        XCTAssertTrue(session.isSending)
+        // This runs on the main actor while credential access is still pending.
+        session.stop()
+        XCTAssertFalse(session.isSending)
+        XCTAssertEqual(session.messages.last?.status, .stopped)
+        key.continuation?.resume(returning: "test-key")
+        key.continuation = nil
+        for _ in 0..<20 { await Task.yield() }
+        XCTAssertTrue(provider.requests.isEmpty)
+        XCTAssertEqual(session.messages.last?.status, .stopped)
+    }
+
+    func testDisabledAndMissingKeyNeverStartNetworkRequests() async {
         let provider = ControlledProvider()
         let session = makeSession(provider, key: MemoryKey(nil))
         session.draft = "Explain pwd"
@@ -199,7 +220,8 @@ final class AskSessionTests: XCTestCase {
         session.enabled = true
         session.send()
         XCTAssertTrue(provider.requests.isEmpty)
-        XCTAssertTrue(session.messages.isEmpty)
+        await waitFor { !session.isSending }
+        XCTAssertEqual(session.messages.last?.status, .failed)
         XCTAssertEqual(session.errorMessage, AIError.missingKey.localizedDescription)
     }
 
@@ -228,7 +250,7 @@ final class AskSessionTests: XCTestCase {
         XCTAssertTrue(session.messages.isEmpty)
         XCTAssertEqual(session.draft, "")
         XCTAssertEqual(session.model, AIBackendID.anthropic.defaultModel)
-        _ = session.saveKey("updated-second-key")
+        _ = await session.saveKey("updated-second-key")
         XCTAssertEqual(firstKey.value, "first-key")
         XCTAssertEqual(secondKey.value, "updated-second-key")
         session.draft = "Anthropic question"
@@ -508,4 +530,13 @@ private final class ControlledProvider: AIProvider, @unchecked Sendable {
     }
     func emit(_ event: AIEvent) { lock.lock(); defer { lock.unlock() }; continuation?.yield(event) }
     func finish() { lock.lock(); defer { lock.unlock() }; continuation?.finish() }
+}
+
+private final class DelayedKey: AICredentialStore {
+    var continuation: CheckedContinuation<String?, Error>?
+    func read() async throws -> String? {
+        try await withCheckedThrowingContinuation { continuation = $0 }
+    }
+    func save(_ value: String) throws {}
+    func delete() throws {}
 }

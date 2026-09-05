@@ -227,3 +227,13 @@ prompt (Control-C) before automatic AI detection resumes.
 
 - [xAI Chat Completions](https://docs.x.ai/developers/model-capabilities/legacy/chat-completions)
 - [xAI streaming](https://docs.x.ai/developers/model-capabilities/text/streaming)
+
+## Keychain responsiveness
+
+Credential reads, saves, and removals use an asynchronous interface and a serial
+background queue per Keychain store. macOS can wait for approval without blocking
+the terminal interface. Stop and provider changes invalidate a pending request;
+a credential returned afterward cannot start that request. The macOS Keychain
+operation itself cannot be cancelled. Setup shows progress and prevents duplicate
+key changes while an operation is pending. Failed credential reads leave a failed
+turn visible, with the error and the original question retained in the transcript.

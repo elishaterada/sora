@@ -2,9 +2,9 @@ import Foundation
 import Security
 
 protocol AICredentialStore {
-    func read() throws -> String?
-    func save(_ value: String) throws
-    func delete() throws
+    func read() async throws -> String?
+    func save(_ value: String) async throws
+    func delete() async throws
 }
 
 struct KeychainAICredentialStore: AICredentialStore {
@@ -16,13 +16,35 @@ struct KeychainAICredentialStore: AICredentialStore {
         self.account = account
     }
 
+    private let queue = DispatchQueue(label: "dev.sora.keychain", qos: .userInitiated)
+
+    func read() async throws -> String? {
+        try await perform { try readSynchronously() }
+    }
+
+    func save(_ value: String) async throws {
+        try await perform { try saveSynchronously(value) }
+    }
+
+    func delete() async throws {
+        try await perform { try deleteSynchronously() }
+    }
+
+    private func perform<T>(_ operation: @escaping () throws -> T) async throws -> T {
+        try await withCheckedThrowingContinuation { continuation in
+            queue.async {
+                continuation.resume(with: Result { try operation() })
+            }
+        }
+    }
+
     private var query: [String: Any] {
         [kSecClass as String: kSecClassGenericPassword,
          kSecAttrService as String: service,
          kSecAttrAccount as String: account]
     }
 
-    func read() throws -> String? {
+    private func readSynchronously() throws -> String? {
         var query = query
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
@@ -36,7 +58,7 @@ struct KeychainAICredentialStore: AICredentialStore {
         return value
     }
 
-    func save(_ value: String) throws {
+    private func saveSynchronously(_ value: String) throws {
         let value = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty else { throw AIError.missingKey }
         let attributes = [kSecValueData as String: Data(value.utf8)]
@@ -50,7 +72,7 @@ struct KeychainAICredentialStore: AICredentialStore {
         }
     }
 
-    func delete() throws {
+    private func deleteSynchronously() throws {
         let status = SecItemDelete(query as CFDictionary)
         if status != errSecItemNotFound { try check(status) }
     }
