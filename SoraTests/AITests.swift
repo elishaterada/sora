@@ -331,6 +331,48 @@ final class AskSessionTests: XCTestCase {
         XCTAssertEqual(session.messages.last?.commandState, "stopped")
     }
 
+    func testTerminalAgentStartsFreshAndTabsKeepSeparateTranscripts() async {
+        let provider = ControlledProvider()
+        let session = makeSession(provider)
+        session.enabled = true
+        let first = UUID(), second = UUID()
+
+        session.bindTab(first)
+        session.beginTerminalAgent(question: "Help me find the largest files", directory: URL(fileURLWithPath: "/private/tmp"))
+        await waitFor { provider.requests.count == 1 }
+        provider.emit(.text("First tab answer"))
+        provider.emit(.completed)
+        provider.finish()
+        await waitFor { !session.isSending }
+        XCTAssertEqual(session.messages.first?.text, "Help me find the largest files")
+        XCTAssertEqual(session.messages.last?.text, "First tab answer")
+
+        session.bindTab(second)
+        XCTAssertTrue(session.messages.isEmpty)
+        session.beginTerminalAgent(question: "Explain pwd", directory: URL(fileURLWithPath: "/private/tmp"))
+        await waitFor { provider.requests.count == 2 }
+        provider.emit(.text("Second tab answer"))
+        provider.emit(.completed)
+        provider.finish()
+        await waitFor { !session.isSending }
+        XCTAssertEqual(session.messages.first?.text, "Explain pwd")
+        XCTAssertEqual(session.messages.count, 2)
+
+        session.beginTerminalAgent(question: "Fresh question", directory: URL(fileURLWithPath: "/private/tmp"))
+        await waitFor { provider.requests.count == 3 }
+        XCTAssertEqual(session.messages.filter { $0.role == .user }.map(\.text), ["Fresh question"])
+        provider.emit(.text("Fresh answer"))
+        provider.emit(.completed)
+        provider.finish()
+        await waitFor { !session.isSending }
+
+        session.bindTab(first)
+        XCTAssertEqual(session.messages.first?.text, "Help me find the largest files")
+        XCTAssertEqual(session.messages.last?.text, "First tab answer")
+        session.discardTab(first)
+        XCTAssertTrue(session.messages.isEmpty)
+    }
+
     func testStopWhileWaitingForKeychainPreventsLateNetworkRequest() async {
         let key = DelayedKey()
         let provider = ControlledProvider()

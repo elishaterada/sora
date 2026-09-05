@@ -2,8 +2,8 @@ import AppKit
 import SwiftUI
 
 /// Pairs the Ghostty grid with a sticky prompt footer so scrollback never
-/// paints through the input strip. Agent mode rises from the prompt as a
-/// continuation of the same tab — terminal scrollback stays visible above.
+/// paints through the input strip. Agent mode fills the tab as a continuation
+/// of the same session; Escape returns to the unchanged terminal.
 final class TerminalPaneView: NSView {
     let surface: GhosttySurfaceView
     let stickyBar = StickyPromptBar()
@@ -11,27 +11,18 @@ final class TerminalPaneView: NSView {
     private(set) var isShowingAgent = false
     private var isPaneActive = false
     private weak var ask: AskSession?
-    private let terminalDim = NSView()
-
-    /// Keep enough terminal peek so entering Ask does not feel like a hard cut.
-    private static let minimumTerminalPeek: CGFloat = 120
-    private static let agentHeightFraction: CGFloat = 0.62
+    let tabID: UUID
 
     override var isOpaque: Bool { false }
 
-    init(surface: GhosttySurfaceView, ask: AskSession) {
+    init(surface: GhosttySurfaceView, ask: AskSession, tabID: UUID) {
         self.surface = surface
         self.ask = ask
+        self.tabID = tabID
         super.init(frame: .zero)
         wantsLayer = true
         layer?.backgroundColor = SoraTheme.nsClear.cgColor
         addSubview(surface)
-
-        terminalDim.wantsLayer = true
-        terminalDim.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.28).cgColor
-        terminalDim.isHidden = true
-        addSubview(terminalDim)
-
         addSubview(stickyBar)
         agentHost = NSHostingView(rootView: AskView(
             session: ask,
@@ -48,7 +39,6 @@ final class TerminalPaneView: NSView {
         surface.autoresizingMask = []
         stickyBar.autoresizingMask = []
         agentHost.autoresizingMask = []
-        terminalDim.autoresizingMask = []
         surface.attachStickyPromptBar(stickyBar)
         stickyBar.onFocusTerminal = { [weak self] in
             guard let self else { return }
@@ -60,10 +50,12 @@ final class TerminalPaneView: NSView {
         }
         surface.onAgentPrompt = { [weak self, weak ask] question in
             guard let self, let ask else { return }
-            showAgent()
-            ask.configureAgent(directory: surface.currentWorkingDirectory() ?? surface.initialWorkingDirectory)
-            ask.draft = question
-            ask.send()
+            ask.bindTab(self.tabID)
+            self.showAgent()
+            ask.beginTerminalAgent(
+                question: question,
+                directory: surface.currentWorkingDirectory() ?? surface.initialWorkingDirectory
+            )
         }
     }
 
@@ -75,15 +67,19 @@ final class TerminalPaneView: NSView {
     func setActive(_ active: Bool) {
         isPaneActive = active
         isHidden = !active
+        if active {
+            ask?.bindTab(tabID)
+        }
         surface.setActive(active && !isShowingAgent)
     }
 
     func showAgent() {
+        ask?.bindTab(tabID)
         ask?.configureAgent(directory: surface.currentWorkingDirectory() ?? surface.initialWorkingDirectory)
         isShowingAgent = true
         agentHost.isHidden = false
         stickyBar.isHidden = true
-        terminalDim.isHidden = false
+        surface.isHidden = true
         surface.setActive(false)
         needsLayout = true
         layoutSubtreeIfNeeded()
@@ -93,7 +89,7 @@ final class TerminalPaneView: NSView {
         isShowingAgent = false
         agentHost.isHidden = true
         stickyBar.isHidden = false
-        terminalDim.isHidden = true
+        surface.isHidden = false
         surface.setActive(isPaneActive)
         needsLayout = true
         layoutSubtreeIfNeeded()
@@ -103,14 +99,9 @@ final class TerminalPaneView: NSView {
         super.layout()
         let barH = StickyPromptBar.height
         if isShowingAgent {
-            let agentH = min(
-                max(280, bounds.height * Self.agentHeightFraction),
-                max(280, bounds.height - Self.minimumTerminalPeek)
-            )
-            let terminalH = max(0, bounds.height - agentH)
-            surface.frame = NSRect(x: 0, y: agentH, width: bounds.width, height: terminalH)
-            terminalDim.frame = surface.frame
-            agentHost.frame = NSRect(x: 0, y: 0, width: bounds.width, height: agentH)
+            // Full-bleed Ask: no empty terminal peek above the conversation.
+            agentHost.frame = bounds
+            surface.frame = .zero
             stickyBar.frame = .zero
         } else {
             stickyBar.frame = NSRect(x: 0, y: 0, width: bounds.width, height: barH)
@@ -120,7 +111,6 @@ final class TerminalPaneView: NSView {
                 width: bounds.width,
                 height: max(0, bounds.height - barH)
             )
-            terminalDim.frame = surface.frame
             agentHost.frame = bounds
         }
     }
