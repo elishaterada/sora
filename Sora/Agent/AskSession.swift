@@ -92,6 +92,18 @@ final class AskSession: ObservableObject {
     private func stashCurrentTranscript() {
         transcripts[transcriptKey(tab: transcriptTabID, provider: selectedProvider)] = messages
     }
+
+    /// Visible when the user returns to the terminal after an agent turn.
+    var resumeSummary: AgentResumeSummary? {
+        let users = messages.filter { $0.role == .user && $0.isAgentContinuation != true }
+        guard let first = users.first else { return nil }
+        let followUp = users.count > 1 ? users.last?.text : nil
+        return AgentResumeSummary(
+            title: AgentResumeSummary.title(from: first.text),
+            latestFollowUp: followUp == first.text ? nil : followUp
+        )
+    }
+
     @Published private(set) var isUpdatingKey = false
     @Published private(set) var errorMessage: String?
     @Published private(set) var setupMessage: String?

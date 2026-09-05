@@ -373,6 +373,34 @@ final class AskSessionTests: XCTestCase {
         XCTAssertTrue(session.messages.isEmpty)
     }
 
+    func testAgentResumeSummaryUsesTitleAndLatestFollowUp() async {
+        XCTAssertEqual(AgentResumeSummary.title(from: "Help me find the largest files"), "Find the largest files")
+        XCTAssertEqual(AgentResumeSummary.title(from: "can you explain pwd"), "Explain pwd")
+
+        let provider = ControlledProvider()
+        let session = makeSession(provider)
+        session.enabled = true
+        session.bindTab(UUID())
+        session.beginTerminalAgent(question: "Help me find the largest files", directory: URL(fileURLWithPath: "/private/tmp"))
+        await waitFor { provider.requests.count == 1 }
+        provider.emit(.text("First answer"))
+        provider.emit(.completed)
+        provider.finish()
+        await waitFor { !session.isSending }
+        XCTAssertEqual(session.resumeSummary?.title, "Find the largest files")
+        XCTAssertNil(session.resumeSummary?.latestFollowUp)
+
+        session.draft = "How about in ~/Downloads?"
+        session.send()
+        await waitFor { provider.requests.count == 2 }
+        provider.emit(.text("Downloads answer"))
+        provider.emit(.completed)
+        provider.finish()
+        await waitFor { !session.isSending }
+        XCTAssertEqual(session.resumeSummary?.title, "Find the largest files")
+        XCTAssertEqual(session.resumeSummary?.latestFollowUp, "How about in ~/Downloads?")
+    }
+
     func testStopWhileWaitingForKeychainPreventsLateNetworkRequest() async {
         let key = DelayedKey()
         let provider = ControlledProvider()

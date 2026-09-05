@@ -9,6 +9,8 @@
 /* Begin PBXBuildFile section */
         FA0000000000000000000001 = {isa = PBXBuildFile; fileRef = FA0000000000000000000000; };
         FA0000000000000000000002 = {isa = PBXBuildFile; fileRef = FA0000000000000000000000; };
+        FB0000000000000000000001 = {isa = PBXBuildFile; fileRef = FB0000000000000000000000 /* AgentResumeStrip.swift */; };
+        FB0000000000000000000002 = {isa = PBXBuildFile; fileRef = FB0000000000000000000000 /* AgentResumeStrip.swift */; };
 		FG0000000000000000000065 /* AgentCommandProposal.swift in Sources */ = {isa = PBXBuildFile; fileRef = FG0000000000000000000000 /* AgentCommandProposal.swift */; };
 		FG0000000000000000000064 /* AgentCommandProposal.swift in Sources */ = {isa = PBXBuildFile; fileRef = FG0000000000000000000000 /* AgentCommandProposal.swift */; };
 		EF0000000000000000000066 /* PromptIntentClassifierTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF0000000000000000000001 /* PromptIntentClassifierTests.swift */; };
@@ -134,6 +136,7 @@
 
 /* Begin PBXFileReference section */
         FA0000000000000000000000 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentCommandRunner.swift; sourceTree = "<group>"; };
+        FB0000000000000000000000 /* AgentResumeStrip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentResumeStrip.swift; sourceTree = "<group>"; };
 		FG0000000000000000000000 /* AgentCommandProposal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentCommandProposal.swift; sourceTree = "<group>"; };
 		EF0000000000000000000001 /* PromptIntentClassifierTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptIntentClassifierTests.swift; sourceTree = "<group>"; };
 		EF0000000000000000000000 /* PromptIntentClassifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptIntentClassifier.swift; sourceTree = "<group>"; };
@@ -253,6 +256,7 @@
 				CC0000000000000000000064 /* AIProvider.swift */,
 				FG0000000000000000000000 /* AgentCommandProposal.swift */,
                 FA0000000000000000000000,
+                FB0000000000000000000000 /* AgentResumeStrip.swift */,
 				EF0000000000000000000000 /* PromptIntentClassifier.swift */,
 				EE0000000000000000000002 /* WebpageAttachmentView.swift */,
 				EE0000000000000000000001 /* WebpageFetcher.swift */,
@@ -518,6 +522,7 @@
 				CC00000000000000000000C8 /* AIProvider.swift in Sources */,
 				FG0000000000000000000064 /* AgentCommandProposal.swift in Sources */,
                 FA0000000000000000000001,
+                FB0000000000000000000001 /* AgentResumeStrip.swift in Sources */,
 				EF0000000000000000000064 /* PromptIntentClassifier.swift in Sources */,
 				EE0000000000000000000068 /* WebpageAttachmentView.swift in Sources */,
 				EE0000000000000000000066 /* WebpageFetcher.swift in Sources */,
@@ -576,6 +581,7 @@
 				CC000000000000000000012C /* AIProvider.swift in Sources */,
 				FG0000000000000000000065 /* AgentCommandProposal.swift in Sources */,
                 FA0000000000000000000002,
+                FB0000000000000000000002 /* AgentResumeStrip.swift in Sources */,
 				EF0000000000000000000066 /* PromptIntentClassifierTests.swift in Sources */,
 				EF0000000000000000000065 /* PromptIntentClassifier.swift in Sources */,
 				EE000000000000000000006B /* WebpageTests.swift in Sources */,

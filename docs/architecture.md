@@ -103,11 +103,12 @@ Vercel and xAI Chat Completions; adapters translate their distinct event schemas
 over stdio with an ephemeral, text-only thread. `CodexLogin` owns sign-in setup.
 `AskView` is the inline agent continuation inside the active terminal tab
 (AI → Ask Sora or prompt routing). Ask fills the tab; Escape returns to the
-terminal. Each tab keeps its own in-memory agent thread, and a terminal→agent
-handoff starts a fresh conversation for that tab. Storage is injected;
-credentials use Keychain. Switching providers cancels outstanding work and
-restores that provider's draft, model, and per-tab history. No tool interface is
-exposed in this slice.
+terminal and leaves a clickable resume strip (and ⌘Y) above the sticky prompt.
+Each tab keeps its own in-memory agent thread, and a terminal→agent handoff
+starts a fresh conversation for that tab. Storage is injected; credentials use
+Keychain. Switching providers cancels outstanding work and restores that
+provider's draft, model, and per-tab history. No tool interface is exposed in
+this slice.
 See [AI Ask](ai-ask.md).
 
 `WebpageFetcher` is an explicit context input outside the provider adapters. It
