@@ -157,11 +157,16 @@ struct AskView: View {
                 HStack {
                     SecureField("\(session.selectedProvider.name) key", text: $keyDraft)
                     Button("Save Key") {
-                        if session.saveKey(keyDraft) { keyDraft = "" }
+                        let value = keyDraft
+                        Task { if await session.saveKey(value), keyDraft == value { keyDraft = "" } }
                     }
-                    .disabled(keyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || session.isSending)
-                    Button("Remove Key") { session.removeKey(); keyDraft = "" }
+                    .disabled(keyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || session.isSending || session.isUpdatingKey)
+                    Button("Remove Key") { Task { await session.removeKey(); keyDraft = "" } }
+                    .disabled(session.isUpdatingKey || session.isSending)
                 }
+            }
+            if session.isUpdatingKey {
+                ProgressView("Waiting for Keychain…").controlSize(.small)
             }
             TextField(session.selectedProvider == .codex ? "Model ID (blank uses Codex default)" : "Model ID", text: $session.model)
                 .disabled(session.isSending)
