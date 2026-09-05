@@ -68,20 +68,26 @@ separate noninteractive zsh, not the user's PTY; interactive input, shell aliase
 and persistent cd/environment changes are unsupported. The command runner uses
 system executables on a fixed PATH and skips user zsh configuration.
 
-Sora automatically runs a narrow set of read-only listings: pwd, constrained ls
-and du options, find with -type f and -print/-print0, and constrained pipelines
-through xargs -0 du -h, sort, and head. Substitutions, redirections, and commands
-outside this grammar require **Run Command** approval. Approval is persisted
-before execution. This is a conservative permission check, not an OS sandbox.
+Sora defaults to **Ask for approval**: every proposed command and webpage fetch
+waits for an explicit decision. Switch to **Approve for me** to auto-run the
+narrow read-only listing grammar (pwd, constrained ls/du, find -type f
+-print/-print0, and constrained pipelines through xargs -0 du -h, sort, and
+head) and auto-fetch public HTTPS pages; anything outside that grammar still
+needs **Run Command**. **Full access** runs any validated proposal without
+asking. The mode is stored in UserDefaults and can be changed from Setup or the
+Ask status bar at any time. Substitutions, redirections, and shell escapes are
+never treated as routine under Approve for me. Approval is persisted before
+execution. This is a conservative permission check, not an OS sandbox.
 Approved commands have the user's filesystem permissions.
 
 When the agent needs a public HTTPS page, it proposes a `<SORA_WEBPAGE>` envelope.
-Sora fetches a static text snapshot automatically (no cookies, credentials, or
-script execution), using the same limits as the earlier manual attach path
-(2 MB download, 50 KB text, HTTPS-only public hosts). The snapshot is stored on
-the conversation turn and fed back to the model as untrusted reference data.
-There is no manual **Attach webpage** control in the composer; the agent owns
-fetching when a page is required.
+Under Approve for me / Full access, Sora fetches a static text snapshot
+automatically (no cookies, credentials, or script execution), using the same
+limits as the earlier manual attach path (2 MB download, 50 KB text, HTTPS-only
+public hosts). Under Ask for approval, the fetch waits for an explicit confirm.
+The snapshot is stored on the conversation turn and fed back to the model as
+untrusted reference data. There is no manual **Attach webpage** control in the
+composer; the agent owns fetching when a page is required.
 
 Output (up to 32 KiB), working directory, and exit code stay in the conversation
 and are sent to the selected AI provider as untrusted result data. The AI reviews

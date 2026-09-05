@@ -251,6 +251,7 @@ struct AskView: View {
             }
             .buttonStyle(.plain)
             .help("Choose an agent model")
+            AgentPermissionModeMenu(mode: $session.permissionMode)
             Spacer(minLength: 0)
             Text(session.selectedProvider.disclosure)
                 .lineLimit(1)
@@ -266,6 +267,7 @@ struct AskView: View {
     private var setup: some View {
         VStack(alignment: .leading, spacing: 12) {
             Toggle("Enable AI", isOn: $session.enabled)
+            AgentPermissionModePicker(mode: $session.permissionMode)
             if session.selectedProvider == .codex {
                 Text("Use the installed Codex CLI with your Codex / ChatGPT sign-in. Sora does not copy login tokens.")
                     .font(.caption).foregroundStyle(.secondary)
@@ -341,16 +343,7 @@ struct AskView: View {
                 commandCard(proposal, messageID: message.id)
             }
             if let proposal = message.webpageProposal {
-                HStack(spacing: 8) {
-                    Image(systemName: proposal.status == .failed ? "link.badge.plus" : "link")
-                    Text(proposal.status == .approved || proposal.status == .pending
-                          ? "Fetching \(proposal.url)"
-                          : proposal.status == .failed ? "Webpage fetch failed" : proposal.url)
-                        .font(.caption)
-                        .lineLimit(1)
-                    Spacer()
-                }
-                .foregroundStyle(.secondary)
+                webpageCard(proposal, messageID: message.id)
             }
             if let page = message.webpage {
                 DisclosureGroup("Webpage: \(page.title)") {
@@ -386,6 +379,56 @@ struct AskView: View {
                 Text(message.status == .stopped ? "Stopped — partial answer" : "Answer incomplete")
                     .font(.caption).foregroundStyle(.secondary)
             }
+        }
+    }
+
+    private func webpageCard(_ proposal: AgentWebpageProposal, messageID: UUID) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: proposal.status == .failed ? "link.badge.plus" : "link")
+                Text(webpageStatusTitle(proposal))
+                    .font(.callout.weight(.semibold))
+                    .lineLimit(2)
+                Spacer(minLength: 8)
+                if proposal.status == .pending {
+                    Button {
+                        session.dismissWebpage(messageID: messageID)
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Dismiss")
+                    Button {
+                        session.fetchWebpage(messageID: messageID)
+                    } label: {
+                        Image(systemName: "checkmark")
+                            .fontWeight(.bold)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(session.isSending || session.isRunningCommand)
+                    .help("Fetch Webpage")
+                } else if proposal.status == .approved {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                }
+            }
+            Text(proposal.url)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .textSelection(.enabled)
+        }
+        .padding(12)
+        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.accentColor.opacity(0.45), lineWidth: 1))
+    }
+
+    private func webpageStatusTitle(_ proposal: AgentWebpageProposal) -> String {
+        switch proposal.status {
+        case .pending: return "OK if I fetch this webpage?"
+        case .approved: return "Fetching webpage"
+        case .dismissed: return "Webpage dismissed"
+        case .failed: return "Webpage fetch failed"
         }
     }
 
@@ -457,5 +500,82 @@ struct AskView: View {
         .padding(12)
         .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.accentColor.opacity(0.65), lineWidth: 1))
+    }
+}
+
+/// Compact status-bar control for switching agent approval policy.
+private struct AgentPermissionModeMenu: View {
+    @Binding var mode: AgentPermissionMode
+
+    var body: some View {
+        Menu {
+            ForEach(AgentPermissionMode.allCases) { option in
+                Button {
+                    mode = option
+                } label: {
+                    if option == mode {
+                        Label(option.title, systemImage: "checkmark")
+                    } else {
+                        Text(option.title)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: mode.systemImage)
+                Text(mode.title)
+                    .lineLimit(1)
+            }
+        }
+        .menuStyle(.borderlessButton)
+        .help("How agent actions are approved")
+        .accessibilityLabel("Agent permissions: \(mode.title)")
+    }
+}
+
+/// Setup list matching the three ChatGPT-style approval modes.
+private struct AgentPermissionModePicker: View {
+    @Binding var mode: AgentPermissionMode
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("How should agent actions be approved?")
+                .font(.callout.weight(.semibold))
+            ForEach(AgentPermissionMode.allCases) { option in
+                Button {
+                    mode = option
+                } label: {
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: option.systemImage)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(option == mode ? Color.accentColor : .secondary)
+                            .frame(width: 20)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(option.title)
+                                .font(.callout.weight(.semibold))
+                                .foregroundStyle(option == mode ? Color.accentColor : .primary)
+                            Text(option.detail)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Spacer(minLength: 8)
+                        if option == mode {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(Color.accentColor)
+                        }
+                    }
+                    .padding(10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .strokeBorder(option == mode ? Color.accentColor.opacity(0.8) : Color.white.opacity(0.08), lineWidth: 1)
+                    )
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .accessibilityElement(children: .contain)
     }
 }
