@@ -24,6 +24,8 @@ final class AskSession: ObservableObject {
     private var commandGeneration: UUID?
     private var commandCount = 0
     private var runningMessageID: UUID?
+    /// Set by Stop; completion stores any output and must not continue the agent loop.
+    private var commandStopRequested = false
 
     func configureAgent(directory: URL?) {
         guard !isSending, !isRunningCommand else { return }
@@ -224,17 +226,16 @@ final class AskSession: ObservableObject {
     }
 
     func stop() {
-        if let id = runningMessageID, let index = messages.firstIndex(where: { $0.id == id }) {
-            messages[index].commandState = "stopped"
-            persist()
+        // Kill the process group immediately, but keep isRunningCommand set until
+        // the runner finishes so a second command cannot start over a dying one.
+        if isRunningCommand || commandRunner != nil {
+            commandStopRequested = true
+            if let id = runningMessageID, let index = messages.firstIndex(where: { $0.id == id }) {
+                messages[index].commandState = "stopped"
+                persist()
+            }
+            commandRunner?.cancel()
         }
-        runningMessageID = nil
-        commandGeneration = nil
-        commandRunner?.cancel()
-        commandRunner = nil
-        commandTask?.cancel()
-        commandTask = nil
-        isRunningCommand = false
         generation = nil
         task?.cancel()
         task = nil
@@ -337,6 +338,7 @@ final class AskSession: ObservableObject {
         let token = UUID()
         commandRunner = runner
         commandGeneration = token
+        commandStopRequested = false
         isRunningCommand = true
         runningMessageID = messageID
         if let index = messages.firstIndex(where: { $0.id == messageID }) {
@@ -346,16 +348,12 @@ final class AskSession: ObservableObject {
             do {
                 let result = try await runner.run(command: proposal.command, directory: directory)
                 guard let self, self.commandGeneration == token else { return }
-                self.isRunningCommand = false
-                self.commandRunner = nil
-                self.commandTask = nil
-                self.commandGeneration = nil
-                guard let index = self.messages.firstIndex(where: { $0.id == messageID }) else { return }
-                self.messages[index].commandResult = result
-                self.messages[index].commandState = result.interrupted ? "stopped" : "finished"
-                self.runningMessageID = nil
-                self.persist()
+                let stoppedByUser = self.commandStopRequested
+                self.finishCommand(token: token, messageID: messageID, result: result, error: nil)
                 guard self.errorMessage == nil else { return }
+                if stoppedByUser {
+                    return
+                }
                 if result.interrupted {
                     self.errorMessage = "Command stopped after reaching its time limit. Send a follow-up to continue."
                 } else {
@@ -363,18 +361,44 @@ final class AskSession: ObservableObject {
                 }
             } catch {
                 guard let self, self.commandGeneration == token else { return }
-                self.isRunningCommand = false
-                self.commandRunner = nil
-                self.commandTask = nil
-                self.commandGeneration = nil
-                if let index = self.messages.firstIndex(where: { $0.id == messageID }) {
-                    self.messages[index].commandState = "failed"
-                }
-                self.runningMessageID = nil
-                self.persist()
-                self.errorMessage = "Command could not run: \(error.localizedDescription)"
+                let stoppedByUser = self.commandStopRequested || error is CancellationError
+                let result = AgentCommandResult(
+                    command: proposal.command,
+                    directory: directory.path,
+                    output: "",
+                    exitCode: 137,
+                    interrupted: true,
+                    truncated: false
+                )
+                self.finishCommand(
+                    token: token,
+                    messageID: messageID,
+                    result: stoppedByUser || error is CancellationError ? result : nil,
+                    error: stoppedByUser ? nil : "Command could not run: \(error.localizedDescription)"
+                )
             }
         }
+    }
+
+    private func finishCommand(token: UUID, messageID: UUID, result: AgentCommandResult?, error: String?) {
+        guard commandGeneration == token else { return }
+        let stoppedByUser = commandStopRequested
+        commandStopRequested = false
+        isRunningCommand = false
+        commandRunner = nil
+        commandTask = nil
+        commandGeneration = nil
+        runningMessageID = nil
+        if let index = messages.firstIndex(where: { $0.id == messageID }) {
+            if let result {
+                messages[index].commandResult = result
+                messages[index].commandState = (stoppedByUser || result.interrupted) ? "stopped" : "finished"
+            } else if messages[index].commandState == "running" || messages[index].commandState == "stopped" {
+                messages[index].commandState = error == nil ? "stopped" : "failed"
+            }
+            persist()
+        }
+        if let error { errorMessage = error }
     }
 
     private func persist() {

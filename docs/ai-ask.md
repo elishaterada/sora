@@ -68,8 +68,11 @@ Output (up to 32 KiB), working directory, and exit code stay in the conversation
 and are sent to the selected AI provider as untrusted result data. The AI reviews
 results, proposes a next command when needed, or summarizes findings and a next
 step. Each user turn permits at most six commands; each command has a 60-second
-time limit. Stop terminates the command process group and cancels continuation.
-A time limit pauses for user follow-up. Commands are never resumed on relaunch.
+time limit. Stop marks the command stopped, kills its process group, keeps Ask
+busy until the runner exits, stores any captured output, and cancels continuation
+so a second command cannot overlap a dying pipeline. A time limit pauses for
+user follow-up without treating the pause as a user Stop. Commands are never
+resumed on relaunch.
 
 Providers only propose commands through Sora's strict single-line envelope.
 Malformed envelopes and control characters are rejected. The initial prompt

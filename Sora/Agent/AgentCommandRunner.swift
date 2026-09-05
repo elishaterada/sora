@@ -105,7 +105,14 @@ final class AgentCommandRunner: @unchecked Sendable {
         if cancelled { lock.unlock(); throw CancellationError() }
         var child: pid_t = 0
         let error = posix_spawn(&child, "/bin/zsh", &actions, &attributes, &argv, &envp)
-        if error == 0 { pid = child }
+        if error == 0 {
+            pid = child
+            // Stop may have arrived while spawn held the lock; kill before unlocking.
+            if cancelled {
+                interrupted = true
+                kill(-child, SIGKILL)
+            }
+        }
         lock.unlock()
         guard error == 0 else { throw POSIXError(POSIXErrorCode(rawValue: error) ?? .EIO) }
         pipe.fileHandleForWriting.closeFile()
