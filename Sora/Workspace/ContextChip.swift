@@ -77,7 +77,7 @@ enum ContextChipActions {
 struct LinkedText: View {
     let text: String
     var relativeTo: URL?
-    var font: Font = .body
+    var font: Font = SoraTheme.agentBody
     var monospaced = false
 
     var body: some View {
@@ -96,7 +96,7 @@ struct LinkedText: View {
     }
 
     private var resolvedFont: Font {
-        monospaced ? .system(.body, design: .monospaced) : font
+        monospaced ? SoraTheme.agentMono : font
     }
 
     private func attributed(_ segments: [TextSegment]) -> AttributedString {
