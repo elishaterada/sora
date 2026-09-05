@@ -9,7 +9,6 @@ struct AskView: View {
     @StateObject private var codexLogin = CodexLogin()
     @State private var showingSetup = false
     @State private var keyDraft = ""
-    @State private var showingWebpage = false
     @FocusState private var composerFocused: Bool
 
     private var visibleMessages: [AIMessage] {
@@ -61,11 +60,6 @@ struct AskView: View {
         .background(inlineBackground)
         .frame(minWidth: inline ? 0 : 540, minHeight: inline ? 0 : 560)
         .preferredColorScheme(.dark)
-        .sheet(isPresented: $showingWebpage) {
-            WebpageAttachmentView(page: session.webpage, providerName: session.selectedProvider.name) {
-                session.attachWebpage($0)
-            }
-        }
         .onAppear {
             session.load()
             if !session.enabled { showingSetup = true }
@@ -74,12 +68,8 @@ struct AskView: View {
             keyDraft = ""
             codexLogin.cancel()
             showingSetup = true
-            showingWebpage = false
         }
-        .onChange(of: session.enabled) { enabled in
-            if !enabled { showingWebpage = false }
-        }
-        .onDisappear { session.stop(); codexLogin.cancel(); keyDraft = ""; showingWebpage = false }
+        .onDisappear { session.stop(); codexLogin.cancel(); keyDraft = "" }
     }
 
     private var inlineBackground: some View {
@@ -176,18 +166,6 @@ struct AskView: View {
 
     private var composer: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Button(session.webpage == nil ? "Attach webpage" : "Review webpage", systemImage: "link") {
-                    showingWebpage = true
-                }
-                .disabled(session.isSending || session.isRunningCommand)
-                if let page = session.webpage {
-                    Text(page.url.host ?? page.title).font(.caption).lineLimit(1)
-                    Spacer()
-                    Button("Remove", systemImage: "xmark") { session.attachWebpage(nil) }
-                        .disabled(session.isSending || session.isRunningCommand)
-                }
-            }
             TextField(inline ? "Ask a follow up…" : "Ask about a command or paste an error…",
                       text: $session.draft, axis: inline ? .horizontal : .vertical)
                 .lineLimit(inline ? 1...3 : 2...5)
@@ -290,7 +268,7 @@ struct AskView: View {
             if let message = session.setupMessage {
                 Text(message).font(.caption).foregroundStyle(.secondary)
             }
-            Text("Credentials stay in macOS Keychain. Each provider has its own local conversation. Commands require approval.")
+            Text("Credentials stay in macOS Keychain. Each provider has its own local conversation. The agent can run approved commands and fetch public HTTPS pages.")
                 .font(.caption).foregroundStyle(.secondary)
         }
         .textFieldStyle(.roundedBorder)
@@ -319,6 +297,9 @@ struct AskView: View {
                 } else if message.status == .streaming,
                           AgentCommandProposalParser.isStreamingEnvelope(message.text) {
                     ProgressView("Preparing a command…").controlSize(.small)
+                } else if message.status == .streaming,
+                          AgentWebpageProposalParser.isStreamingEnvelope(message.text) {
+                    ProgressView("Preparing a webpage…").controlSize(.small)
                 } else {
                     Text(message.text).textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -326,6 +307,18 @@ struct AskView: View {
             }
             if let proposal = message.commandProposal {
                 commandCard(proposal, messageID: message.id)
+            }
+            if let proposal = message.webpageProposal {
+                HStack(spacing: 8) {
+                    Image(systemName: proposal.status == .failed ? "link.badge.plus" : "link")
+                    Text(proposal.status == .approved || proposal.status == .pending
+                          ? "Fetching \(proposal.url)"
+                          : proposal.status == .failed ? "Webpage fetch failed" : proposal.url)
+                        .font(.caption)
+                        .lineLimit(1)
+                    Spacer()
+                }
+                .foregroundStyle(.secondary)
             }
             if let page = message.webpage {
                 DisclosureGroup("Webpage: \(page.title)") {
@@ -337,7 +330,8 @@ struct AskView: View {
                 }
             }
             if let state = message.commandState, state == "stopped" || state == "failed" {
-                Text("Command " + state).font(.caption).foregroundStyle(.secondary)
+                Text((message.webpageProposal == nil ? "Command " : "Fetch ") + state)
+                    .font(.caption).foregroundStyle(.secondary)
             }
             if let result = message.commandResult {
                 DisclosureGroup("Command output · exit \(result.exitCode)" + (result.truncated ? " · excerpt" : "")) {
@@ -346,8 +340,12 @@ struct AskView: View {
                 }
             }
             if session.isRunningCommand, message.id == session.messages.last?.id {
-                ProgressView(message.commandState == "stopped" ? "Stopping command…" : "Running command…")
-                    .controlSize(.small)
+                ProgressView(
+                    message.commandState == "stopped" ? "Stopping…"
+                    : message.commandState == "fetching" ? "Fetching webpage…"
+                    : "Running command…"
+                )
+                .controlSize(.small)
             }
             if message.status == .stopped || message.status == .failed {
                 Text(message.status == .stopped ? "Stopped — partial answer" : "Answer incomplete")
