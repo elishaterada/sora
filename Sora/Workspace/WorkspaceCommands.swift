@@ -8,7 +8,7 @@ struct WorkspaceCommands: Commands {
             Button("New Tab") {
                 workspace?.addTabInheritingCWD()
             }
-            .keyboardShortcut("t", modifiers: .command)
+            .keyboardShortcut("n", modifiers: .command)
             .disabled(workspace == nil)
         }
         CommandGroup(replacing: .saveItem) {

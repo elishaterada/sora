@@ -216,6 +216,11 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
            event.modifierFlags.intersection([.command, .shift, .option, .control]) == [.command, .shift] {
             return false
         }
+        // File → New Tab (Cmd+N) must reach WorkspaceCommands, not the PTY.
+        if chars.lowercased() == "n",
+           event.modifierFlags.intersection([.command, .shift, .option, .control]) == [.command] {
+            return false
+        }
         if chars.lowercased() == "y",
            event.modifierFlags.intersection([.command, .shift, .option, .control]) == [.command],
            onContinueAgent?() == true {

@@ -57,7 +57,7 @@ xcodebuild -project Sora.xcodeproj -scheme Sora -configuration Debug -destinatio
 xcodebuild -project Sora.xcodeproj -scheme Sora -configuration Debug -destination 'platform=macOS' -parallel-testing-enabled NO test
 ```
 
-The first launch starts a login `zsh` in a single window. Cmd+T opens a new tab; Cmd+W closes the current tab. The app is unsandboxed and ad-hoc signed for local use. Launch creates `~/.hushlogin` if missing so `login(1)` does not print the last-login banner.
+The first launch starts a login `zsh` in a single window. Cmd+N opens a new tab; Cmd+W closes the current tab. The app is unsandboxed and ad-hoc signed for local use. Launch creates `~/.hushlogin` if missing so `login(1)` does not print the last-login banner.
 
 Ghostty is pinned to commit `c81f0b26871c7fbbe2fc35549fdad1f64ed29094`. See [`docs/libghostty-integration.md`](docs/libghostty-integration.md).
 
