@@ -15,6 +15,7 @@ final class StickyPromptBar: NSView {
     private let effectView: NSView
     private let hairline = NSView()
     private var showingPrediction = false
+    private var agentResumeAvailable = false
 
     override var isOpaque: Bool { false }
     override var acceptsFirstResponder: Bool { false }
@@ -120,8 +121,7 @@ final class StickyPromptBar: NSView {
             hintLabel.isHidden = !predicted
         } else {
             lineLabel.stringValue = ""
-            hintLabel.stringValue = ""
-            hintLabel.isHidden = true
+            applyFallbackHint()
         }
         needsLayout = true
     }
@@ -134,14 +134,31 @@ final class StickyPromptBar: NSView {
             hintLabel.isHidden = false
         } else {
             routeLabel.stringValue = ""
-            // Keep prediction's accept hint intact.
-            if !showingPrediction {
-                hintLabel.stringValue = ""
-                hintLabel.isHidden = true
-            }
+            applyFallbackHint()
         }
         routeLabel.isHidden = intent != .agent
         needsLayout = true
+    }
+
+    func updateAgentResumeHint(_ available: Bool) {
+        agentResumeAvailable = available
+        if routeLabel.stringValue.isEmpty {
+            applyFallbackHint()
+        }
+        needsLayout = true
+    }
+
+    private func applyFallbackHint() {
+        if showingPrediction {
+            hintLabel.stringValue = "→ accept"
+            hintLabel.isHidden = false
+        } else if agentResumeAvailable {
+            hintLabel.stringValue = "⌘Y continue"
+            hintLabel.isHidden = false
+        } else {
+            hintLabel.stringValue = ""
+            hintLabel.isHidden = true
+        }
     }
 
     @objc private func focusTerminal() {

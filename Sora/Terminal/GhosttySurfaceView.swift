@@ -33,6 +33,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     private var isShellPromptReady = false
     private var promptIntent: PromptIntent?
     var onAgentPrompt: ((String) -> Void)?
+    var onContinueAgent: (() -> Bool)?
 
     override var isOpaque: Bool { false }
     override var acceptsFirstResponder: Bool { true }
@@ -214,6 +215,11 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         if chars.lowercased() == "a",
            event.modifierFlags.intersection([.command, .shift, .option, .control]) == [.command, .shift] {
             return false
+        }
+        if chars.lowercased() == "y",
+           event.modifierFlags.intersection([.command, .shift, .option, .control]) == [.command],
+           onContinueAgent?() == true {
+            return true
         }
         if event.modifierFlags.contains(.command) {
             switch chars {
