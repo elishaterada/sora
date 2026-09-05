@@ -1,6 +1,11 @@
 # Original Sora highlighter. Colors the ZLE buffer with region_highlight.
 # Not derived from zsh-syntax-highlighting. Skips install if that plugin is present.
 
+# Cmd+V and completion accept insert through ghostty_surface_text, which zsh
+# treats as a paste. The default paste:standout style paints spaces as opaque
+# blocks in Ghostty; keep paste regions unstyled and let this highlighter run.
+zle_highlight=(${zle_highlight:#paste:*} paste:none)
+
 _sora_is_space() {
   [[ $1 == ' ' || $1 == $'\t' || $1 == $'\n' ]]
 }

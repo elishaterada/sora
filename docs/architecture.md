@@ -63,7 +63,7 @@ Only create directories required by the current phase. Phase 5 creates
 - resize and backing-scale propagation
 - clipboard: Cmd+C/V and Edit menu copy/paste via `ghostty_surface_read_selection` / `ghostty_surface_text`; OSC 52 via Ghostty runtime callbacks plus `NSPasteboard`
 - session chrome: flush two-column `HStack` (sidebar | terminal). Transparent titlebar with `fullSizeContentView` so close/minimize/zoom sit in the sidebar next to the collapse control. Collapsing the sidebar hides that column; the traffic lights, sidebar toggle, session title, path, and new-tab control move into a thin terminal header. Do not use `.toolbar(.hidden, for: .windowToolbar)` — that hides the window buttons. No `NavigationSplitView` (Tahoe draws that as floating rounded cards). Window frost is a square `NSGlassEffectView` behind both columns.
-- shell presentation: `~/.hushlogin` suppresses `login(1)` "Last login"; a Sora `ZDOTDIR` sources Ghostty's zsh integration, replaces the stock macOS `user@host` prompt, and colors the input line (command/flags/paths/strings) unless the user already has zsh-syntax-highlighting.
+- shell presentation: `~/.hushlogin` suppresses `login(1)` "Last login"; a Sora `ZDOTDIR` sources Ghostty's zsh integration, replaces the stock macOS `user@host` prompt, and colors the input line (command/flags/paths/strings) unless the user already has zsh-syntax-highlighting. Paste and completion-accept inserts use `paste:none` so zsh's default paste standout does not paint spaces as opaque blocks.
 
 Unit tests must not link GhosttyKit. `GhosttyInput.swift` and `GhosttyClipboard.swift` stay Ghostty-free; `GhosttyInputKit.swift` and `GhosttyClipboardKit.swift` are app-only.
 
