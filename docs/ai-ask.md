@@ -205,6 +205,15 @@ Grok streaming, Unicode, authentication/rate failures, and truncated responses
 are verified with local HTTP fixtures. A live Grok response still needs an xAI
 key. No external dependency was added.
 
+## Prompt editing recovery
+
+Prompt tracking recognizes macOS control characters for Control-C and Control-U,
+so cancelling or clearing a line allows the next conversational prompt to route
+to Ask AI. Control-A/E/K/W remain conservative: these move the cursor or delete
+only part of a line, so tracking stops rather than classifying a suffix as the
+whole command. History navigation and unsupported edits still require a fresh
+prompt (Control-C) before automatic AI detection resumes.
+
 ## Official references
 
 - [OpenAI Responses](https://developers.openai.com/api/reference/resources/responses/methods/create)
