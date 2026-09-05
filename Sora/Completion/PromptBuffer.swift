@@ -51,10 +51,14 @@ enum PromptEvent {
             return nil
         }
         if modifiers.contains(.control) {
+            // NSEvent.characters contains ASCII control codes for real key
+            // events, while some callers supply the printable key name.
             let key = characters.lowercased()
-            if key == "c" || key == "u" || key == "a" || key == "e" || key == "k" || key == "w" {
+            if key == "c" || key == "\u{03}" || key == "u" || key == "\u{15}" {
                 return .reset
             }
+            // Cursor movement and partial deletions do not clear the whole
+            // shell buffer. Do not classify a subsequently typed suffix alone.
             return .stopTracking
         }
         if modifiers.contains(.option) {
