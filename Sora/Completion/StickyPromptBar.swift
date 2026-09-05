@@ -128,8 +128,9 @@ final class StickyPromptBar: NSView {
 
     func updateRoute(_ intent: PromptIntent?) {
         if intent == .agent {
-            routeLabel.stringValue = "AI prompt"
-            hintLabel.stringValue = "⌘↩ run shell"
+            // Warp-style continuation hint: Return opens Ask in this tab.
+            routeLabel.stringValue = "↵ agent"
+            hintLabel.stringValue = "⌘↩ shell"
             hintLabel.isHidden = false
         } else {
             routeLabel.stringValue = ""
