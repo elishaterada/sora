@@ -10,8 +10,55 @@ struct AgentCommandResult: Codable, Equatable, Sendable {
     let truncated: Bool
 }
 
-/// Deliberately narrow automatic permission. Everything else needs approval.
-/// No substitutions, redirections, shell functions, or arbitrary xargs targets.
+/// How aggressively Sora auto-runs agent-proposed commands and webpage fetches.
+enum AgentPermissionMode: String, CaseIterable, Identifiable, Sendable {
+    case askForApproval
+    case approveForMe
+    case fullAccess
+
+    var id: String { rawValue }
+
+    static let defaultsKey = "ai.agentPermissionMode"
+
+    var title: String {
+        switch self {
+        case .askForApproval: return "Ask for approval"
+        case .approveForMe: return "Approve for me"
+        case .fullAccess: return "Full access"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .askForApproval:
+            return "Always ask before running commands or fetching webpages"
+        case .approveForMe:
+            return "Only ask for actions detected as potentially unsafe"
+        case .fullAccess:
+            return "Run proposed commands and fetch pages without asking"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .askForApproval: return "hand.raised"
+        case .approveForMe: return "shield.lefthalf.filled"
+        case .fullAccess: return "exclamationmark.shield"
+        }
+    }
+
+    static func stored(in defaults: UserDefaults = .standard) -> AgentPermissionMode {
+        guard let raw = defaults.string(forKey: defaultsKey),
+              let mode = AgentPermissionMode(rawValue: raw) else {
+            return .askForApproval
+        }
+        return mode
+    }
+}
+
+/// Deliberately narrow automatic permission. Everything else needs approval
+/// unless the user chooses Full access. No substitutions, redirections, shell
+/// functions, or arbitrary xargs targets.
 enum AgentCommandPermission {
     static func allowsAutomatically(_ command: String) -> Bool {
         guard !command.isEmpty,
@@ -42,6 +89,26 @@ enum AgentCommandPermission {
             }
         }
         return true
+    }
+
+    static func shouldAutoRunCommand(_ command: String, mode: AgentPermissionMode) -> Bool {
+        switch mode {
+        case .askForApproval:
+            return false
+        case .approveForMe:
+            return allowsAutomatically(command)
+        case .fullAccess:
+            return AgentCommandProposal.isValidCommand(command)
+        }
+    }
+
+    static func shouldAutoFetchWebpage(mode: AgentPermissionMode) -> Bool {
+        switch mode {
+        case .askForApproval:
+            return false
+        case .approveForMe, .fullAccess:
+            return true
+        }
     }
 }
 

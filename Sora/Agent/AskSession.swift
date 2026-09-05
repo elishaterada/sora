@@ -15,6 +15,9 @@ final class AskSession: ObservableObject {
             if !enabled { stop() }
         }
     }
+    @Published var permissionMode: AgentPermissionMode {
+        didSet { defaults.set(permissionMode.rawValue, forKey: AgentPermissionMode.defaultsKey) }
+    }
     @Published private(set) var messages: [AIMessage] = []
     @Published private(set) var isSending = false
     @Published private(set) var isRunningCommand = false
@@ -140,6 +143,7 @@ final class AskSession: ObservableObject {
         let selected = backends.first(where: { $0.id == saved })?.id ?? backends[0].id
         self.selectedProvider = selected
         self.enabled = defaults.bool(forKey: "ai.enabled")
+        self.permissionMode = AgentPermissionMode.stored(in: defaults)
         let legacy = selected == .openai ? defaults.string(forKey: "ai.model") : nil
         self.model = defaults.string(forKey: "ai.model.\(selected.rawValue)") ?? legacy ?? selected.defaultModel
     }
@@ -401,11 +405,22 @@ final class AskSession: ObservableObject {
         let message = messages.first(where: { $0.id == responseID })
         if agentDirectory != nil,
            let proposal = message?.commandProposal,
-           AgentCommandPermission.allowsAutomatically(proposal.command) {
+           AgentCommandPermission.shouldAutoRunCommand(proposal.command, mode: permissionMode) {
             runCommand(messageID: responseID)
-        } else if message?.webpageProposal != nil {
+        } else if message?.webpageProposal != nil,
+                  AgentCommandPermission.shouldAutoFetchWebpage(mode: permissionMode) {
             fetchWebpage(messageID: responseID)
         }
+    }
+
+    func dismissWebpage(messageID: UUID) {
+        guard let index = messages.firstIndex(where: { $0.id == messageID }),
+              var proposal = messages[index].webpageProposal,
+              proposal.status == .pending
+        else { return }
+        proposal.status = .dismissed
+        messages[index].webpageProposal = proposal
+        persist()
     }
 
     func fetchWebpage(messageID: UUID) {

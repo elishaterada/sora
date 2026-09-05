@@ -205,6 +205,7 @@ final class AskSessionTests: XCTestCase {
         let provider = ControlledProvider()
         let session = makeSession(provider)
         session.enabled = true
+        session.permissionMode = .approveForMe
         session.configureAgent(directory: URL(fileURLWithPath: "/private/tmp"))
         session.draft = "Show me the current directory"
         session.send()
@@ -225,10 +226,47 @@ final class AskSessionTests: XCTestCase {
         XCTAssertTrue(session.messages.last?.text.contains("Next") == true)
     }
 
+    func testAskForApprovalLeavesSafeCommandsPending() async {
+        let provider = ControlledProvider()
+        let session = makeSession(provider)
+        session.enabled = true
+        session.permissionMode = .askForApproval
+        session.configureAgent(directory: URL(fileURLWithPath: "/private/tmp"))
+        session.draft = "Show me the current directory"
+        session.send()
+        await waitFor { provider.requests.count == 1 }
+        provider.emit(.text("<SORA_COMMAND>{\"summary\":\"Read directory\",\"command\":\"pwd\"}</SORA_COMMAND>"))
+        provider.emit(.completed)
+        provider.finish()
+        await waitFor { !session.isSending }
+        XCTAssertEqual(session.messages.last?.commandProposal?.status, .pending)
+        XCTAssertNil(session.messages.last?.commandResult)
+        XCTAssertEqual(provider.requests.count, 1)
+    }
+
+    func testFullAccessAutoRunsCommandsThatNeedApprovalUnderSaferModes() async {
+        let provider = ControlledProvider()
+        let session = makeSession(provider)
+        session.enabled = true
+        session.permissionMode = .fullAccess
+        session.configureAgent(directory: URL(fileURLWithPath: "/private/tmp"))
+        session.draft = "Print hello"
+        session.send()
+        await waitFor { provider.requests.count == 1 }
+        provider.emit(.text("<SORA_COMMAND>{\"summary\":\"Say hello\",\"command\":\"printf hello\"}</SORA_COMMAND>"))
+        provider.emit(.completed)
+        provider.finish()
+        await waitFor { provider.requests.count == 2 }
+        XCTAssertEqual(session.messages.compactMap(\.commandResult).first?.output, "hello")
+        XCTAssertFalse(AgentCommandPermission.allowsAutomatically("printf hello"))
+        XCTAssertTrue(AgentCommandPermission.shouldAutoRunCommand("printf hello", mode: .fullAccess))
+    }
+
     func testAgentFeedsFailureBackAndStopsAtCommandLimit() async {
         let provider = ControlledProvider()
         let session = makeSession(provider)
         session.enabled = true
+        session.permissionMode = .approveForMe
         session.configureAgent(directory: URL(fileURLWithPath: "/private/tmp"))
         session.draft = "Help me inspect files"
         session.send()
@@ -253,10 +291,18 @@ final class AskSessionTests: XCTestCase {
     func testAutomaticCommandPolicyRejectsShellEscapesAndMutations() {
         for command in ["pwd", "ls -lah", "du -sh .", "find . -type f -print0 | xargs -0 du -h | sort -hr | head -20"] {
             XCTAssertTrue(AgentCommandPermission.allowsAutomatically(command), command)
+            XCTAssertTrue(AgentCommandPermission.shouldAutoRunCommand(command, mode: .approveForMe), command)
+            XCTAssertFalse(AgentCommandPermission.shouldAutoRunCommand(command, mode: .askForApproval), command)
         }
         for command in ["rm file", "find . -delete", "find . -exec rm {} +", "ls; rm file", "ls $(touch file)", "ls > file", "xargs sh", "ls | xargs sh", "ls\npwd", "curl example.com", "ls --help"] {
             XCTAssertFalse(AgentCommandPermission.allowsAutomatically(command), command)
+            XCTAssertFalse(AgentCommandPermission.shouldAutoRunCommand(command, mode: .approveForMe), command)
+            XCTAssertTrue(AgentCommandPermission.shouldAutoRunCommand(command, mode: .fullAccess) == AgentCommandProposal.isValidCommand(command), command)
         }
+        XCTAssertFalse(AgentCommandPermission.shouldAutoFetchWebpage(mode: .askForApproval))
+        XCTAssertTrue(AgentCommandPermission.shouldAutoFetchWebpage(mode: .approveForMe))
+        XCTAssertTrue(AgentCommandPermission.shouldAutoFetchWebpage(mode: .fullAccess))
+        XCTAssertEqual(AgentPermissionMode.stored(in: UserDefaults(suiteName: "sora-perm-\(UUID())")!), .askForApproval)
     }
 
     func testRunnerCapturesFailuresBoundsOutputAndStopsPipelines() async throws {
@@ -430,6 +476,7 @@ final class AskSessionTests: XCTestCase {
             webpageFetcher: FixedWebpageFetcher(page: page)
         )
         session.enabled = true
+        session.permissionMode = .approveForMe
         session.bindTab(UUID())
         session.beginTerminalAgent(question: "Summarize https://example.com/docs", directory: URL(fileURLWithPath: "/private/tmp"))
         await waitFor { provider.requests.count == 1 }
