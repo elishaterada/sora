@@ -11,11 +11,12 @@ sync, and a hosted backend remain deferred.
 At a ready shell prompt, type a clear conversational request such as
 `Help me find the largest files`. Sora labels the line **↵ agent** while
 typing. Press Return to cancel it as shell input and continue into Ask in the
-same terminal tab: recent scrollback stays visible above the conversation, the
-prompt is shown as `/agent …`, and **ESC for terminal** (or Escape) returns to
-the unchanged session. Press **Cmd+Return** to force a detected sentence to run
-in the shell. The canceled request may remain visible in terminal scrollback,
-but it is never submitted as a command. No separate Ask window is created.
+same terminal tab. Ask fills the tab (Escape returns to the unchanged
+terminal). Each terminal→agent handoff starts a fresh conversation for that
+tab; other tabs keep their own threads. Press **Cmd+Return** to force a
+detected sentence to run in the shell. The canceled request may remain visible
+in terminal scrollback, but it is never submitted as a command. No separate Ask
+window is created.
 
 Routing is conservative and local. Known command names, executable paths,
 assignments, shell operators, short input, and ambiguous text remain shell

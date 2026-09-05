@@ -26,10 +26,71 @@ final class AskSession: ObservableObject {
     private var runningMessageID: UUID?
     /// Set by Stop; completion stores any output and must not continue the agent loop.
     private var commandStopRequested = false
+    /// Tab-scoped transcripts. Keys are `tabID.provider`.
+    private var transcripts: [String: [AIMessage]] = [:]
+    private(set) var activeTabID: UUID?
+    /// Used before the workspace binds a real tab (tests and early Setup).
+    private let unboundTabID = UUID()
+
+    private var transcriptTabID: UUID { activeTabID ?? unboundTabID }
 
     func configureAgent(directory: URL?) {
         guard !isSending, !isRunningCommand else { return }
         agentDirectory = directory
+    }
+
+    /// Isolate Ask history per terminal tab. Switching tabs never shows another
+    /// tab's agent thread.
+    func bindTab(_ id: UUID) {
+        if activeTabID == id {
+            if !loaded { load() }
+            return
+        }
+        stashCurrentTranscript()
+        stop()
+        activeTabID = id
+        messages = transcripts[transcriptKey(tab: id, provider: selectedProvider)] ?? []
+        loaded = true
+        loadFailed = false
+        commandCount = 0
+        errorMessage = nil
+    }
+
+    func discardTab(_ id: UUID) {
+        for provider in AIBackendID.allCases {
+            transcripts.removeValue(forKey: transcriptKey(tab: id, provider: provider))
+        }
+        guard activeTabID == id else { return }
+        stop()
+        activeTabID = nil
+        messages = transcripts[transcriptKey(tab: unboundTabID, provider: selectedProvider)] ?? []
+        loaded = true
+    }
+
+    /// Terminal → agent routing always starts a fresh thread for the active tab.
+    func beginTerminalAgent(question: String, directory: URL?) {
+        let trimmed = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        stop()
+        messages = []
+        transcripts[transcriptKey(tab: transcriptTabID, provider: selectedProvider)] = []
+        webpage = nil
+        webpages[selectedProvider] = nil
+        draft = trimmed
+        agentDirectory = directory
+        commandCount = 0
+        errorMessage = nil
+        loaded = true
+        loadFailed = false
+        send()
+    }
+
+    private func transcriptKey(tab: UUID, provider: AIBackendID) -> String {
+        "\(tab.uuidString).\(provider.rawValue)"
+    }
+
+    private func stashCurrentTranscript() {
+        transcripts[transcriptKey(tab: transcriptTabID, provider: selectedProvider)] = messages
     }
     @Published private(set) var isUpdatingKey = false
     @Published private(set) var errorMessage: String?
@@ -69,6 +130,7 @@ final class AskSession: ObservableObject {
     func selectProvider(_ id: AIBackendID) {
         guard id != selectedProvider, backends[id] != nil else { return }
         stop()
+        stashCurrentTranscript()
         drafts[selectedProvider] = draft
         webpages[selectedProvider] = webpage
         selectedProvider = id
@@ -77,12 +139,11 @@ final class AskSession: ObservableObject {
             ?? (id == .openai ? defaults.string(forKey: "ai.model") : nil) ?? id.defaultModel
         draft = drafts[id] ?? ""
         webpage = webpages[id]
-        messages = []
-        loaded = false
+        messages = transcripts[transcriptKey(tab: transcriptTabID, provider: id)] ?? []
+        loaded = true
         loadFailed = false
         errorMessage = nil
         setupMessage = nil
-        load()
     }
 
     deinit { task?.cancel(); commandTask?.cancel(); commandRunner?.cancel() }
@@ -94,11 +155,9 @@ final class AskSession: ObservableObject {
     func load() {
         guard !loaded else { return }
         loaded = true
-        do { messages = try conversations.load() }
-        catch {
-            loadFailed = true
-            errorMessage = "The saved conversation could not be opened. Start a new conversation to replace it."
-        }
+        // Agent threads are tab-scoped in memory. Do not hydrate a shared
+        // cross-tab transcript from disk into the active pane.
+        messages = transcripts[transcriptKey(tab: transcriptTabID, provider: selectedProvider)] ?? []
     }
 
     func saveKey(_ key: String) async -> Bool {
@@ -249,9 +308,10 @@ final class AskSession: ObservableObject {
 
     func newConversation() {
         stop()
+        messages = []
+        transcripts[transcriptKey(tab: transcriptTabID, provider: selectedProvider)] = []
         do {
             try conversations.save([])
-            messages = []
             webpage = nil
             webpages[selectedProvider] = nil
             loadFailed = false
@@ -402,6 +462,7 @@ final class AskSession: ObservableObject {
     }
 
     private func persist() {
+        stashCurrentTranscript()
         do { try conversations.save(messages) }
         catch { errorMessage = "The conversation could not be saved: \(error.localizedDescription)" }
     }

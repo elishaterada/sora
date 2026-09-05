@@ -42,6 +42,7 @@ final class WorkspaceHostView: NSView {
         for id in panes.keys where !liveIDs.contains(id) {
             panes[id]?.removeFromSuperview()
             panes[id] = nil
+            ask.discardTab(id)
         }
 
         for tab in workspace.tabs {
@@ -50,7 +51,7 @@ final class WorkspaceHostView: NSView {
             if let existing = panes[tab.id] {
                 pane = existing
             } else {
-                pane = TerminalPaneView(surface: surface, ask: ask)
+                pane = TerminalPaneView(surface: surface, ask: ask, tabID: tab.id)
                 panes[tab.id] = pane
                 addSubview(pane)
             }
@@ -59,6 +60,7 @@ final class WorkspaceHostView: NSView {
             }
             pane.setActive(tab.id == workspace.selectedID)
         }
+        ask.bindTab(workspace.selectedID)
         layoutPanes()
         if agentTrigger != lastAgentTrigger {
             lastAgentTrigger = agentTrigger

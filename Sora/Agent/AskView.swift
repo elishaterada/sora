@@ -156,10 +156,10 @@ struct AskView: View {
 
     private var emptyState: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(inline ? "Continue from this terminal" : "What would you like to do?")
+            Text(inline ? "New agent conversation" : "What would you like to do?")
                 .font(inline ? .callout.weight(.medium) : .title3.weight(.medium))
             Text(inline
-                 ? "Ask about a command, describe a task, or paste an error. Escape returns to the same prompt."
+                 ? "This thread belongs to the current tab. Escape returns to the same terminal prompt."
                  : "Ask about a command, describe a task, or paste an error you want help understanding.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
