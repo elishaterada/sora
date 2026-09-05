@@ -14,9 +14,13 @@ typing. Press Return to cancel it as shell input and continue into Ask in the
 same terminal tab. Ask fills the tab (**ESC for terminal** returns to the
 unchanged session). After Escape, a summary strip above the sticky prompt shows
 the agent title (and latest follow-up); click it or press **⌘Y** to reopen that
-tab's thread. Each new terminal→agent handoff starts a fresh conversation for
-that tab; other tabs keep their own threads. Press **Cmd+Return** to force a
-detected sentence to run in the shell. The canceled request may remain visible
+tab's thread. Context chips are clickable Warp-style: working directory and git
+branch in the chrome/sticky bar open Reveal/Copy actions; agent replies link
+filesystem paths (click to Reveal in Finder); the Ask status model label opens
+Setup; proposed commands expose Copy. Each new terminal→agent handoff starts a
+fresh conversation for that tab; other tabs keep their own threads. Press
+**Cmd+Return** to force a detected sentence to run in the shell. The canceled
+request may remain visible
 in terminal scrollback, but it is never submitted as a command. No separate Ask
 window is created.
 

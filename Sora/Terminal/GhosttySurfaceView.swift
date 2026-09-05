@@ -735,6 +735,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         }
         stickyBar.update(
             path: path,
+            directory: cwd,
             branch: branch,
             line: line,
             predicted: predicted
