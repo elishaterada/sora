@@ -33,4 +33,34 @@ enum SoraTheme {
     static var terminalCTFont: CTFont {
         terminalFont
     }
+
+    /// SwiftUI body text sized to match the Ghostty grid (18pt).
+    static var agentBody: Font {
+        .system(size: terminalFontSize)
+    }
+
+    static var agentBodySemibold: Font {
+        .system(size: terminalFontSize, weight: .semibold)
+    }
+
+    /// Monospaced text at the same point size as the terminal.
+    static var agentMono: Font {
+        Font(terminalFont)
+    }
+
+    static var agentMonoSemibold: Font {
+        let bold = NSFont(name: "SFMono-Semibold", size: terminalFontSize)
+            ?? NSFont(name: "SF Mono", size: terminalFontSize)
+            ?? NSFont.monospacedSystemFont(ofSize: terminalFontSize, weight: .semibold)
+        return Font(bold)
+    }
+
+    /// Secondary labels ~70% of terminal size so chrome stays subordinate.
+    static var agentCaption: Font {
+        .system(size: terminalFontSize * 0.72, weight: .medium)
+    }
+
+    static var agentCaption2: Font {
+        .system(size: terminalFontSize * 0.64, weight: .medium)
+    }
 }

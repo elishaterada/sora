@@ -38,15 +38,15 @@ struct AgentResumeStripView: View {
             Button(action: onResume) {
                 HStack(spacing: 10) {
                     Image(systemName: "bubble.left.and.text.bubble.right.fill")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.system(size: SoraTheme.terminalFontSize * 0.67, weight: .semibold))
                         .foregroundStyle(Color.accentColor)
                     Text(summary.title)
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(SoraTheme.agentBodySemibold)
                         .foregroundStyle(.primary)
                         .lineLimit(1)
                     Spacer(minLength: 8)
                     Image(systemName: "arrow.right.circle")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.system(size: SoraTheme.terminalFontSize * 0.67, weight: .semibold))
                         .foregroundStyle(.secondary)
                 }
                 .padding(.horizontal, 14)
@@ -61,15 +61,15 @@ struct AgentResumeStripView: View {
                 Button(action: onResume) {
                     HStack(spacing: 10) {
                         Image(systemName: "arrow.turn.down.right")
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(.system(size: SoraTheme.terminalFontSize * 0.61, weight: .semibold))
                             .foregroundStyle(Color.accentColor.opacity(0.85))
                         Text(followUp)
-                            .font(.system(size: 12, weight: .medium))
+                            .font(SoraTheme.agentCaption)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                         Spacer(minLength: 8)
                         Image(systemName: "return")
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(.system(size: SoraTheme.terminalFontSize * 0.61, weight: .semibold))
                             .foregroundStyle(.tertiary)
                     }
                     .padding(.horizontal, 14)

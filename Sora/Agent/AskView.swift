@@ -47,7 +47,7 @@ struct AskView: View {
             }
 
             if let error = session.errorMessage {
-                Text(error).font(.caption).foregroundStyle(.red)
+                Text(error).font(SoraTheme.agentCaption).foregroundStyle(.red)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 16).padding(.bottom, 8)
                     .accessibilityLabel("AI error: \(error)")
@@ -99,14 +99,14 @@ struct AskView: View {
                             Image(systemName: "chevron.left")
                             Text("ESC for terminal")
                         }
-                        .font(.caption.weight(.semibold))
+                        .font(SoraTheme.agentCaption.weight(.semibold))
                         .foregroundStyle(Color.accentColor)
                     }
                     .buttonStyle(.plain)
                     .keyboardShortcut(.cancelAction)
                     .help("Return to the terminal session")
                 } else {
-                    Text("Ask Sora").font(.title2.weight(.semibold))
+                    Text("Ask Sora").font(SoraTheme.agentBodySemibold)
                 }
 
                 Spacer(minLength: 8)
@@ -124,7 +124,7 @@ struct AskView: View {
                             }
                         ]
                     )
-                    .font(.caption.weight(.medium))
+                    .font(SoraTheme.agentCaption)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: 280)
                 }
@@ -157,11 +157,11 @@ struct AskView: View {
     private var emptyState: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(inline ? "New agent conversation" : "What would you like to do?")
-                .font(inline ? .callout.weight(.medium) : .title3.weight(.medium))
+                .font(SoraTheme.agentBodySemibold)
             Text(inline
                  ? "This thread belongs to the current tab. Escape returns to the same terminal prompt."
                  : "Ask about a command, describe a task, or paste an error you want help understanding.")
-                .font(.caption)
+                .font(SoraTheme.agentCaption)
                 .foregroundStyle(.secondary)
             if !inline {
                 Button("How do I find the largest files in a folder?") {
@@ -169,6 +169,7 @@ struct AskView: View {
                     composerFocused = true
                 }
                 .buttonStyle(.link)
+                .font(SoraTheme.agentBody)
             }
         }
         .padding(.vertical, inline ? 8 : 28)
@@ -178,6 +179,7 @@ struct AskView: View {
         VStack(alignment: .leading, spacing: 8) {
             TextField(inline ? "Ask a follow up…" : "Ask about a command or paste an error…",
                       text: $session.draft, axis: inline ? .horizontal : .vertical)
+                .font(SoraTheme.agentBody)
                 .lineLimit(inline ? 1...3 : 2...5)
                 .textFieldStyle(.plain)
                 .focused($composerFocused)
@@ -186,10 +188,10 @@ struct AskView: View {
             HStack {
                 if !inline {
                     Text(session.selectedProvider.disclosure)
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(SoraTheme.agentCaption).foregroundStyle(.secondary)
                 } else {
                     Text("↵ send")
-                        .font(.caption2)
+                        .font(SoraTheme.agentCaption2)
                         .foregroundStyle(.tertiary)
                 }
                 Spacer()
@@ -257,7 +259,7 @@ struct AskView: View {
                 .lineLimit(1)
                 .foregroundStyle(.tertiary)
         }
-        .font(.caption2)
+        .font(SoraTheme.agentCaption2)
         .foregroundStyle(.secondary)
         .padding(.horizontal, 16)
         .padding(.bottom, 10)
@@ -270,19 +272,19 @@ struct AskView: View {
             AgentPermissionModePicker(mode: $session.permissionMode)
             if session.selectedProvider == .codex {
                 Text("Use the installed Codex CLI with your Codex / ChatGPT sign-in. Sora does not copy login tokens.")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(SoraTheme.agentCaption).foregroundStyle(.secondary)
                 HStack {
                     Button("Check Sign-In") { codexLogin.connect(signIn: false) }
                     Button("Sign In with ChatGPT") { codexLogin.connect(signIn: true) }
                     if codexLogin.isBusy { Button("Cancel") { codexLogin.cancel() } }
                 }
                 .disabled(session.isSending)
-                Text(codexLogin.status).font(.caption).foregroundStyle(.secondary)
+                Text(codexLogin.status).font(SoraTheme.agentCaption).foregroundStyle(.secondary)
             } else {
                 Text(session.selectedProvider == .openai
                      ? "Use your OpenAI API key. API usage is billed separately from ChatGPT."
                      : "Use your \(session.selectedProvider.name) key. Usage is billed by that service.")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(SoraTheme.agentCaption).foregroundStyle(.secondary)
                 HStack {
                     SecureField("\(session.selectedProvider.name) key", text: $keyDraft)
                     Button("Save Key") {
@@ -298,12 +300,13 @@ struct AskView: View {
                 ProgressView("Waiting for Keychain…").controlSize(.small)
             }
             TextField(session.selectedProvider == .codex ? "Model ID (blank uses Codex default)" : "Model ID", text: $session.model)
+                .font(SoraTheme.agentBody)
                 .disabled(session.isSending)
             if let message = session.setupMessage {
-                Text(message).font(.caption).foregroundStyle(.secondary)
+                Text(message).font(SoraTheme.agentCaption).foregroundStyle(.secondary)
             }
             Text("Credentials stay in macOS Keychain. Each provider has its own local conversation. The agent can run approved commands and fetch public HTTPS pages.")
-                .font(.caption).foregroundStyle(.secondary)
+                .font(SoraTheme.agentCaption).foregroundStyle(.secondary)
         }
         .textFieldStyle(.roundedBorder)
         .padding(16)
@@ -315,7 +318,7 @@ struct AskView: View {
                 userPrompt(message.text)
             } else {
                 HStack {
-                    Text("Sora").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    Text("Sora").font(SoraTheme.agentCaption.weight(.semibold)).foregroundStyle(.secondary)
                     Spacer()
                     if !message.text.isEmpty {
                         Button("Copy") {
@@ -323,7 +326,7 @@ struct AskView: View {
                             NSPasteboard.general.setString(message.text, forType: .string)
                         }
                         .buttonStyle(.borderless)
-                        .font(.caption)
+                        .font(SoraTheme.agentCaption)
                     }
                 }
                 if message.text.isEmpty && message.status == .streaming {
@@ -348,15 +351,15 @@ struct AskView: View {
             if let page = message.webpage {
                 DisclosureGroup("Webpage: \(page.title)") {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(page.url.absoluteString).font(.caption).textSelection(.enabled)
-                        if page.isExcerpt { Text("Excerpt from page").font(.caption).foregroundStyle(.secondary) }
-                        Text(page.text).font(.callout).textSelection(.enabled)
+                        Text(page.url.absoluteString).font(SoraTheme.agentCaption).textSelection(.enabled)
+                        if page.isExcerpt { Text("Excerpt from page").font(SoraTheme.agentCaption).foregroundStyle(.secondary) }
+                        Text(page.text).font(SoraTheme.agentBody).textSelection(.enabled)
                     }
                 }
             }
             if let state = message.commandState, state == "stopped" || state == "failed" {
                 Text((message.webpageProposal == nil ? "Command " : "Fetch ") + state)
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(SoraTheme.agentCaption).foregroundStyle(.secondary)
             }
             if let result = message.commandResult {
                 DisclosureGroup("Command output · exit \(result.exitCode)" + (result.truncated ? " · excerpt" : "")) {
@@ -377,7 +380,7 @@ struct AskView: View {
             }
             if message.status == .stopped || message.status == .failed {
                 Text(message.status == .stopped ? "Stopped — partial answer" : "Answer incomplete")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(SoraTheme.agentCaption).foregroundStyle(.secondary)
             }
         }
     }
@@ -387,7 +390,7 @@ struct AskView: View {
             HStack(spacing: 8) {
                 Image(systemName: proposal.status == .failed ? "link.badge.plus" : "link")
                 Text(webpageStatusTitle(proposal))
-                    .font(.callout.weight(.semibold))
+                    .font(SoraTheme.agentBodySemibold)
                     .lineLimit(2)
                 Spacer(minLength: 8)
                 if proposal.status == .pending {
@@ -413,7 +416,7 @@ struct AskView: View {
                 }
             }
             Text(proposal.url)
-                .font(.caption)
+                .font(SoraTheme.agentCaption)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
                 .textSelection(.enabled)
@@ -435,13 +438,13 @@ struct AskView: View {
     private func userPrompt(_ text: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text("/agent")
-                .font(.system(.body, design: .monospaced).weight(.semibold))
+                .font(SoraTheme.agentMonoSemibold)
                 .foregroundStyle(Color.accentColor)
                 .contextMenu {
                     Button("Copy /agent") { PathActions.copy("/agent") }
                 }
             Text(text)
-                .font(.system(.body, design: .monospaced))
+                .font(SoraTheme.agentMono)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contextMenu {
@@ -457,7 +460,7 @@ struct AskView: View {
             HStack(spacing: 8) {
                 Text(proposal.status == .pending ? "OK if I run this command and read the output?" :
                      proposal.status == .approved ? "Running command" : "Command dismissed")
-                    .font(.callout.weight(.semibold))
+                    .font(SoraTheme.agentBodySemibold)
                 Spacer(minLength: 8)
                 if proposal.status == .pending {
                     Button {
@@ -483,7 +486,7 @@ struct AskView: View {
             }
             if proposal.status == .pending {
                 Text(proposal.summary)
-                    .font(.caption)
+                    .font(SoraTheme.agentCaption)
                     .foregroundStyle(.secondary)
             }
             ScrollView(.horizontal) {
@@ -492,7 +495,7 @@ struct AskView: View {
                     help: "Command actions",
                     actions: ContextChipActions.command(proposal.command)
                 )
-                .font(.system(.body, design: .monospaced))
+                .font(SoraTheme.agentMono)
                 .padding(10)
             }
             .background(Color.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 8))
@@ -540,29 +543,29 @@ private struct AgentPermissionModePicker: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("How should agent actions be approved?")
-                .font(.callout.weight(.semibold))
+                .font(SoraTheme.agentBodySemibold)
             ForEach(AgentPermissionMode.allCases) { option in
                 Button {
                     mode = option
                 } label: {
                     HStack(alignment: .top, spacing: 10) {
                         Image(systemName: option.systemImage)
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.system(size: SoraTheme.terminalFontSize * 0.78, weight: .semibold))
                             .foregroundStyle(option == mode ? Color.accentColor : .secondary)
                             .frame(width: 20)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(option.title)
-                                .font(.callout.weight(.semibold))
+                                .font(SoraTheme.agentBodySemibold)
                                 .foregroundStyle(option == mode ? Color.accentColor : .primary)
                             Text(option.detail)
-                                .font(.caption)
+                                .font(SoraTheme.agentCaption)
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         Spacer(minLength: 8)
                         if option == mode {
                             Image(systemName: "checkmark")
-                                .font(.system(size: 12, weight: .bold))
+                                .font(.system(size: SoraTheme.terminalFontSize * 0.67, weight: .bold))
                                 .foregroundStyle(Color.accentColor)
                         }
                     }
