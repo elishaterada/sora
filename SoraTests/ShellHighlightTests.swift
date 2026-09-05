@@ -25,6 +25,31 @@ final class ShellHighlightTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(greens.count, 2)
     }
 
+    func testDisablesPasteStandoutThatPaintsSpacesAsBlocks() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let script = root.appendingPathComponent("Sora/Resources/zsh/highlight.zsh")
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        process.arguments = [
+            "-f", "-c",
+            "source \"$1\"; print -r -- ${zle_highlight[(r)paste:*]}",
+            "sora-highlight",
+            script.path
+        ]
+        let stdout = Pipe()
+        let stderr = Pipe()
+        process.standardOutput = stdout
+        process.standardError = stderr
+        try process.run()
+        process.waitUntilExit()
+        XCTAssertEqual(process.terminationStatus, 0, String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? "")
+        let output = String(data: stdout.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        XCTAssertEqual(output, "paste:none")
+    }
+
     private func highlight(_ buffer: String) throws -> [String] {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
