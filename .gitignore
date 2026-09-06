@@ -40,5 +40,9 @@ credentials.json
 # Rebuild with ./Scripts/build-ghosttykit.sh
 Vendor/ghostty/
 
+# Local package output (./Scripts/package-app.sh)
+dist/
+.derivedData-package/
+
 # Impeccable critique snapshots (local UX review archive)
 .impeccable/

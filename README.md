@@ -59,6 +59,20 @@ xcodebuild -project Sora.xcodeproj -scheme Sora -configuration Debug -destinatio
 
 The first launch starts a login `zsh` in a single window. Cmd+N opens a new tab; Cmd+W closes the current tab. The app is unsandboxed and ad-hoc signed for local use. Launch creates `~/.hushlogin` if missing so `login(1)` does not print the last-login banner.
 
+## Shareable zip (friends / other Macs)
+
+No Apple Developer Program required. CI builds an **ad-hoc Apple Silicon** zip and attaches it to a GitHub Release. Gatekeeper will warn; that is expected until notarization.
+
+```sh
+# Local package (same script CI runs)
+./Scripts/package-app.sh
+# → dist/Sora-<version>-<build>-macos-arm64.zip
+```
+
+**CI:** push a tag `v0.1.0`, or run **Actions → Release zip → Run workflow**. Download the zip from the Release (or the workflow artifact). First open: right-click → Open, or `xattr -cr Sora.app`.
+
+Intel Macs are not covered by the default `macos-26` runner artifact.
+
 Ghostty is pinned to commit `c81f0b26871c7fbbe2fc35549fdad1f64ed29094`. See [`docs/libghostty-integration.md`](docs/libghostty-integration.md).
 
 ## Documents
