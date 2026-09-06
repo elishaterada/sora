@@ -108,12 +108,12 @@ snapshot from a public HTTPS HTML/text page, attach it to one Ask message, and
 inspect the saved source and text in conversation history. Pages are never
 rendered or executed. Terminal output attachment remains future work.
 
-**Inline routing slice (2026-09-04):** a conservative local classifier marks
-clear conversational text at a ready zsh prompt and routes it to Ask inside the
-same terminal tab. Cmd+Return forces shell submission, `/agent ` forces AI, and
-ambiguous input remains with the shell. Routing is disabled while a foreground
-command or interactive program owns input. This slice does not add tools or
-autonomous execution.
+**Inline routing slice (2026-09-04, catch-all 2026-09-05):** a local classifier
+marks conversational text and unresolved commands at a ready zsh prompt and
+routes them to Ask inside the same terminal tab. Cmd+Return forces shell
+submission, `/agent ` forces AI, and shell syntax stays with the shell.
+Routing is disabled while a foreground command or interactive program owns
+input. This slice does not add tools or autonomous execution.
 
 **Command approval slice (2026-09-04):** providers can propose one validated,
 single-line zsh command through Sora's provider-independent response envelope.

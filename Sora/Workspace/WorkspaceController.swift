@@ -111,6 +111,13 @@ final class WorkspaceController: ObservableObject {
         persist(model.snapshot())
     }
 
+    /// Push Settings font size into every live Ghostty surface.
+    func applyFontSizeToAllSurfaces(_ points: CGFloat = TerminalPreferences.fontSize) {
+        for view in surfaces.values {
+            view.applyFontSize(points)
+        }
+    }
+
     private func publishAndPersist() {
         publish()
         persist(model.snapshot())

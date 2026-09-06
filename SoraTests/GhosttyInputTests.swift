@@ -89,7 +89,7 @@ final class GhosttyInputTests: XCTestCase {
         XCTAssertLessThan(baseline, cellHeight)
     }
     func testSuggestionGlyphsStayInTheSameColumnsWhileTypingAndBackspacing() throws {
-        let anchor = GhostTextAnchor(origin: NSPoint(x: 30, y: 100), cellWidth: 10)
+        let anchor = GhostTextAnchor(originX: 30, cellWidth: 10)
         var buffer = PromptBuffer()
         let fullCommand = "ls -lah"
         let view = GhostTextView()
@@ -97,8 +97,10 @@ final class GhosttyInputTests: XCTestCase {
         for prefix in ["ls", "ls ", "ls -", "ls -l", "ls -la", "ls -l", "ls -", "ls ", "ls"] {
             buffer.apply(.reset)
             buffer.apply(.insert(prefix))
-            let origin = try XCTUnwrap(anchor.position(for: buffer, viewWidth: 800))
+            let x = try XCTUnwrap(anchor.positionX(for: buffer, viewWidth: 800))
             let suffix = String(fullCommand.dropFirst(prefix.count))
+            // Live IME supplies Y; tests pin a stable row.
+            let origin = NSPoint(x: x, y: 100)
             view.show(text: suffix, origin: origin, cellWidth: 10, cellHeight: 20, font: font)
             // The final 'h' must not shift as its prefix is typed or erased.
             XCTAssertEqual(view.frame.minX + CGFloat(suffix.count - 1) * 10, 90)
@@ -108,13 +110,30 @@ final class GhosttyInputTests: XCTestCase {
     }
 
     func testSuggestionAnchorRejectsUntrackedWideAndWrappedInput() {
-        let anchor = GhostTextAnchor(origin: NSPoint(x: 30, y: 100), cellWidth: 10)
+        let anchor = GhostTextAnchor(originX: 30, cellWidth: 10)
         var buffer = PromptBuffer()
         buffer.apply(.insert("ls"))
-        XCTAssertNil(anchor.position(for: buffer, viewWidth: 55))
+        XCTAssertNil(anchor.positionX(for: buffer, viewWidth: 55))
         buffer.apply(.insert("猫"))
-        XCTAssertNil(anchor.position(for: buffer, viewWidth: 800))
+        XCTAssertNil(anchor.positionX(for: buffer, viewWidth: 800))
         buffer.apply(.stopTracking)
-        XCTAssertNil(anchor.position(for: buffer, viewWidth: 800))
+        XCTAssertNil(anchor.positionX(for: buffer, viewWidth: 800))
+    }
+
+    func testSuggestionUsesLiveIMERowNotStaleAnchorY() {
+        // Anchored X advances with the buffer; Y must come from the live caret
+        // so a mid-screen stale value cannot pin the overlay.
+        let anchor = GhostTextAnchor(originX: 30, cellWidth: 10)
+        var buffer = PromptBuffer()
+        buffer.apply(.insert("Tell me"))
+        let x = anchor.positionX(for: buffer, viewWidth: 800)
+        XCTAssertEqual(x, 100)
+        let liveY = GhosttyInput.ghostTextOrigin(
+            imeX: 104, imeY: 40, viewHeight: 500, cellWidth: 10
+        ).y
+        XCTAssertEqual(liveY, 460)
+        let origin = NSPoint(x: max(x ?? 0, 104 - 5), y: liveY)
+        XCTAssertEqual(origin.y, 460)
+        XCTAssertGreaterThan(origin.x, 30)
     }
 }

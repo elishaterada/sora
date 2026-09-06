@@ -112,20 +112,22 @@ enum GhosttyInput {
     }
 }
 
-/// A tracked single-line prompt has a fixed grid origin. Shell redraws can
+/// A tracked single-line prompt has a fixed grid column origin. Shell redraws can
 /// temporarily move the live cursor backwards, so never anchor a new suffix
-/// to those intermediate cursor positions.
+/// to those intermediate cursor X positions. Row (Y) always comes from the
+/// live IME point so resize / viewport changes cannot leave the overlay mid-screen.
 struct GhostTextAnchor {
-    let origin: NSPoint
+    /// AppKit X of column 0 of the tracked prompt (leading edge of the first cell).
+    let originX: CGFloat
     let cellWidth: CGFloat
 
-    func position(for buffer: PromptBuffer, viewWidth: CGFloat) -> NSPoint? {
+    func positionX(for buffer: PromptBuffer, viewWidth: CGFloat) -> CGFloat? {
         guard buffer.isTracking, cellWidth > 0,
               buffer.text.unicodeScalars.allSatisfy({ $0.value >= 0x20 && $0.value < 0x7f })
         else { return nil }
-        let x = origin.x + CGFloat(buffer.text.count) * cellWidth
+        let x = originX + CGFloat(buffer.text.count) * cellWidth
         // Wrapped input needs shell-authoritative line geometry. Don't guess.
         guard x + cellWidth <= viewWidth else { return nil }
-        return NSPoint(x: x, y: origin.y)
+        return x
     }
 }

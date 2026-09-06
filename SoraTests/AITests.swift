@@ -5,31 +5,69 @@ final class OpenAIProviderTests: XCTestCase {
     func testCommandProposalEnvelopeIsStrictAndSingleLine() throws {
         let valid = #"<SORA_COMMAND>{"summary":"List the largest files without changing them.","command":"find . -type f -print | head"}</SORA_COMMAND>"#
         XCTAssertEqual(
-            AgentCommandProposalParser.parse(valid),
+            AgentCommandProposalParser.match(valid)?.proposal,
             AgentCommandProposal(
                 summary: "List the largest files without changing them.",
                 command: "find . -type f -print | head"
             )
         )
-        XCTAssertTrue(AgentCommandProposalParser.isStreamingEnvelope("<SORA_"))
-        XCTAssertTrue(AgentCommandProposalParser.isStreamingEnvelope("<SORA_COMMAND>{"))
-        XCTAssertNil(AgentCommandProposalParser.parse("Run this:\n\(valid)"))
-        XCTAssertNil(AgentCommandProposalParser.parse(#"<SORA_COMMAND>{"summary":"Run it","command":"pwd\nwhoami"}</SORA_COMMAND>"#))
-        XCTAssertNil(AgentCommandProposalParser.parse(#"<SORA_COMMAND>{"summary":"","command":"pwd"}</SORA_COMMAND>"#))
+        XCTAssertNil(AgentCommandProposalParser.match(#"<SORA_COMMAND>{"summary":"Run it","command":"pwd\nwhoami"}</SORA_COMMAND>"#))
+        XCTAssertNil(AgentCommandProposalParser.match(#"<SORA_COMMAND>{"summary":"","command":"pwd"}</SORA_COMMAND>"#))
         XCTAssertFalse(AgentCommandProposal.isValidCommand("pwd\u{1B}"))
         XCTAssertFalse(AgentCommandProposal.isValidCommand("echo safe\u{202E}txt"))
+    }
+
+    func testEnvelopeIsFoundWhenTheModelWrapsItInProse() throws {
+        let valid = #"<SORA_COMMAND>{"summary":"List the largest files.","command":"find . -type f -print | head"}</SORA_COMMAND>"#
+        let match = try XCTUnwrap(AgentCommandProposalParser.match("Run this:\n\(valid)\nThen review it."))
+        XCTAssertEqual(match.proposal.command, "find . -type f -print | head")
+        XCTAssertEqual(match.prose, "Run this:\n\nThen review it.")
+
+        // Two envelopes leave the intent ambiguous.
+        XCTAssertNil(AgentCommandProposalParser.match("\(valid)\n\(valid)"))
+    }
+
+    func testEnvelopeWithUnescapedQuotesIsRecoveredRatherThanShownRaw() throws {
+        // Verbatim shape from a Homebrew install proposal: the inner quotes in
+        // `command` are unescaped, so strict JSON decoding fails.
+        let text = #"<SORA_COMMAND>{"summary":"Install Homebrew so yt-dlp can be installed afterward","command":"/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""} </SORA_COMMAND>"#
+        let match = try XCTUnwrap(AgentCommandProposalParser.match(text))
+        XCTAssertEqual(match.proposal.summary, "Install Homebrew so yt-dlp can be installed afterward")
+        XCTAssertEqual(
+            match.proposal.command,
+            #"/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)""#
+        )
+        XCTAssertTrue(match.prose.isEmpty)
+    }
+
+    func testRecoveryStillRejectsMultiLineCommands() {
+        let text = #"<SORA_COMMAND>{"summary":"Two steps","command":"pwd\nwhoami "and" more"}</SORA_COMMAND>"#
+        XCTAssertNil(AgentCommandProposalParser.match(text))
+    }
+
+    func testProseBeforeEnvelopeHidesCompleteAndPartialTags() {
+        XCTAssertNil(AgentCommandProposalParser.proseBeforeEnvelope(in: "Just an answer."))
+        XCTAssertEqual(
+            AgentCommandProposalParser.proseBeforeEnvelope(in: "Here we go. <SORA_COMMAND>{\"summ"),
+            "Here we go."
+        )
+        // Mid-stream the tag itself arrives in pieces.
+        XCTAssertEqual(
+            AgentCommandProposalParser.proseBeforeEnvelope(in: "Here we go. <SORA_"),
+            "Here we go."
+        )
     }
 
     func testWebpageProposalEnvelopeRequiresPublicHTTPS() {
         let valid = #"<SORA_WEBPAGE>{"summary":"Read the docs landing page","url":"https://example.com/docs"}</SORA_WEBPAGE>"#
         XCTAssertEqual(
-            AgentWebpageProposalParser.parse(valid),
+            AgentWebpageProposalParser.match(valid)?.proposal,
             AgentWebpageProposal(summary: "Read the docs landing page", url: "https://example.com/docs")
         )
-        XCTAssertTrue(AgentWebpageProposalParser.isStreamingEnvelope("<SORA_WEBPAGE>"))
-        XCTAssertNil(AgentWebpageProposalParser.parse(#"<SORA_WEBPAGE>{"summary":"Local","url":"http://example.com"}</SORA_WEBPAGE>"#))
-        XCTAssertNil(AgentWebpageProposalParser.parse(#"<SORA_WEBPAGE>{"summary":"Local","url":"https://localhost/docs"}</SORA_WEBPAGE>"#))
-        XCTAssertNil(AgentWebpageProposalParser.parse(#"<SORA_WEBPAGE>{"summary":"","url":"https://example.com"}</SORA_WEBPAGE>"#))
+        XCTAssertEqual(AgentWebpageProposalParser.proseBeforeEnvelope(in: "<SORA_WEBPAGE>"), "")
+        XCTAssertNil(AgentWebpageProposalParser.match(#"<SORA_WEBPAGE>{"summary":"Local","url":"http://example.com"}</SORA_WEBPAGE>"#))
+        XCTAssertNil(AgentWebpageProposalParser.match(#"<SORA_WEBPAGE>{"summary":"Local","url":"https://localhost/docs"}</SORA_WEBPAGE>"#))
+        XCTAssertNil(AgentWebpageProposalParser.match(#"<SORA_WEBPAGE>{"summary":"","url":"https://example.com"}</SORA_WEBPAGE>"#))
     }
 
     func testGrokRequestUsesDirectXAIEndpointAndExplicitConversation() throws {
@@ -300,7 +338,7 @@ final class AskSessionTests: XCTestCase {
             XCTAssertTrue(AgentCommandPermission.shouldAutoRunCommand(command, mode: .fullAccess) == AgentCommandProposal.isValidCommand(command), command)
         }
         XCTAssertFalse(AgentCommandPermission.shouldAutoFetchWebpage(mode: .askForApproval))
-        XCTAssertTrue(AgentCommandPermission.shouldAutoFetchWebpage(mode: .approveForMe))
+        XCTAssertFalse(AgentCommandPermission.shouldAutoFetchWebpage(mode: .approveForMe))
         XCTAssertTrue(AgentCommandPermission.shouldAutoFetchWebpage(mode: .fullAccess))
         XCTAssertEqual(AgentPermissionMode.stored(in: UserDefaults(suiteName: "sora-perm-\(UUID())")!), .askForApproval)
     }
@@ -316,6 +354,42 @@ final class AskSessionTests: XCTestCase {
         let timed = try await AgentCommandRunner().run(command: "sleep 30 | cat", directory: directory, timeout: 0.1)
         XCTAssertTrue(timed.interrupted)
         XCTAssertNotEqual(timed.exitCode, 0)
+    }
+
+    func testRunnerSeesToolsOnTheLoginShellSearchPath() async throws {
+        // Regression: a hardcoded /usr/bin PATH hid Homebrew, so the agent
+        // reported installed tools as missing and offered to reinstall them.
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("sora-path-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let tool = directory.appendingPathComponent("sora-fixture-tool")
+        try "#!/bin/sh\necho fixture\n".write(to: tool, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: tool.path)
+
+        let runner = AgentCommandRunner(searchPath: "\(directory.path):/usr/bin:/bin")
+        let found = try await runner.run(command: "sora-fixture-tool", directory: directory)
+        XCTAssertEqual(found.exitCode, 0)
+        XCTAssertEqual(found.output.trimmingCharacters(in: .whitespacesAndNewlines), "fixture")
+
+        let hidden = try await AgentCommandRunner(searchPath: "/usr/bin:/bin")
+            .run(command: "sora-fixture-tool", directory: directory)
+        XCTAssertNotEqual(hidden.exitCode, 0)
+    }
+
+    func testLoginShellPathParsingAndResolution() {
+        XCTAssertEqual(
+            LoginShellPath.parse("noise\(LoginShellPath.beginMarker)/opt/homebrew/bin:/usr/bin\(LoginShellPath.endMarker)"),
+            "/opt/homebrew/bin:/usr/bin"
+        )
+        XCTAssertNil(LoginShellPath.parse("no markers here"))
+        XCTAssertNil(LoginShellPath.parse("\(LoginShellPath.beginMarker)\(LoginShellPath.endMarker)"))
+        // A path spanning lines is malformed.
+        XCTAssertNil(LoginShellPath.parse("\(LoginShellPath.beginMarker)/usr/bin\n/bin\(LoginShellPath.endMarker)"))
+        // The real shell on this machine must at least return the system path.
+        let resolved = try? XCTUnwrap(LoginShellPath.resolve())
+        XCTAssertTrue(resolved?.contains("/usr/bin") == true, "resolved path: \(resolved ?? "nil")")
+        XCTAssertTrue(LoginShellPath.value.contains("/usr/bin"))
     }
 
     func testCancelKillsPipelineWithoutWaitingForTimeout() async throws {
@@ -476,7 +550,7 @@ final class AskSessionTests: XCTestCase {
             webpageFetcher: FixedWebpageFetcher(page: page)
         )
         session.enabled = true
-        session.permissionMode = .approveForMe
+        session.permissionMode = .fullAccess
         session.bindTab(UUID())
         session.beginTerminalAgent(question: "Summarize https://example.com/docs", directory: URL(fileURLWithPath: "/private/tmp"))
         await waitFor { provider.requests.count == 1 }

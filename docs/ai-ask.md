@@ -10,11 +10,12 @@ sync, and a hosted backend remain deferred.
 
 At a ready shell prompt, type a clear conversational request such as
 `Help me find the largest files`. Sora labels the line **↵ agent** while
-typing. Press Return to cancel it as shell input and continue into Ask in the
-same terminal tab. Ask fills the tab (**ESC for terminal** returns to the
-unchanged session). After Escape, a summary strip above the sticky prompt shows
-the agent title (and latest follow-up); click it or press **⌘Y** to reopen that
-tab's thread. Context chips are clickable Warp-style: working directory and git
+typing. Press Return to cancel it as shell input and continue into Agent in the
+same terminal tab. Agent opens as a translucent overlay on the live grid (the
+Metal surface stays visible underneath). **ESC for terminal** dismisses the
+overlay without stopping a running answer. A reserved 36pt resume slot above
+the sticky prompt shows the agent title when you return; click it or press
+**⌘Y** to reopen. Context chips are clickable: working directory and git
 branch in the chrome/sticky bar open Reveal/Copy actions; agent replies link
 filesystem paths (click to Reveal in Finder); the Ask status model label opens
 Setup; proposed commands expose Copy. Each new terminal→agent handoff starts a
@@ -24,19 +25,23 @@ request may remain visible
 in terminal scrollback, but it is never submitted as a command. No separate Ask
 window is created.
 
-Routing is conservative and local. Known command names, executable paths,
-assignments, shell operators, short input, and ambiguous text remain shell
-input. Start a line with `/agent ` to force command-like text to AI; the prefix is
-removed before sending. Routing only occurs at a ready zsh prompt. Input to a
+Routing is local and recovery-oriented. Conversational prefixes (`help me`,
+`how many`, …), `/agent ` (prefix stripped), and any line whose primary command
+is not a zsh builtin and not found on the login-shell PATH go to the agent —
+so a mistyped or not-yet-installed tool becomes an install/fix suggestion
+instead of `zsh: command not found`. Clear shell syntax (paths, pipes,
+redirects, `VAR=value`) stays with the shell even when a token is missing.
+Aliases and shell functions are invisible to the pre-check; **Cmd+Return**
+forces shell. Routing only occurs at a ready zsh prompt. Input to a
 foreground command, REPL, or other program always goes to that program.
 
-Open **Agent** in the chrome bar or sidebar, use **AI → Ask Sora**, or press
-**Cmd+Shift+A** to open the inline Ask panel without submitting terminal text.
+Open **Agent** in the chrome bar or sidebar, use **Agent → Open Agent**, or press
+**Cmd+Shift+A** to open the inline Agent panel without submitting terminal text.
 After an agent turn, that tab's sidebar title becomes the first question (for
 example `Find the largest files`) with an agent icon so sessions stay
 distinguishable; shell tabs still show the folder name or last command.
-AI starts disabled. Select a provider, open
-Setup, enable AI, and configure credentials and a model:
+Agent starts disabled. Select a provider, open
+Setup, enable Agent, and configure credentials and a model:
 
 | Provider | Authentication | Default model |
 | --- | --- | --- |
@@ -58,24 +63,51 @@ Conversations are not transferred between services. Only explicitly entered Ask
 text and prior completed Ask turns are sent. There is no automatic terminal,
 repository, working-directory, environment, or command-history collection.
 The local classifier makes no AI calls. A terminal sentence is sent only after
-the **↵ agent** label appears and the user presses Return.
+the **↵ agent** label appears and the user presses Return. Sora classifies the
+line zsh actually holds, mirrored from its ZLE buffer, so clicks, arrow keys,
+history recall, completion, and paste cannot desync routing. This is what keeps
+conversational requests containing URLs with `?` from reaching the shell, where
+zsh would fail to glob them.
 
 ### Persistent agent actions
+
+When a typed line routes to the agent, zsh closes the block the same way it
+closes a command run, labelled `(agent)` instead of a duration. Sora sends
+Ctrl+6 through `ghostty_surface_key`; Ghostty encodes that as ASCII RS
+(0x1E), which `command-blocks.zsh` binds to the handoff widget. A bare RS
+codepoint writes nothing to the PTY (Ghostty only emits C0 via ctrlSeq), and
+`ghostty_surface_text` is bracketed paste so a Unicode sentinel tried earlier
+was inserted as a visible diamond and never ran the widget. The widget only
+raises a flag and calls `send-break`, leaving the rule to `precmd`, because
+printing from inside a widget desynchronizes ZLE's row bookkeeping and its
+redraw erases the rule. Without Sora's zsh integration loaded the app falls
+back to Control-C and no rule is drawn.
 
 Agent mode stays visible until **ESC for terminal**. Each command starts in the
 active tab's directory captured when its proposal was generated. Commands use a
 separate noninteractive zsh, not the user's PTY; interactive input, shell aliases,
-and persistent cd/environment changes are unsupported. The command runner uses
-system executables on a fixed PATH and skips user zsh configuration.
+and persistent cd/environment changes are unsupported. The runner still skips
+every zsh startup file (`zsh -f` with `ZDOTDIR=/dev/null`), so no alias or
+function from the user's dotfiles can change what a proposed command means.
+
+Its search path, however, is the user's. A fixed `/usr/bin:/bin:/usr/sbin:/sbin`
+made the agent blind to Homebrew, pipx, mise, and anything else installed
+outside the system prefixes: it reported present tools as missing and offered to
+reinstall them, which is worse than a missing answer. `LoginShellPath` asks the
+user's login shell for `$PATH` once per launch (interactive first, since many
+people extend PATH in `.zshrc`) and falls back to a list including both Homebrew
+prefixes if the shell cannot be reached. Borrowing the search path is a
+deliberate trade: a hostile entry in the user's own PATH would apply here too,
+but it already applies to every command they type in the terminal.
 
 Sora defaults to **Ask for approval**: every proposed command and webpage fetch
 waits for an explicit decision. Switch to **Approve for me** to auto-run the
 narrow read-only listing grammar (pwd, constrained ls/du, find -type f
 -print/-print0, and constrained pipelines through xargs -0 du -h, sort, and
-head) and auto-fetch public HTTPS pages; anything outside that grammar still
-needs **Run Command**. **Full access** runs any validated proposal without
-asking. The mode is stored in UserDefaults and can be changed from Setup or the
-Ask status bar at any time. Substitutions, redirections, and shell escapes are
+head); webpage fetches and anything outside that grammar still need approval.
+**Full access** runs any validated proposal and fetches pages without asking.
+The mode is stored in UserDefaults and can be changed from Setup or the
+Agent status bar at any time. Substitutions, redirections, and shell escapes are
 never treated as routine under Approve for me. Approval is persisted before
 execution. This is a conservative permission check, not an OS sandbox.
 Approved commands have the user's filesystem permissions.
@@ -136,8 +168,11 @@ without waiting for a full pipe buffer. Stderr and raw RPC errors are not logged
 
 - `Agent/AIProvider.swift`: internal messages, requests, events, and errors.
   Provider-owned schemas do not cross this boundary.
-- `Agent/PromptIntentClassifier.swift`: local conservative routing between
-  shell input and an explicit Ask submission. It has no provider dependency.
+- `Agent/PromptIntentClassifier.swift`: local routing between shell input and
+  Ask. Catch-all uses `ShellCommandResolver` (PATH + builtins) so unknown
+  commands become agent turns. No provider dependency.
+- `Agent/ShellCommandResolver.swift`: resolves the primary command against the
+  login-shell PATH and a fixed zsh builtin set before Return.
 - `Agent/AgentCommandProposal.swift`: provider-independent proposal validation,
   strict envelope parsing, and persisted approve/dismiss state.
 - `Agent/AskSession.swift`: explicit send, cancellation, completed-turn context,
@@ -205,7 +240,39 @@ from that Gateway model. Other live responses and browser login completion still
 require user-supplied API keys or ChatGPT sign-in. The installed Codex currently reports
 no Keychain sign-in.
 
-The UI displays selectable plain text, including Markdown source. There is one
+The UI renders assistant answers as Markdown (headings, lists, inline code,
+links) via Foundation `AttributedString`. That parser records block structure in
+`presentationIntent` without emitting newlines, so `AgentMarkdown` splits runs
+into `AgentMarkdownBlock` values and `AgentMarkdownText` lays each one out as its
+own view; rendering the string as a single `Text` ran blocks together. Inline
+code is tinted peach rather than boxed in a background fill, which kept
+identifier-dense paragraphs unreadable.
+
+Filesystem paths the agent mentions become `file://` links that reveal in
+Finder, resolved against the agent working directory. A whole code span counts
+as one token so paths containing spaces resolve, bare words like `ffmpeg` are
+left alone even when a file of that name exists, and the target must exist so a
+link never dead-ends. Fenced blocks are skipped: they hold commands to read and
+copy, not references. macOS makes a selectable `Text` and a tappable link
+mutually exclusive, so only blocks that contain links drop
+`textSelection(.enabled)`; code blocks and link-free prose stay selectable, and
+every message keeps its Copy button.
+
+Envelope handling is deliberately tolerant, because the raw `<SORA_COMMAND>`
+wire format used to reach the transcript whenever a model deviated from the
+prompt. `AgentEnvelope` finds a single envelope anywhere in a reply and keeps
+the surrounding prose as the answer, recovers values when a shell one-liner
+leaves inner quotes unescaped and strict JSON decoding fails, and hides a
+partially streamed tag behind the "Preparing a command…" status. Two envelopes
+in one reply are ambiguous and are refused. When an envelope is present but
+unreadable, the transcript shows the prose and the panel reports that the
+request was malformed rather than printing the protocol text. Recovery never
+lowers the permission bar: the command still appears in full in the approval
+card, and only routine read-only commands auto-run.
+
+The system prompt asks for scannable
+GitHub-flavored Markdown on normal replies; command and webpage envelopes stay
+plain. Command output remains monospace plain text with path links. There is one
 conversation per provider and no transcript browser. General terminal scrollback
 attachments and interactive agent commands remain future work.
 Grok connects directly to `https://api.x.ai/v1/chat/completions` using Bearer
@@ -221,15 +288,13 @@ key. No external dependency was added.
 
 Prompt tracking recognizes macOS control characters for Control-C and Control-U,
 so cancelling or clearing a line allows the next conversational prompt to route
-to Ask AI. Clicking an empty ready prompt (or the sticky footer) focuses the
-terminal and keeps tracking, so typing `Help me find the largest files` still
-shows **↵ agent** and Return opens Ask. Clicking after text is already present
-stops tracking, because the click may move zsh's caret; use Control-C for a
-fresh line before automatic AI detection resumes. Control-A/E/K/W remain
-conservative: these move the cursor or delete only part of a line, so tracking
-stops rather than classifying a suffix as the whole command. History navigation
-and unsupported edits still require a fresh prompt (Control-C) before automatic
-AI detection resumes.
+to Ask AI. Clicking a ready prompt (or the sticky footer) focuses the terminal
+and keeps tracking, so typing `Help me find the largest files` still shows
+**↵ agent** and Return opens Ask — even after a focus click. Arrow keys and
+Control-A/E/K/W remain conservative: these move the cursor or delete only part
+of a line, so tracking stops rather than classifying a suffix as the whole
+command. History navigation and unsupported edits still require a fresh prompt
+(Control-C) before automatic AI detection resumes.
 
 ## Official references
 

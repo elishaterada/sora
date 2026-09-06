@@ -134,12 +134,17 @@ _sora_highlight_apply() {
 }
 
 _sora_highlight_redraw() {
+  # This widget owns zle-line-pre-redraw, so report the edit buffer here too;
+  # installing a second widget for the same hook would replace this one.
+  (( $+functions[_sora_report_line] )) && _sora_report_line
   _sora_highlight_apply
 }
 
 _sora_highlight_install() {
   emulate -L zsh
   if (( $+functions[_zsh_highlight] )); then
+    # Another highlighter owns the widget; keep line reporting alive on its own.
+    (( $+functions[_sora_report_line_install] )) && _sora_report_line_install
     precmd_functions=(${precmd_functions:#_sora_highlight_install})
     return
   fi

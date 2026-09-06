@@ -54,10 +54,26 @@ final class GhosttyRuntime: ObservableObject {
                 ghostty_config_load_file(config, path)
             }
         }
+        // Soft custom-shader blink is intentionally not loaded: a failed shader
+        // open used to leave cursor-style-blink=false with a permanently solid
+        // caret. Built-in blink in sora.ghostty is the reliable path. Override
+        // to a steady bar when Reduce Motion is on.
+        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+           let steady = Self.writeOverlayConfig("cursor-style-blink = false\n")
+        {
+            steady.withCString { path in
+                ghostty_config_load_file(config, path)
+            }
+        }
         ghostty_config_finalize(config)
         let problems = ghostty_config_diagnostics_count(config)
         if problems > 0 {
-            Self.logger.error("sora.ghostty has \(problems) diagnostic(s)")
+            for index in 0..<problems {
+                let diagnostic = ghostty_config_get_diagnostic(config, index)
+                if let message = diagnostic.message {
+                    Self.logger.error("sora.ghostty diagnostic: \(String(cString: message))")
+                }
+            }
         }
         self.config = config
         self.launchSnapshot = WorkspaceRestore.load()
@@ -113,6 +129,23 @@ final class GhosttyRuntime: ObservableObject {
             ghostty_app_free(app)
         }
         ghostty_config_free(config)
+    }
+
+    /// Writes a small Ghostty config snippet next to the app support dir so
+    /// Reduce Motion can override `cursor-style-blink` without a set API.
+    private static func writeOverlayConfig(_ contents: String) -> String? {
+        let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Sora", isDirectory: true)
+            .appendingPathComponent("ghostty", isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+            let file = root.appendingPathComponent("overlay.ghostty")
+            try contents.write(to: file, atomically: true, encoding: .utf8)
+            return file.path
+        } catch {
+            logger.error("could not write ghostty overlay: \(error.localizedDescription)")
+            return nil
+        }
     }
 
     func tick() {

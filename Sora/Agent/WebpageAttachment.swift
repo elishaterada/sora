@@ -95,18 +95,46 @@ enum AgentWebpageProposalParser {
         let url: String
     }
 
-    static func parse(_ text: String) -> AgentWebpageProposal? {
-        let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard value.hasPrefix(openingTag), value.hasSuffix(closingTag) else { return nil }
-        let jsonStart = value.index(value.startIndex, offsetBy: openingTag.count)
-        let jsonEnd = value.index(value.endIndex, offsetBy: -closingTag.count)
-        guard jsonStart <= jsonEnd else { return nil }
-        let json = String(value[jsonStart..<jsonEnd]).trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let payload = try? JSONDecoder().decode(Payload.self, from: Data(json.utf8)) else { return nil }
-        let summary = payload.summary.trimmingCharacters(in: .whitespacesAndNewlines)
-        let url = payload.url.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !summary.isEmpty, summary.utf8.count <= 600,
-              summary.unicodeScalars.allSatisfy({ scalar in
+    struct Match: Equatable {
+        let proposal: AgentWebpageProposal
+        /// Anything the model wrote around the envelope, which stays as the answer.
+        let prose: String
+    }
+
+    static func match(_ text: String) -> Match? {
+        guard let span = AgentEnvelope.span(in: text, opening: openingTag, closing: closingTag),
+              let proposal = proposal(fromJSON: span.json)
+        else { return nil }
+        return Match(proposal: proposal, prose: span.prose)
+    }
+
+    static func hasOpeningTag(_ text: String) -> Bool {
+        AgentEnvelope.hasOpeningTag(text, opening: openingTag)
+    }
+
+    static func proseBeforeEnvelope(in text: String) -> String? {
+        AgentEnvelope.proseBeforeEnvelope(in: text, opening: openingTag)
+    }
+
+    private static func proposal(fromJSON json: String) -> AgentWebpageProposal? {
+        let summary: String
+        let url: String
+        if let payload = try? JSONDecoder().decode(Payload.self, from: Data(json.utf8)) {
+            summary = payload.summary
+            url = payload.url
+        } else if let recovered = AgentEnvelope.recoverStringValues(json: json, keys: ["summary", "url"]),
+                  let recoveredSummary = recovered["summary"],
+                  let recoveredURL = recovered["url"] {
+            summary = recoveredSummary
+            url = recoveredURL
+        } else {
+            return nil
+        }
+
+        let trimmedSummary = summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedURL = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedSummary.isEmpty, trimmedSummary.utf8.count <= 600,
+              trimmedSummary.unicodeScalars.allSatisfy({ scalar in
                   switch scalar.properties.generalCategory {
                   case .control, .format, .lineSeparator, .paragraphSeparator:
                       return false
@@ -114,14 +142,8 @@ enum AgentWebpageProposalParser {
                       return true
                   }
               }),
-              (try? WebpageFetcher.url(url)) != nil
+              (try? WebpageFetcher.url(trimmedURL)) != nil
         else { return nil }
-        return AgentWebpageProposal(summary: summary, url: url)
-    }
-
-    static func isStreamingEnvelope(_ text: String) -> Bool {
-        let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !value.isEmpty else { return false }
-        return openingTag.hasPrefix(value) || value.hasPrefix(openingTag)
+        return AgentWebpageProposal(summary: trimmedSummary, url: trimmedURL)
     }
 }

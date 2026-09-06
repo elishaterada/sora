@@ -8,6 +8,7 @@ final class GhostTextView: NSView {
         didSet {
             needsDisplay = true
             isHidden = text.isEmpty
+            refreshAccessibility()
         }
     }
 
@@ -20,6 +21,28 @@ final class GhostTextView: NSView {
     override var isOpaque: Bool { false }
     override var acceptsFirstResponder: Bool { false }
 
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        setAccessibilityElement(true)
+        setAccessibilityRole(.staticText)
+        setAccessibilityLabel("Suggestion")
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not supported")
+    }
+
+    private func refreshAccessibility() {
+        if text.isEmpty {
+            setAccessibilityValue(nil)
+            setAccessibilityHidden(true)
+        } else {
+            setAccessibilityHidden(false)
+            setAccessibilityValue(predicted ? "Prediction: \(text)" : "Suggestion: \(text)")
+        }
+    }
+
     override func hitTest(_ point: NSPoint) -> NSView? {
         nil
     }
@@ -27,7 +50,7 @@ final class GhostTextView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         guard !text.isEmpty, let context = NSGraphicsContext.current?.cgContext else { return }
         let color = predicted
-            ? NSColor.controlAccentColor.withAlphaComponent(0.55)
+            ? SoraTheme.nsAccent.withAlphaComponent(0.55)
             : NSColor.secondaryLabelColor.withAlphaComponent(0.55)
 
         // One glyph per terminal cell, left-aligned like Ghostty — do not

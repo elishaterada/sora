@@ -31,23 +31,51 @@ enum AgentCommandProposalParser {
     static let openingTag = "<SORA_COMMAND>"
     static let closingTag = "</SORA_COMMAND>"
 
+    struct Match: Equatable {
+        let proposal: AgentCommandProposal
+        /// Anything the model wrote around the envelope, which stays as the answer.
+        let prose: String
+    }
+
     private struct Payload: Decodable {
         let summary: String
         let command: String
     }
 
-    static func parse(_ text: String) -> AgentCommandProposal? {
-        let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard value.hasPrefix(openingTag), value.hasSuffix(closingTag) else { return nil }
-        let jsonStart = value.index(value.startIndex, offsetBy: openingTag.count)
-        let jsonEnd = value.index(value.endIndex, offsetBy: -closingTag.count)
-        guard jsonStart <= jsonEnd else { return nil }
-        let json = String(value[jsonStart..<jsonEnd]).trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let payload = try? JSONDecoder().decode(Payload.self, from: Data(json.utf8)) else { return nil }
-        let summary = payload.summary.trimmingCharacters(in: .whitespacesAndNewlines)
-        let command = payload.command.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !summary.isEmpty, summary.utf8.count <= 600,
-              summary.unicodeScalars.allSatisfy({ scalar in
+    static func match(_ text: String) -> Match? {
+        guard let span = AgentEnvelope.span(in: text, opening: openingTag, closing: closingTag),
+              let proposal = proposal(fromJSON: span.json)
+        else { return nil }
+        return Match(proposal: proposal, prose: span.prose)
+    }
+
+    static func hasOpeningTag(_ text: String) -> Bool {
+        AgentEnvelope.hasOpeningTag(text, opening: openingTag)
+    }
+
+    static func proseBeforeEnvelope(in text: String) -> String? {
+        AgentEnvelope.proseBeforeEnvelope(in: text, opening: openingTag)
+    }
+
+    private static func proposal(fromJSON json: String) -> AgentCommandProposal? {
+        let summary: String
+        let command: String
+        if let payload = try? JSONDecoder().decode(Payload.self, from: Data(json.utf8)) {
+            summary = payload.summary
+            command = payload.command
+        } else if let recovered = AgentEnvelope.recoverStringValues(json: json, keys: ["summary", "command"]),
+                  let recoveredSummary = recovered["summary"],
+                  let recoveredCommand = recovered["command"] {
+            summary = recoveredSummary
+            command = recoveredCommand
+        } else {
+            return nil
+        }
+
+        let trimmedSummary = summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedCommand = command.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedSummary.isEmpty, trimmedSummary.utf8.count <= 600,
+              trimmedSummary.unicodeScalars.allSatisfy({ scalar in
                   switch scalar.properties.generalCategory {
                   case .control, .format, .lineSeparator, .paragraphSeparator:
                       return false
@@ -55,14 +83,8 @@ enum AgentCommandProposalParser {
                       return true
                   }
               }),
-              AgentCommandProposal.isValidCommand(command)
+              AgentCommandProposal.isValidCommand(trimmedCommand)
         else { return nil }
-        return AgentCommandProposal(summary: summary, command: command)
-    }
-
-    static func isStreamingEnvelope(_ text: String) -> Bool {
-        let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !value.isEmpty else { return false }
-        return openingTag.hasPrefix(value) || value.hasPrefix(openingTag)
+        return AgentCommandProposal(summary: trimmedSummary, command: trimmedCommand)
     }
 }

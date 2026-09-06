@@ -63,7 +63,7 @@ Only create directories required by the current phase. Phase 5 creates
 - resize and backing-scale propagation
 - clipboard: Cmd+C/V and Edit menu copy/paste via `ghostty_surface_read_selection` / `ghostty_surface_text`; OSC 52 via Ghostty runtime callbacks plus `NSPasteboard`
 - session chrome: flush two-column `HStack` (sidebar | terminal). Transparent titlebar with `fullSizeContentView` so close/minimize/zoom sit in the sidebar next to the collapse control. Collapsing the sidebar hides that column; the traffic lights, sidebar toggle, session title, path, and new-tab control move into a thin terminal header. Do not use `.toolbar(.hidden, for: .windowToolbar)` — that hides the window buttons. No `NavigationSplitView` (Tahoe draws that as floating rounded cards). Window frost is a square `NSGlassEffectView` behind both columns.
-- shell presentation: `~/.hushlogin` suppresses `login(1)` "Last login"; a Sora `ZDOTDIR` sources Ghostty's zsh integration, replaces the stock macOS `user@host` prompt, and colors the input line (command/flags/paths/strings) unless the user already has zsh-syntax-highlighting. Paste and completion-accept inserts use `paste:none` so zsh's default paste standout does not paint spaces as opaque blocks.
+- shell presentation: `~/.hushlogin` suppresses `login(1)` "Last login"; a Sora `ZDOTDIR` sources Ghostty's zsh integration, replaces the stock macOS `user@host` prompt with an empty prompt (blinking bar cursor only), and colors the input line (command/flags/paths/strings) unless the user already has zsh-syntax-highlighting. After each command, a muted full-width rule with elapsed time (and exit code when non-zero) is printed from zsh `precmd` so command+output blocks separate in scrollback. Paste and completion-accept inserts use `paste:none` so zsh's default paste standout does not paint spaces as opaque blocks. The bar cursor uses Ghostty's built-in blink (`cursor-style-blink = true`); a custom-shader soft fade was dropped because a failed shader load left blink disabled with a solid caret. Reduce Motion forces a steady bar via an overlay config. Chrome motion tokens are ease-in-out.
 
 Unit tests must not link GhosttyKit. `GhosttyInput.swift` and `GhosttyClipboard.swift` stay Ghostty-free; `GhosttyInputKit.swift` and `GhosttyClipboardKit.swift` are app-only.
 
@@ -89,7 +89,8 @@ The host does not implement VT parsing, glyph rendering, or PTY spawn.
 - filesystem path completion for tokens that look like paths
 - inline ghost text; Tab / Right Arrow accept without sending those keys to the PTY
 - Inline suggestions use a fixed prompt origin captured before the first keystroke. The tracked ASCII buffer determines the suffix column, so text and position change together without following intermediate PTY cursor redraws or running a polling timer. Untracked, non-ASCII, and wrapped input suppresses the overlay rather than guessing its position.
-- overlay resets on Enter, Esc, arrows (except accept), Ctrl-C/U/A/E/K/W, Option, mouse down, and multiline paste. zsh Tab-complete and history recall desync the buffer until the next prompt.
+- overlay resets on Enter, Esc, arrows (except accept), Ctrl-C/U/A/E/K/W, Option-as-Meta (no printable text), and multiline paste. Ready-prompt mouse focus keeps tracking so conversational Return still sees the typed line. zsh Tab-complete and history recall desync the buffer until the next prompt.
+- Agent-vs-shell routing does not use the keystroke buffer or the rendered grid. zsh mirrors its live ZLE `$BUFFER` to Sora on every `zle-line-pre-redraw` through a sentinel-prefixed OSC 2 title (`ShellEditLine`), which Sora consumes as routing state and never shows as a window or tab title. That buffer stays correct through paste, history recall, completion, and wrapping, and its arrival also proves the shell is at an interactive prompt. Screen scraping cannot substitute: `PS1` is empty, so nothing on screen marks where the prompt begins. Shells without the Sora hooks fall back to the keystroke buffer.
 - next-command prediction on an empty prompt after a successful command, shown as accent `→` text in the sticky prompt footer under the grid (not as an overlay on scrollback). Esc or Up/Down/Left dismisses it until the next successful command. Prefix ghost text stays on-grid only while the live prompt is visible; scrolling away hides the overlay and mirrors the line in the footer.
 
 ### Agent, Providers, and Tools
@@ -101,9 +102,10 @@ shares URLSession transport across OpenAI Responses, Anthropic Messages, and
 Vercel and xAI Chat Completions; adapters translate their distinct event schemas.
 `CodexProvider` uses `CodexConnection` to run the installed official app-server
 over stdio with an ephemeral, text-only thread. `CodexLogin` owns sign-in setup.
-`AskView` is the inline agent continuation inside the active terminal tab
-(AI → Ask Sora or prompt routing). Ask fills the tab; Escape returns to the
-terminal and leaves a clickable resume strip (and ⌘Y) above the sticky prompt.
+`AskView` is a translucent hybrid overlay on the live Ghostty surface (Agent →
+Open Agent or prompt routing). Escape dismisses the overlay without stopping a
+running answer; a reserved resume slot (and ⌘Y) sits above the sticky prompt
+without resizing the PTY.
 Each tab keeps its own in-memory agent thread, and a terminal→agent handoff
 starts a fresh conversation for that tab. Storage is injected; credentials use
 Keychain. Switching providers cancels outstanding work and restores that

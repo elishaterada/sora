@@ -100,10 +100,19 @@ final class AskSession: ObservableObject {
     var resumeSummary: AgentResumeSummary? {
         let users = messages.filter { $0.role == .user && $0.isAgentContinuation != true }
         guard let first = users.first else { return nil }
-        let followUp = users.count > 1 ? users.last?.text : nil
+        let followUp: String?
+        if isRunningCommand {
+            followUp = "Running…"
+        } else if isSending {
+            followUp = "Answering…"
+        } else if users.count > 1, let last = users.last?.text, last != first.text {
+            followUp = last
+        } else {
+            followUp = nil
+        }
         return AgentResumeSummary(
             title: AgentResumeSummary.title(from: first.text),
-            latestFollowUp: followUp == first.text ? nil : followUp
+            latestFollowUp: followUp
         )
     }
 
@@ -387,19 +396,30 @@ final class AskSession: ObservableObject {
         generation = nil
         task = nil
         isSending = false
+        var envelopeError: String?
         if let index = messages.firstIndex(where: { $0.id == responseID }) {
             messages[index].status = status
             if status == .complete {
-                if let proposal = AgentCommandProposalParser.parse(messages[index].text) {
-                    messages[index].text = proposal.summary
-                    messages[index].commandProposal = proposal
-                } else if let page = AgentWebpageProposalParser.parse(messages[index].text) {
-                    messages[index].text = page.summary
-                    messages[index].webpageProposal = page
+                let text = messages[index].text
+                if let match = AgentCommandProposalParser.match(text) {
+                    messages[index].text = match.prose.isEmpty ? match.proposal.summary : match.prose
+                    messages[index].commandProposal = match.proposal
+                } else if let match = AgentWebpageProposalParser.match(text) {
+                    messages[index].text = match.prose.isEmpty ? match.proposal.summary : match.prose
+                    messages[index].webpageProposal = match.proposal
+                } else if AgentCommandProposalParser.hasOpeningTag(text)
+                            || AgentWebpageProposalParser.hasOpeningTag(text) {
+                    // Never leave Sora's wire format in the transcript. Say what
+                    // happened instead of silently dropping the request.
+                    let prose = AgentCommandProposalParser.proseBeforeEnvelope(in: text)
+                        ?? AgentWebpageProposalParser.proseBeforeEnvelope(in: text)
+                        ?? ""
+                    messages[index].text = prose
+                    envelopeError = "The assistant's request was malformed, so nothing was proposed. Ask again."
                 }
             }
         }
-        errorMessage = error
+        errorMessage = error ?? envelopeError
         persist()
         guard status == .complete, errorMessage == nil else { return }
         let message = messages.first(where: { $0.id == responseID })

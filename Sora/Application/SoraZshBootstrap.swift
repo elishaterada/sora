@@ -21,13 +21,16 @@ enum SoraZshBootstrap {
             to: directory.appendingPathComponent(".zshenv"),
             fileManager: fileManager
         )
-        let highlight = source.deletingLastPathComponent().appendingPathComponent("highlight.zsh")
-        if fileManager.fileExists(atPath: highlight.path) {
-            try copyIfChanged(
-                from: highlight,
-                to: directory.appendingPathComponent("highlight.zsh"),
-                fileManager: fileManager
-            )
+        let siblings = ["highlight.zsh", "command-blocks.zsh", "prompt-line.zsh"]
+        for name in siblings {
+            let sibling = source.deletingLastPathComponent().appendingPathComponent(name)
+            if fileManager.fileExists(atPath: sibling.path) {
+                try copyIfChanged(
+                    from: sibling,
+                    to: directory.appendingPathComponent(name),
+                    fileManager: fileManager
+                )
+            }
         }
         return directory
     }

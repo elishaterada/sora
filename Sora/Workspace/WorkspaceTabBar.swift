@@ -7,6 +7,10 @@ struct WorkspaceTabBar: View {
     var trafficLightWidth: CGFloat
     var onAsk: () -> Void
 
+    private var selectedBranch: String? {
+        GitRepository.branchName(containing: workspace.selected.workingDirectory)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             chromeRow
@@ -15,35 +19,36 @@ struct WorkspaceTabBar: View {
                 workspace.addTabInheritingCWD()
             } label: {
                 Label("New Tab", systemImage: "plus")
-                    .font(.system(size: 13, weight: .medium))
+                    .font(SoraTheme.chromeBody)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(SoraChromeButtonStyle())
             .help("New Tab")
             .padding(.horizontal, 6)
-            .padding(.top, 4)
+            .padding(.top, SoraTheme.space1)
 
             Button(action: onAsk) {
-                Label("Agent", systemImage: "bubble.left.and.text.bubble.right.fill")
-                    .font(.system(size: 13, weight: .medium))
+                Label("Agent", systemImage: "sparkles")
+                    .font(SoraTheme.chromeBody)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(SoraChromeButtonStyle())
             .help("Open Agent (⌘⇧A)")
+            .accessibilityLabel("Open Agent")
             .padding(.horizontal, 6)
             .padding(.top, 2)
 
             Text("Sessions")
-                .font(.system(size: 11, weight: .semibold))
+                .font(SoraTheme.chromeCaptionSemibold)
                 .foregroundStyle(.tertiary)
-                .padding(.horizontal, 16)
-                .padding(.top, 16)
+                .padding(.horizontal, SoraTheme.space4)
+                .padding(.top, SoraTheme.space4)
                 .padding(.bottom, 6)
 
             ScrollView(.vertical, showsIndicators: false) {
@@ -56,13 +61,11 @@ struct WorkspaceTabBar: View {
             }
 
             Spacer(minLength: 0)
-
-            SessionHeader(workingDirectory: workspace.selected.workingDirectory)
-                .padding(.horizontal, 14)
-                .padding(.bottom, 12)
+            // Path/branch live in the chrome bar and sticky prompt — keep the
+            // sidebar focused on session identity.
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(Color.black.opacity(0.12))
+        .background(SoraTheme.sidebarWash)
     }
 
     private var chromeRow: some View {
@@ -79,39 +82,39 @@ struct WorkspaceTabBar: View {
     private func tabRow(_ tab: WorkspaceModel.Tab) -> some View {
         let selected = tab.id == workspace.selectedID
         let branch = GitRepository.branchName(containing: tab.workingDirectory)
+        // Only show a branch subtitle when it differs from the selected tab's.
+        let showBranch = branch != nil && branch != selectedBranch
         return Button {
             workspace.select(tab.id)
         } label: {
-            HStack(spacing: 8) {
-                Image(systemName: tab.hasAgentActivity
-                      ? "bubble.left.and.text.bubble.right.fill"
-                      : "terminal")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(tab.hasAgentActivity ? Color.accentColor : .secondary)
+            HStack(spacing: SoraTheme.space2) {
+                Image(systemName: tab.hasAgentActivity ? "sparkles" : "terminal")
+                    .font(SoraTheme.chromeIcon)
+                    .foregroundStyle(tab.hasAgentActivity ? SoraTheme.accent : SoraTheme.muted)
                     .frame(width: 16)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(tab.displayTitle)
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(.primary)
+                        .font(SoraTheme.chromeBody)
+                        .foregroundStyle(SoraTheme.text)
                         .lineLimit(1)
-                    if let branch {
+                    if showBranch, let branch {
                         Text(branch)
-                            .font(.system(size: 11))
+                            .font(SoraTheme.chromeCaption)
                             .foregroundStyle(.tertiary)
                             .lineLimit(1)
                     }
                 }
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 8)
+            .padding(.horizontal, SoraTheme.space2)
             .padding(.vertical, 6)
             .background(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(selected ? Color.white.opacity(0.08) : Color.clear)
+                RoundedRectangle(cornerRadius: SoraTheme.radiusSmall, style: .continuous)
+                    .fill(selected ? SoraTheme.fillSubtle : Color.clear)
             )
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(SoraChromeButtonStyle(fill: .clear, cornerRadius: SoraTheme.radiusSmall))
         .contextMenu {
             if workspace.tabs.count > 1 {
                 Button("Close Tab", role: .destructive) {

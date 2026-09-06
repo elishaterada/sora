@@ -93,14 +93,23 @@ final class PromptBufferTests: XCTestCase {
         )
     }
 
-    func testMouseFocusAfterTypedTextStopsTracking() {
+    func testMouseFocusAfterTypedTextKeepsTrackingForAgentRouting() {
         let session = CompletionSession()
         _ = session.handleKeyDown(keyCode: 0, characters: "Help me", modifiers: [])
         session.applyMouseFocus(isShellPromptReady: true)
-        XCTAssertFalse(session.buffer.isTracking)
+        XCTAssertTrue(session.buffer.isTracking)
         _ = session.handleKeyDown(keyCode: 0, characters: " find files", modifiers: [])
-        XCTAssertEqual(session.buffer.text, "")
-        XCTAssertEqual(PromptIntentClassifier.submission(for: session.buffer.text), .shell)
+        XCTAssertEqual(session.buffer.text, "Help me find files")
+        XCTAssertEqual(
+            PromptIntentClassifier.submission(for: session.buffer.text),
+            .agent("Help me find files")
+        )
+    }
+
+    func testYoutubeHelpLineRoutesToAgentNotShell() {
+        let line = "Help me download youtube video https://www.youtube.com/watch?v=bOC3DisEOfg as mp4 into ~/Downloads"
+        XCTAssertEqual(PromptIntentClassifier.intent(for: line), .agent)
+        XCTAssertEqual(PromptIntentClassifier.submission(for: line), .agent(line))
     }
 
     func testPartialControlEditsDoNotTrackOnlyTheQuestionSuffix() {
