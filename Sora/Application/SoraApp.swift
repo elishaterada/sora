@@ -40,6 +40,10 @@ struct SoraApp: App {
             CommandHistoryView(store: runtime.history)
         }
         .defaultSize(width: 520, height: 360)
+
+        Settings {
+            SoraSettingsView()
+        }
     }
 }
 
@@ -59,8 +63,8 @@ private struct AskCommands: Commands {
     @FocusedValue(\.inlineAskAction) private var inlineAskAction
 
     var body: some Commands {
-        CommandMenu("AI") {
-            Button("Ask Sora") { inlineAskAction?.call() }
+        CommandMenu("Agent") {
+            Button("Open Agent") { inlineAskAction?.call() }
                 .keyboardShortcut("a", modifiers: [.command, .shift])
                 .disabled(inlineAskAction == nil)
         }

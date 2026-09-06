@@ -13,7 +13,12 @@ struct SessionHeader: View {
                     actions: ContextChipActions.path(workingDirectory)
                 )
             } else {
-                Label("~", systemImage: "folder")
+                ContextChip(
+                    title: "~",
+                    systemImage: "folder",
+                    help: "Home",
+                    actions: []
+                )
             }
             if let branch, let root = workingDirectory.flatMap({ GitRepository.root(containing: $0) }) {
                 ContextChip(
@@ -31,8 +36,8 @@ struct SessionHeader: View {
                 )
             }
         }
-        .font(.system(size: 11, weight: .medium))
-        .foregroundStyle(.secondary)
+        .font(SoraTheme.chromeCaption)
+        .foregroundStyle(SoraTheme.muted)
         .controlSize(.small)
         .accessibilityElement(children: .contain)
     }
@@ -48,26 +53,20 @@ struct SessionHeader: View {
 
 struct SidebarToggleButton: View {
     @Binding var sidebarVisible: Bool
-    @State private var hovering = false
 
     var body: some View {
         Button {
-            withAnimation(.easeOut(duration: 0.18)) {
+            withAnimation(SoraTheme.motionSidebar) {
                 sidebarVisible.toggle()
             }
         } label: {
             Image(systemName: "sidebar.leading")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.secondary)
-                .frame(width: 28, height: 28)
-                .background(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(hovering ? Color.white.opacity(0.08) : Color.clear)
-                )
+                .font(SoraTheme.chromeBody)
+                .foregroundStyle(SoraTheme.muted)
+                .frame(width: SoraTheme.hitCompact, height: SoraTheme.hitCompact)
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .onHover { hovering = $0 }
+        .buttonStyle(SoraChromeButtonStyle())
         .help(sidebarVisible ? "Hide Sidebar" : "Show Sidebar")
         .accessibilityLabel(sidebarVisible ? "Hide Sidebar" : "Show Sidebar")
     }
@@ -92,7 +91,7 @@ struct TerminalChromeBar: View {
 
             sessionTitle
 
-            Spacer(minLength: 8)
+            Spacer(minLength: SoraTheme.space2)
 
             agentButton
 
@@ -102,12 +101,12 @@ struct TerminalChromeBar: View {
                 newTabButton
             }
         }
-        .padding(.leading, sidebarVisible ? 12 : 0)
+        .padding(.leading, sidebarVisible ? SoraTheme.space3 : 0)
         .padding(.trailing, 10)
         .frame(height: titlebarHeight)
         .overlay(alignment: .bottom) {
             Rectangle()
-                .fill(Color.white.opacity(0.08))
+                .fill(SoraTheme.hairline)
                 .frame(height: 1)
         }
     }
@@ -115,9 +114,8 @@ struct TerminalChromeBar: View {
     @ViewBuilder
     private var sessionTitle: some View {
         let title = workspace.selected.displayTitle
-        let branch = GitRepository.branchName(containing: workspace.selected.workingDirectory)
         if sidebarVisible || workspace.tabs.count == 1 {
-            titleLabel(title: title, branch: branch)
+            titleLabel(title: title)
         } else {
             Menu {
                 ForEach(workspace.tabs) { tab in
@@ -132,7 +130,7 @@ struct TerminalChromeBar: View {
                     }
                 }
             } label: {
-                titleLabel(title: title, branch: branch)
+                titleLabel(title: title)
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
@@ -140,43 +138,40 @@ struct TerminalChromeBar: View {
         }
     }
 
-    private func titleLabel(title: String, branch: String?) -> some View {
-        HStack(spacing: 6) {
-            Text(title)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.primary)
-                .lineLimit(1)
-            if let branch {
-                Text(branch)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
-            }
-        }
+    private func titleLabel(title: String) -> some View {
+        Text(title)
+            .font(SoraTheme.chromeBody)
+            .foregroundStyle(SoraTheme.text)
+            .lineLimit(1)
     }
 
     private var agentButton: some View {
         Button(action: onAsk) {
-            HStack(spacing: 5) {
-                Image(systemName: "bubble.left.and.text.bubble.right.fill")
-                    .font(.system(size: 11, weight: .semibold))
+            HStack(spacing: 4) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 9, weight: .semibold))
                 Text("Agent")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(SoraTheme.chromeCaptionSemibold)
             }
-            .foregroundStyle(.primary)
-            .padding(.horizontal, 10)
-            .frame(height: 28)
+            .foregroundStyle(SoraTheme.accent)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
             .background(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(Color.accentColor.opacity(0.22))
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .fill(SoraTheme.accent.opacity(0.14))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .strokeBorder(Color.accentColor.opacity(0.45), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .strokeBorder(SoraTheme.accent.opacity(0.32), lineWidth: 1)
             )
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(SoraChromeButtonStyle(
+            fill: .clear,
+            pressedFill: SoraTheme.accent.opacity(0.16),
+            hoverFill: SoraTheme.accent.opacity(0.10),
+            cornerRadius: 5
+        ))
         .help("Open Agent (⌘⇧A)")
         .accessibilityLabel("Open Agent")
     }
@@ -186,12 +181,12 @@ struct TerminalChromeBar: View {
             workspace.addTabInheritingCWD()
         } label: {
             Image(systemName: "plus")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.secondary)
-                .frame(width: 28, height: 28)
+                .font(SoraTheme.chromeBody)
+                .foregroundStyle(SoraTheme.muted)
+                .frame(width: SoraTheme.hitCompact, height: SoraTheme.hitCompact)
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(SoraChromeButtonStyle())
         .help("New Tab")
         .accessibilityLabel("New Tab")
     }

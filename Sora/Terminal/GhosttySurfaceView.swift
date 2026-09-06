@@ -31,6 +31,8 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     private var scrollbarLen: UInt64 = 0
     private var swallowedKeyCodes: Set<UInt16> = []
     private var isShellPromptReady = false
+    /// Live ZLE buffer mirrored by the shell. Nil until the first report.
+    private var shellEditLine: String?
     private var promptIntent: PromptIntent?
     var onAgentPrompt: ((String) -> Void)?
     var onContinueAgent: (() -> Bool)?
@@ -45,6 +47,10 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         super.init(frame: NSRect(x: 0, y: 0, width: 800, height: 600))
         // Do not set wantsLayer or install a CAMetalLayer. libghostty assigns the layer.
         ghostText.isHidden = true
+        // Layer-back the overlay so it composites in the same space as the
+        // libghostty Metal layer instead of drifting in the non-layer path.
+        ghostText.wantsLayer = true
+        ghostText.layer?.backgroundColor = NSColor.clear.cgColor
         addSubview(ghostText)
     }
 
@@ -90,14 +96,12 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     }
 
     override func setFrameSize(_ newSize: NSSize) {
-        if let anchor = ghostTextAnchor {
-            ghostTextAnchor = GhostTextAnchor(
-                origin: NSPoint(x: anchor.origin.x, y: anchor.origin.y + newSize.height - frame.height),
-                cellWidth: anchor.cellWidth
-            )
-        }
         super.setFrameSize(newSize)
         updateSurfaceMetrics()
+        // Y is live from IME; refresh so a resize cannot leave ghost text stranded.
+        if ghostTextAnchor != nil {
+            scheduleCompletionRefresh()
+        }
     }
 
     override func becomeFirstResponder() -> Bool {
@@ -135,16 +139,24 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         let isReturn = event.keyCode == PromptEvent.returnKey
             || event.keyCode == PromptEvent.keypadEnter
             || characters == "\r" || characters == "\n"
-        if isShellPromptReady, isReturn {
+        if isReturn {
             let forceShell = event.modifierFlags.contains(.command)
-            switch PromptIntentClassifier.submission(for: completion.buffer.text, forceShell: forceShell) {
+            let promptReady = isShellPromptReady || foregroundProcessIsShell()
+            // Keystroke tracking clears on arrows / Option-meta / Tab. ZLE still
+            // holds the visible line — recover it so conversational Return does
+            // not fall through to zsh (e.g. unquoted YouTube URLs).
+            let line = promptLineForSubmission()
+            let submission = PromptIntentClassifier.submission(
+                for: line,
+                forceShell: forceShell,
+                allowImplicitAgent: promptReady
+            )
+            switch submission {
             case .agent(let question) where !question.isEmpty:
                 swallowedKeyCodes.insert(event.keyCode)
-                // Cancel zsh's entire edit buffer before opening AI. A kill-line
-                // widget depends on ZLE's transient cursor during redraw and can
-                // leave a suffix behind; terminal interrupt cannot submit it.
-                cancelPromptLine()
+                handOffPromptLineToAgent()
                 completion.reset()
+                shellEditLine = ""
                 ghostTextAnchor = nil
                 isShellPromptReady = true
                 refreshCompletion()
@@ -154,12 +166,16 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
                 swallowedKeyCodes.insert(event.keyCode)
                 sendUnmodifiedReturn(keyCode: event.keyCode)
                 completion.reset()
+                shellEditLine = ""
                 ghostTextAnchor = nil
                 isShellPromptReady = false
                 refreshCompletion()
                 return
             default:
-                isShellPromptReady = false
+                shellEditLine = ""
+                if promptReady {
+                    isShellPromptReady = false
+                }
             }
         }
         switch completion.handleKeyDown(
@@ -304,8 +320,9 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
 
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
-        // Focusing an empty ready prompt must not kill AI routing. Clicks after
-        // the user has typed may move zsh's caret, so those still stop tracking.
+        // Focusing a ready prompt must not kill AI routing. Clicks used to
+        // stop tracking whenever text was present, which sent conversational
+        // lines (with URLs) to zsh. Arrow/control edits still stopTracking.
         applyPromptMouseFocus()
         ghostTextAnchor = nil
         ghostText.hide()
@@ -316,12 +333,23 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
 
     func applyStickyBarFocus() {
         window?.makeFirstResponder(self)
+        reassertTerminalFocus()
         applyPromptMouseFocus()
         refreshCompletion()
     }
 
     private func applyPromptMouseFocus() {
         completion.applyMouseFocus(isShellPromptReady: isShellPromptReady)
+    }
+
+    /// The shell's own edit buffer wins whenever it has reported one: it stays
+    /// correct through paste, history recall, completion, and wrapping. The
+    /// keystroke buffer is the fallback for shells without the Sora hooks.
+    private func promptLineForSubmission() -> String {
+        if let shellEditLine {
+            return shellEditLine
+        }
+        return completion.buffer.isTracking ? completion.buffer.text : ""
     }
 
     override func mouseUp(with event: NSEvent) {
@@ -386,7 +414,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         ))
         config.userdata = Unmanaged.passUnretained(self).toOpaque()
         config.scale_factor = Double(window?.backingScaleFactor ?? 2.0)
-        config.font_size = 0
+        config.font_size = Float(TerminalPreferences.fontSize)
         config.command = nil
         config.wait_after_command = false
         config.context = GHOSTTY_SURFACE_CONTEXT_TAB
@@ -433,12 +461,24 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
             runtime.activeSurface = self
             updateSurfaceMetrics()
             window?.makeFirstResponder(self)
+            // makeFirstResponder is a no-op when we are already first responder,
+            // so always re-assert Ghostty focus after un-occlusion. Leaving the
+            // agent overlay clears focus via occlusion; without this the blink
+            // shader sees iFocus=0 and custom-shader-animation never runs.
+            reassertTerminalFocus()
         } else {
             ghostText.hide()
             if runtime.activeSurface === self {
                 runtime.activeSurface = nil
             }
         }
+    }
+
+    /// Tell libghostty the surface is focused so the cursor blink shader animates.
+    func reassertTerminalFocus() {
+        guard let surface else { return }
+        ghostty_surface_set_focus(surface, true)
+        runtime.setFocus(true)
     }
 
     func closeSession() {
@@ -452,7 +492,26 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         return ForegroundWorkingDirectory.url(pid: pid_t(pid))
     }
 
+    private func foregroundProcessIsShell() -> Bool {
+        guard let surface else { return false }
+        let rawPID = ghostty_surface_foreground_pid(surface)
+        guard rawPID > 0, rawPID <= UInt64(pid_t.max),
+              let name = ForegroundWorkingDirectory.executableName(pid: pid_t(rawPID))
+        else { return false }
+        return ["zsh", "bash", "fish", "sh"].contains(name)
+    }
+
     func applyTitle(_ title: String) {
+        // zsh mirrors its live edit buffer through a sentinel title. Consume it
+        // as routing state; it is never a window or tab title.
+        if let line = ShellEditLine.parse(title: title) {
+            shellEditLine = line
+            // Only ZLE emits this, so the shell is definitionally at a prompt.
+            isShellPromptReady = true
+            // Arrives on every redraw; avoid the history/path work in a full refresh.
+            refreshPromptRoute()
+            return
+        }
         lastShellTitle = title
         let value = title.isEmpty ? "Sora" : title
         if runtime.activeSurface === self {
@@ -465,12 +524,24 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     func applyWorkingDirectory(_ path: String) {
         let url = URL(fileURLWithPath: path)
         lastWorkingDirectory = url
-        refreshStickyBar()
+        // Ghostty's zsh integration emits OSC 7 while presenting a prompt.
+        // Treat that signal as authoritative readiness too: some embedded
+        // builds don't deliver COMMAND_FINISHED reliably, leaving routing
+        // permanently disabled after the first shell submission.
+        if !isShellPromptReady {
+            isShellPromptReady = true
+            completion.reset()
+            ghostTextAnchor = nil
+            refreshCompletion()
+        } else {
+            refreshStickyBar()
+        }
         delegate?.surface(self, didChangeWorkingDirectory: url)
     }
 
     func recordCommandFinished(exitCode: Int16, durationNanos: UInt64) {
         isShellPromptReady = true
+        shellEditLine = ""
         let cwd = lastWorkingDirectory ?? currentWorkingDirectory() ?? initialWorkingDirectory
         let run = runtime.recordCommand(
             command: lastShellTitle,
@@ -575,21 +646,58 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         }
     }
 
+    /// Clear the line Sora just handed to the agent. When Sora's zsh
+    /// integration is loaded its widget also closes the block with a rule, so
+    /// scrollback delineates an agent prompt the same way it delineates a
+    /// command run. A mirrored edit line is proof the integration is present.
+    private func handOffPromptLineToAgent() {
+        guard shellEditLine != nil else {
+            // Cancel zsh's entire edit buffer. A kill-line widget depends on
+            // ZLE's transient cursor during redraw and can leave a suffix
+            // behind; terminal interrupt cannot submit it.
+            cancelPromptLine()
+            return
+        }
+        // Ctrl+6 encodes as ASCII RS (0x1E), which command-blocks.zsh binds.
+        // A bare unshifted_codepoint of 0x1E writes nothing: Ghostty only emits
+        // C0 bytes through ctrlSeq when the control modifier is set.
+        sendControlKey(keyCode: 0x16, unshifted: UnicodeScalar("6"), text: "6")
+    }
+
     /// Send an actual Control-C key event. `ghostty_surface_text` is for text
     /// input and intentionally does not encode C0 control bytes for zsh.
     private func cancelPromptLine() {
+        sendControlKey(keyCode: 8, unshifted: UnicodeScalar("c"))
+    }
+
+    private func sendControlKey(
+        keyCode: UInt32,
+        unshifted: UnicodeScalar,
+        text: String? = nil
+    ) {
         guard let surface else { return }
         var key = ghostty_input_key_s()
-        key.keycode = 8 // macOS hardware keycode for C
+        key.keycode = keyCode
         key.mods = GHOSTTY_MODS_CTRL
         key.consumed_mods = GHOSTTY_MODS_NONE
-        key.unshifted_codepoint = UnicodeScalar("c").value
+        key.unshifted_codepoint = unshifted.value
         key.composing = false
-        key.text = nil
-        key.action = GHOSTTY_ACTION_PRESS
-        _ = ghostty_surface_key(surface, key)
-        key.action = GHOSTTY_ACTION_RELEASE
-        _ = ghostty_surface_key(surface, key)
+        let fire = {
+            key.action = GHOSTTY_ACTION_PRESS
+            _ = ghostty_surface_key(surface, key)
+            key.action = GHOSTTY_ACTION_RELEASE
+            _ = ghostty_surface_key(surface, key)
+        }
+        if let text {
+            // Keep the C string alive for both press and release.
+            text.withCString { pointer in
+                key.text = pointer
+                fire()
+            }
+        } else {
+            key.text = nil
+            fire()
+        }
         runtime.tick()
     }
 
@@ -624,6 +732,15 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         scheduleCompletionRefresh()
     }
 
+    /// Recomputes only the shell/agent route label for the current line.
+    private func refreshPromptRoute() {
+        let line = promptLineForSubmission()
+        promptIntent = isShellPromptReady && !line.isEmpty
+            ? PromptIntentClassifier.intent(for: line)
+            : nil
+        stickyBar?.updateRoute(promptIntent)
+    }
+
     private func refreshCompletion() {
         runtime.tick()
         let cwd = lastWorkingDirectory
@@ -631,8 +748,10 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
             ?? initialWorkingDirectory
             ?? FileManager.default.homeDirectoryForCurrentUser
         completion.refresh(cwd: cwd, history: runtime.history)
-        let route = isShellPromptReady && completion.buffer.isTracking && !completion.buffer.text.isEmpty
-            ? PromptIntentClassifier.intent(for: completion.buffer.text)
+        // Show the route from whatever line Return would actually submit.
+        let routableLine = promptLineForSubmission()
+        let route = isShellPromptReady && !routableLine.isEmpty
+            ? PromptIntentClassifier.intent(for: routableLine)
             : nil
         promptIntent = route
         refreshStickyBar()
@@ -672,12 +791,23 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
                 cellSize: cellSize,
                 font: font
             )
-        guard let origin = ghostTextAnchor?.position(
+        let liveOrigin = GhosttyInput.ghostTextOrigin(
+            imeX: x,
+            imeY: y,
+            viewHeight: bounds.height,
+            cellWidth: cellWidth
+        )
+        // X: anchored prompt column + typed length (stable during PTY echo).
+        // Y: always the live IME row so resize/layout cannot leave the suffix
+        // floating in the middle of the grid.
+        guard let anchoredX = ghostTextAnchor?.positionX(
             for: completion.buffer, viewWidth: bounds.width
         ) else {
             ghostText.hide()
             return
         }
+        // Before echo, anchored X is ahead of the caret; after echo they match.
+        let origin = NSPoint(x: max(anchoredX, liveOrigin.x), y: liveOrigin.y)
         ghostText.show(
             text: suggestion.displayText,
             origin: origin,
@@ -693,11 +823,13 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
               ghostTextAnchor == nil, let surface else { return }
         var x = 0.0, y = 0.0, width = 0.0, height = 0.0
         ghostty_surface_ime_point(surface, &x, &y, &width, &height)
+        let cellWidth = cellSize.width > 0 ? cellSize.width : 8
+        let origin = GhosttyInput.ghostTextOrigin(
+            imeX: x, imeY: y, viewHeight: bounds.height, cellWidth: cellWidth
+        )
         ghostTextAnchor = GhostTextAnchor(
-            origin: GhosttyInput.ghostTextOrigin(
-                imeX: x, imeY: y, viewHeight: bounds.height, cellWidth: cellSize.width
-            ),
-            cellWidth: cellSize.width
+            originX: origin.x,
+            cellWidth: cellWidth
         )
     }
 
@@ -827,5 +959,14 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
             action,
             UInt(action.lengthOfBytes(using: .utf8))
         )
+    }
+
+    /// Apply a live font size via Ghostty's `set_font_size` binding.
+    func applyFontSize(_ points: CGFloat) {
+        let clamped = min(
+            TerminalPreferences.maximumFontSize,
+            max(TerminalPreferences.minimumFontSize, points.rounded())
+        )
+        performBinding("set_font_size:\(clamped)")
     }
 }

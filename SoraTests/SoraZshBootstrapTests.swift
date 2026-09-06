@@ -14,6 +14,11 @@ final class SoraZshBootstrapTests: XCTestCase {
             atomically: true,
             encoding: .utf8
         )
+        try "# blocks\n".write(
+            to: root.appendingPathComponent("command-blocks.zsh"),
+            atomically: true,
+            encoding: .utf8
+        )
         let zdot = root.appendingPathComponent("zdot", isDirectory: true)
         let installed = try SoraZshBootstrap.install(into: zdot, source: source)
         let dest = installed.appendingPathComponent(".zshenv")
@@ -24,6 +29,13 @@ final class SoraZshBootstrapTests: XCTestCase {
                 encoding: .utf8
             ),
             "# highlight\n"
+        )
+        XCTAssertEqual(
+            try String(
+                contentsOf: installed.appendingPathComponent("command-blocks.zsh"),
+                encoding: .utf8
+            ),
+            "# blocks\n"
         )
 
         try "# sora-2\n".write(to: source, atomically: true, encoding: .utf8)

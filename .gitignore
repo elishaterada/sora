@@ -39,3 +39,6 @@ credentials.json
 # Ghostty clone and GhosttyKit build artifacts.
 # Rebuild with ./Scripts/build-ghosttykit.sh
 Vendor/ghostty/
+
+# Impeccable critique snapshots (local UX review archive)
+.impeccable/

@@ -46,15 +46,14 @@ enum PromptEvent {
         return modifiers.isDisjoint(with: [.command, .control, .option, .shift])
     }
 
-    /// Mouse focus on an empty ready prompt must keep (or resume) tracking so
-    /// conversational Return routing still sees the typed line. A click after
-    /// text is present may move the shell caret, so tracking stops.
+    /// Mouse focus on a ready prompt keeps (or resumes) tracking so
+    /// conversational Return routing still sees the typed line. Clicks no
+    /// longer clear tracking after text is present — that sent lines like
+    /// `Help me … https://…?v=…` to zsh. Arrow keys and control chords still
+    /// stop tracking when the caret may have moved.
     static func mouseFocusEvent(isShellPromptReady: Bool, buffer: PromptBuffer) -> PromptBuffer.Event? {
-        if isShellPromptReady, buffer.text.isEmpty {
-            return .reset
-        }
-        if !buffer.text.isEmpty {
-            return .stopTracking
+        if isShellPromptReady {
+            return buffer.isTracking ? nil : .reset
         }
         return nil
     }
@@ -74,9 +73,6 @@ enum PromptEvent {
             // shell buffer. Do not classify a subsequently typed suffix alone.
             return .stopTracking
         }
-        if modifiers.contains(.option) {
-            return .stopTracking
-        }
 
         switch keyCode {
         case returnKey, keypadEnter, escape:
@@ -94,6 +90,12 @@ enum PromptEvent {
         let filtered = characters.filter { scalar in
             scalar != "\t" && scalar != "\r" && scalar != "\n"
                 && scalar.unicodeScalars.allSatisfy { $0.value >= 0x20 }
+        }
+        // Option as Meta (alt-b / alt-f) sends no printable text and moves the
+        // caret — stop tracking. Option producing a character (å, ø, …) is a
+        // normal insert and must keep the line eligible for agent routing.
+        if modifiers.contains(.option), filtered.isEmpty {
+            return .stopTracking
         }
         if filtered.isEmpty { return nil }
         return .insert(filtered)

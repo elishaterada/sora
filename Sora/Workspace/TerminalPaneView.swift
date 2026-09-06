@@ -1,10 +1,12 @@
 import AppKit
 import Combine
+import QuartzCore
 import SwiftUI
 
-/// Pairs the Ghostty grid with a sticky prompt footer so scrollback never
-/// paints through the input strip. After agent mode, a Warp-style summary
-/// strip sits above the prompt so the user can click back into the thread.
+/// Pairs the Ghostty grid with a sticky prompt footer. Agent mode is a hybrid
+/// overlay: the Metal surface stays visible underneath (never swapped away),
+/// and a translucent Ask panel sits on top. A fixed resume slot above the
+/// sticky bar keeps the PTY row count stable.
 final class TerminalPaneView: NSView {
     let surface: GhosttySurfaceView
     let stickyBar = StickyPromptBar()
@@ -17,6 +19,9 @@ final class TerminalPaneView: NSView {
     let tabID: UUID
     /// Publishes the agent thread title for sidebar / chrome labeling.
     var onActivityTitleChange: ((UUID, String?) -> Void)?
+
+    /// Always reserved between sticky bar and surface so Escape never reflows.
+    private static let resumeSlotHeight = AgentResumeSummary.primaryRowHeight
 
     override var isOpaque: Bool { false }
 
@@ -48,6 +53,7 @@ final class TerminalPaneView: NSView {
             }
         ))
         agentHost.isHidden = true
+        agentHost.alphaValue = 0
         addSubview(agentHost)
         surface.autoresizingMask = []
         stickyBar.autoresizingMask = []
@@ -97,6 +103,8 @@ final class TerminalPaneView: NSView {
             refreshResumeStrip()
             publishActivityTitleIfActive()
         }
+        // Keep the surface "active" for metrics even while the overlay is up;
+        // input focus still moves to Ask.
         surface.setActive(active && !isShowingAgent)
     }
 
@@ -107,23 +115,42 @@ final class TerminalPaneView: NSView {
         agentHost.isHidden = false
         stickyBar.isHidden = true
         resumeHost.isHidden = true
-        surface.isHidden = true
+        // Soft-deactivate input/occlusion without hiding — hybrid overlay dims
+        // the live grid under Ask. setActive(false) would set isHidden=true.
         surface.setActive(false)
+        surface.isHidden = false
         needsLayout = true
         layoutSubtreeIfNeeded()
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 0.12
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            // Dim the live grid; do not hide it — hybrid overlay.
+            surface.animator().alphaValue = 0.28
+            agentHost.animator().alphaValue = 1
+        }
     }
 
     func hideAgent() {
-        ask?.stop()
+        // Keep the stream alive so Escape is a glance, not a cancel.
         isShowingAgent = false
-        agentHost.isHidden = true
-        stickyBar.isHidden = false
         surface.isHidden = false
+        stickyBar.isHidden = false
         surface.setActive(isPaneActive)
         refreshResumeStrip()
         needsLayout = true
         layoutSubtreeIfNeeded()
-        window?.makeFirstResponder(surface)
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 0.12
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            agentHost.animator().alphaValue = 0
+            surface.animator().alphaValue = 1
+        } completionHandler: { [weak self] in
+            guard let self else { return }
+            self.agentHost.isHidden = true
+            self.agentHost.alphaValue = 0
+            self.window?.makeFirstResponder(self.surface)
+            self.surface.reassertTerminalFocus()
+        }
     }
 
     func resumeAgentIfAvailable() -> Bool {
@@ -138,46 +165,51 @@ final class TerminalPaneView: NSView {
     }
 
     private func refreshResumeStrip() {
-        guard isPaneActive, !isShowingAgent, let ask else {
+        guard isPaneActive, !isShowingAgent else {
             resumeHost.isHidden = true
             stickyBar.updateAgentResumeHint(false)
             needsLayout = true
             return
         }
-        ask.bindTab(tabID)
-        guard let summary = ask.resumeSummary else {
-            resumeHost.isHidden = true
+        ask?.bindTab(tabID)
+        if let ask, let summary = ask.resumeSummary {
+            resumeHost.rootView = AgentResumeStripView(summary: summary) { [weak self] in
+                self?.showAgent()
+            }
+            stickyBar.updateAgentResumeHint(true)
+        } else {
+            // Keep the reserved slot occupied so the PTY never gains rows when
+            // a thread becomes resumable.
+            resumeHost.rootView = AgentResumeStripView(
+                summary: AgentResumeSummary(title: "", latestFollowUp: nil),
+                onResume: {}
+            )
             stickyBar.updateAgentResumeHint(false)
-            needsLayout = true
-            return
-        }
-        resumeHost.rootView = AgentResumeStripView(summary: summary) { [weak self] in
-            self?.showAgent()
         }
         resumeHost.isHidden = false
-        stickyBar.updateAgentResumeHint(true)
         needsLayout = true
     }
 
     override func layout() {
         super.layout()
         let barH = StickyPromptBar.height
-        if isShowingAgent {
-            agentHost.frame = bounds
-            surface.frame = .zero
-            stickyBar.frame = .zero
-            resumeHost.frame = .zero
-        } else {
-            let resumeH = resumeHost.isHidden ? 0 : (ask?.resumeSummary?.height ?? 0)
-            stickyBar.frame = NSRect(x: 0, y: 0, width: bounds.width, height: barH)
-            resumeHost.frame = NSRect(x: 0, y: barH, width: bounds.width, height: resumeH)
-            surface.frame = NSRect(
+        let resumeSlot = Self.resumeSlotHeight
+        // Surface height is always bounds - sticky - resume slot, whether or
+        // not a thread is resumable — PTY rows never change on Escape.
+        stickyBar.frame = isShowingAgent
+            ? .zero
+            : NSRect(x: 0, y: 0, width: bounds.width, height: barH)
+        resumeHost.frame = isShowingAgent
+            ? .zero
+            : NSRect(x: 0, y: barH, width: bounds.width, height: resumeSlot)
+        surface.frame = isShowingAgent
+            ? bounds
+            : NSRect(
                 x: 0,
-                y: barH + resumeH,
+                y: barH + resumeSlot,
                 width: bounds.width,
-                height: max(0, bounds.height - barH - resumeH)
+                height: max(0, bounds.height - barH - resumeSlot)
             )
-            agentHost.frame = bounds
-        }
+        agentHost.frame = bounds
     }
 }

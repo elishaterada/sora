@@ -3,10 +3,15 @@ background = #292a2b
 background-opacity = 0.20
 background-blur = macos-glass-regular
 foreground = #cccccc
-cursor-color = #cccccc
+cursor-color = #19f9d8
 cursor-text = #292a2b
 cursor-style = bar
-cursor-style-blink = false
+# Built-in blink. Soft custom-shader blink was tried earlier but Ghostty
+# loads shaders via cwd.openFile; a failed load left blink=false and a solid
+# caret with no fallback. Prefer the reliable path.
+cursor-style-blink = true
+# Thin bar matching the SwiftUI TextField caret in agent mode (was 4).
+adjust-cursor-thickness = 1
 selection-background = #5f4e3b
 selection-foreground = #cccccc
 window-padding-x = 14

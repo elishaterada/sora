@@ -1,6 +1,7 @@
 # Sora interactive bootstrap. ZDOTDIR points here so this file runs first.
 # Source Ghostty's integration (do not copy it), then replace the stock macOS
-# prompt. Custom themes that change PS1 in .zshrc are left alone.
+# prompt with an empty one so only the blinking bar cursor marks input.
+# Custom themes that change PS1 in .zshrc are left alone.
 
 _sora_dir="${${(%):-%x}:A:h}"
 
@@ -16,7 +17,7 @@ if [[ -o interactive ]]; then
     builtin emulate -L zsh
     # Literal template from /etc/zshrc, not the expanded prompt.
     if [[ "${PS1}" == '%n@%m %1~ %# ' ]]; then
-      PS1='%F{245}❯%f '
+      PS1=''
     fi
     precmd_functions=(${precmd_functions:#_sora_simplify_prompt})
     builtin unfunction _sora_simplify_prompt
@@ -24,7 +25,13 @@ if [[ -o interactive ]]; then
   typeset -ag precmd_functions
   precmd_functions=(_sora_simplify_prompt ${precmd_functions[@]})
 
+  if [[ -r "${_sora_dir}/prompt-line.zsh" ]]; then
+    builtin source "${_sora_dir}/prompt-line.zsh"
+  fi
   if [[ -r "${_sora_dir}/highlight.zsh" ]]; then
     builtin source "${_sora_dir}/highlight.zsh"
+  fi
+  if [[ -r "${_sora_dir}/command-blocks.zsh" ]]; then
+    builtin source "${_sora_dir}/command-blocks.zsh"
   fi
 fi

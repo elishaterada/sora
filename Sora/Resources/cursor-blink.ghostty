@@ -1,0 +1,4 @@
+# Soft ease-in-out cursor blink (loaded only when Reduce Motion is off).
+cursor-style-blink = false
+custom-shader = cursor-blink.glsl
+custom-shader-animation = true

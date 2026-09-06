@@ -16,8 +16,10 @@
 		EF0000000000000000000066 /* PromptIntentClassifierTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF0000000000000000000001 /* PromptIntentClassifierTests.swift */; };
 		EF0000000000000000000065 /* PromptIntentClassifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF0000000000000000000000 /* PromptIntentClassifier.swift */; };
 		EF0000000000000000000064 /* PromptIntentClassifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF0000000000000000000000 /* PromptIntentClassifier.swift */; };
+		EF000000000000000000006A /* ShellCommandResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF0000000000000000000002 /* ShellCommandResolver.swift */; };
+		EF0000000000000000000069 /* ShellCommandResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF0000000000000000000002 /* ShellCommandResolver.swift */; };
+		EF000000000000000000006B /* ShellCommandResolverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF0000000000000000000003 /* ShellCommandResolverTests.swift */; };
 		EE000000000000000000006B /* WebpageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE0000000000000000000003 /* WebpageTests.swift */; };
-		EE0000000000000000000068 /* WebpageAttachmentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE0000000000000000000002 /* WebpageAttachmentView.swift */; };
 		EE0000000000000000000067 /* WebpageFetcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE0000000000000000000001 /* WebpageFetcher.swift */; };
 		EE0000000000000000000066 /* WebpageFetcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE0000000000000000000001 /* WebpageFetcher.swift */; };
 		EE0000000000000000000065 /* WebpageAttachment.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE0000000000000000000000 /* WebpageAttachment.swift */; };
@@ -37,6 +39,12 @@
 		CC00000000000000000000C9 /* AskSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0000000000000000000065 /* AskSession.swift */; };
 		CC000000000000000000012D /* AskSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0000000000000000000065 /* AskSession.swift */; };
 		CC00000000000000000000CA /* AskView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0000000000000000000066 /* AskView.swift */; };
+		MD0000000000000000000001 /* AgentMarkdownText.swift in Sources */ = {isa = PBXBuildFile; fileRef = MD0000000000000000000010 /* AgentMarkdownText.swift */; };
+		MD0000000000000000000004 /* AgentMarkdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = MD0000000000000000000012 /* AgentMarkdown.swift */; };
+		MD0000000000000000000005 /* AgentMarkdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = MD0000000000000000000012 /* AgentMarkdown.swift */; };
+		MD0000000000000000000006 /* AgentEnvelope.swift in Sources */ = {isa = PBXBuildFile; fileRef = MD0000000000000000000014 /* AgentEnvelope.swift */; };
+		MD0000000000000000000007 /* AgentEnvelope.swift in Sources */ = {isa = PBXBuildFile; fileRef = MD0000000000000000000014 /* AgentEnvelope.swift */; };
+		MD0000000000000000000002 /* AgentMarkdownTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MD0000000000000000000011 /* AgentMarkdownTests.swift */; };
 		CC00000000000000000000CB /* OpenAIProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0000000000000000000067 /* OpenAIProvider.swift */; };
 		CC000000000000000000012F /* OpenAIProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0000000000000000000067 /* OpenAIProvider.swift */; };
 		CC00000000000000000000CC /* AICredentialStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0000000000000000000068 /* AICredentialStore.swift */; };
@@ -44,12 +52,16 @@
 		CC00000000000000000000CD /* AIConversationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0000000000000000000069 /* AIConversationStore.swift */; };
 		CC0000000000000000000131 /* AIConversationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0000000000000000000069 /* AIConversationStore.swift */; };
 		CC0000000000000000000132 /* AITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC000000000000000000006A /* AITests.swift */; };
+		MD0000000000000000000020 /* CommandBlocksTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MD0000000000000000000021 /* CommandBlocksTests.swift */; };
 		AA00000000000000000000B1 /* GhostTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000165 /* GhostTextView.swift */; };
 		AA00000000000000000000B2 /* SoraTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000105 /* SoraTheme.swift */; };
 		AA00000000000000000000B0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA00000000000000000001B0 /* Assets.xcassets */; };
 		AA0000000000000000000001 /* SoraApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000101 /* SoraApp.swift */; };
 		AA0000000000000000000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000102 /* ContentView.swift */; };
 		AA0000000000000000000005 /* SoraTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000105 /* SoraTheme.swift */; };
+		AA00000000000000000000D1 /* TerminalPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000000000000000001D1 /* TerminalPreferences.swift */; };
+		AA00000000000000000000D2 /* SoraSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000000000000000001D2 /* SoraSettingsView.swift */; };
+		AA00000000000000000000E1 /* TerminalPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000000000000000001D1 /* TerminalPreferences.swift */; };
 		AA0000000000000000000003 /* GhosttyRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000103 /* GhosttyRuntime.swift */; };
 		AA0000000000000000000004 /* GhosttySurfaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000104 /* GhosttySurfaceView.swift */; };
 		AA0000000000000000000006 /* GhosttyInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000106 /* GhosttyInput.swift */; };
@@ -60,6 +72,8 @@
 		AA0000000000000000000009 /* terminfo in Resources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000109 /* terminfo */; };
 		AA0000000000000000000013 /* ghostty in Resources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000114 /* ghostty */; };
 		AA0000000000000000000018 /* sora.ghostty in Resources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000118 /* sora.ghostty */; };
+		AA0000000000000000000019 /* cursor-blink.ghostty in Resources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000119 /* cursor-blink.ghostty */; };
+		AA000000000000000000001A /* cursor-blink.glsl in Resources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000011A /* cursor-blink.glsl */; };
 		AA0000000000000000000010 /* GhosttyInputTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000110 /* GhosttyInputTests.swift */; };
 		AA0000000000000000000011 /* GhosttyClipboardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000111 /* GhosttyClipboardTests.swift */; };
 		AA0000000000000000000014 /* GhosttyInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000106 /* GhosttyInput.swift */; };
@@ -103,8 +117,12 @@
 		AA0000000000000000000065 /* GhostTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000165 /* GhostTextView.swift */; };
 		AA0000000000000000000066 /* StickyPromptBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000166 /* StickyPromptBar.swift */; };
 		AA0000000000000000000067 /* StickyPromptBarModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000167 /* StickyPromptBarModel.swift */; };
+		AA0000000000000000000068 /* PromptLineRecovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000168 /* ShellEditLine.swift */; };
 		AA0000000000000000000087 /* StickyPromptBarModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000167 /* StickyPromptBarModel.swift */; };
+		AA0000000000000000000088 /* PromptLineRecovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000168 /* ShellEditLine.swift */; };
 		AA0000000000000000000070 /* PromptBufferTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000170 /* PromptBufferTests.swift */; };
+		AA0000000000000000000075 /* PromptLineRecoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000175 /* PromptLineRecoveryTests.swift */; };
+		AA0000000000000000000076 /* ShellEditLineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000176 /* ShellEditLineTests.swift */; };
 		AA0000000000000000000071 /* PathCompleterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000171 /* PathCompleterTests.swift */; };
 		AA0000000000000000000072 /* CompletionEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000172 /* CompletionEngineTests.swift */; };
 		AA0000000000000000000073 /* GitRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000173 /* GitRepositoryTests.swift */; };
@@ -144,8 +162,9 @@
 		FG0000000000000000000000 /* AgentCommandProposal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentCommandProposal.swift; sourceTree = "<group>"; };
 		EF0000000000000000000001 /* PromptIntentClassifierTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptIntentClassifierTests.swift; sourceTree = "<group>"; };
 		EF0000000000000000000000 /* PromptIntentClassifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptIntentClassifier.swift; sourceTree = "<group>"; };
+		EF0000000000000000000002 /* ShellCommandResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellCommandResolver.swift; sourceTree = "<group>"; };
+		EF0000000000000000000003 /* ShellCommandResolverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellCommandResolverTests.swift; sourceTree = "<group>"; };
 		EE0000000000000000000003 /* WebpageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebpageTests.swift; sourceTree = "<group>"; };
-		EE0000000000000000000002 /* WebpageAttachmentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebpageAttachmentView.swift; sourceTree = "<group>"; };
 		EE0000000000000000000001 /* WebpageFetcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebpageFetcher.swift; sourceTree = "<group>"; };
 		EE0000000000000000000000 /* WebpageAttachment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebpageAttachment.swift; sourceTree = "<group>"; };
 		DD0000000000000000000064 /* AIBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIBackend.swift; sourceTree = "<group>"; };
@@ -156,14 +175,21 @@
 		CC0000000000000000000064 /* AIProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIProvider.swift; sourceTree = "<group>"; };
 		CC0000000000000000000065 /* AskSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AskSession.swift; sourceTree = "<group>"; };
 		CC0000000000000000000066 /* AskView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AskView.swift; sourceTree = "<group>"; };
+		MD0000000000000000000010 /* AgentMarkdownText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentMarkdownText.swift; sourceTree = "<group>"; };
+		MD0000000000000000000012 /* AgentMarkdown.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentMarkdown.swift; sourceTree = "<group>"; };
+		MD0000000000000000000014 /* AgentEnvelope.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentEnvelope.swift; sourceTree = "<group>"; };
+		MD0000000000000000000011 /* AgentMarkdownTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentMarkdownTests.swift; sourceTree = "<group>"; };
 		CC0000000000000000000067 /* OpenAIProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAIProvider.swift; sourceTree = "<group>"; };
 		CC0000000000000000000068 /* AICredentialStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AICredentialStore.swift; sourceTree = "<group>"; };
 		CC0000000000000000000069 /* AIConversationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIConversationStore.swift; sourceTree = "<group>"; };
 		CC000000000000000000006A /* AITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AITests.swift; sourceTree = "<group>"; };
+		MD0000000000000000000021 /* CommandBlocksTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandBlocksTests.swift; sourceTree = "<group>"; };
 		AA00000000000000000001B0 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		AA0000000000000000000101 /* SoraApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoraApp.swift; sourceTree = "<group>"; };
-		AA0000000000000000000102 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		AA0000000000000000000105 /* SoraTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoraTheme.swift; sourceTree = "<group>"; };
+		AA00000000000000000001D1 /* TerminalPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalPreferences.swift; sourceTree = "<group>"; };
+		AA00000000000000000001D2 /* SoraSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoraSettingsView.swift; sourceTree = "<group>"; };
+		AA0000000000000000000102 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		AA0000000000000000000103 /* GhosttyRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyRuntime.swift; sourceTree = "<group>"; };
 		AA0000000000000000000104 /* GhosttySurfaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttySurfaceView.swift; sourceTree = "<group>"; };
 		AA0000000000000000000106 /* GhosttyInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyInput.swift; sourceTree = "<group>"; };
@@ -174,6 +200,8 @@
 		AA0000000000000000000109 /* terminfo */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Vendor/ghostty/zig-out/share/terminfo; sourceTree = "<group>"; };
 		AA0000000000000000000114 /* ghostty */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Vendor/ghostty/zig-out/share/ghostty; sourceTree = "<group>"; };
 		AA0000000000000000000118 /* sora.ghostty */ = {isa = PBXFileReference; lastKnownFileType = text; path = sora.ghostty; sourceTree = "<group>"; };
+		AA0000000000000000000119 /* cursor-blink.ghostty */ = {isa = PBXFileReference; lastKnownFileType = text; path = "cursor-blink.ghostty"; sourceTree = "<group>"; };
+		AA000000000000000000011A /* cursor-blink.glsl */ = {isa = PBXFileReference; lastKnownFileType = text; path = "cursor-blink.glsl"; sourceTree = "<group>"; };
 		AA0000000000000000000190 /* HushLogin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HushLogin.swift; sourceTree = "<group>"; };
 		AA0000000000000000000191 /* SoraZshBootstrap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoraZshBootstrap.swift; sourceTree = "<group>"; };
 		AA0000000000000000000192 /* zsh */ = {isa = PBXFileReference; lastKnownFileType = folder; path = zsh; sourceTree = "<group>"; };
@@ -213,7 +241,10 @@
 		AA0000000000000000000165 /* GhostTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhostTextView.swift; sourceTree = "<group>"; };
 		AA0000000000000000000166 /* StickyPromptBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StickyPromptBar.swift; sourceTree = "<group>"; };
 		AA0000000000000000000167 /* StickyPromptBarModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StickyPromptBarModel.swift; sourceTree = "<group>"; };
+		AA0000000000000000000168 /* ShellEditLine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellEditLine.swift; sourceTree = "<group>"; };
 		AA0000000000000000000170 /* PromptBufferTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptBufferTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000175 /* PromptLineRecoveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptLineRecoveryTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000176 /* ShellEditLineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellEditLineTests.swift; sourceTree = "<group>"; };
 		AA0000000000000000000171 /* PathCompleterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PathCompleterTests.swift; sourceTree = "<group>"; };
 		AA0000000000000000000172 /* CompletionEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompletionEngineTests.swift; sourceTree = "<group>"; };
 		AA0000000000000000000173 /* GitRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitRepositoryTests.swift; sourceTree = "<group>"; };
@@ -265,11 +296,14 @@
                 FA0000000000000000000000,
                 FB0000000000000000000000 /* AgentResumeStrip.swift */,
 				EF0000000000000000000000 /* PromptIntentClassifier.swift */,
-				EE0000000000000000000002 /* WebpageAttachmentView.swift */,
+				EF0000000000000000000002 /* ShellCommandResolver.swift */,
 				EE0000000000000000000001 /* WebpageFetcher.swift */,
 				EE0000000000000000000000 /* WebpageAttachment.swift */,
 				CC0000000000000000000065 /* AskSession.swift */,
 				CC0000000000000000000066 /* AskView.swift */,
+				MD0000000000000000000010 /* AgentMarkdownText.swift */,
+				MD0000000000000000000012 /* AgentMarkdown.swift */,
+				MD0000000000000000000014 /* AgentEnvelope.swift */,
 			);
 			path = Agent;
 			sourceTree = "<group>";
@@ -309,6 +343,8 @@
 				AA0000000000000000000101 /* SoraApp.swift */,
 				AA0000000000000000000102 /* ContentView.swift */,
 				AA0000000000000000000105 /* SoraTheme.swift */,
+				AA00000000000000000001D1 /* TerminalPreferences.swift */,
+				AA00000000000000000001D2 /* SoraSettingsView.swift */,
 				AA0000000000000000000190 /* HushLogin.swift */,
 				AA0000000000000000000191 /* SoraZshBootstrap.swift */,
 			);
@@ -320,6 +356,8 @@
 			children = (
 				AA00000000000000000001B0 /* Assets.xcassets */,
 				AA0000000000000000000118 /* sora.ghostty */,
+				AA0000000000000000000119 /* cursor-blink.ghostty */,
+				AA000000000000000000011A /* cursor-blink.glsl */,
 				AA0000000000000000000192 /* zsh */,
 			);
 			path = Resources;
@@ -388,6 +426,7 @@
 				AA0000000000000000000165 /* GhostTextView.swift */,
 				AA0000000000000000000166 /* StickyPromptBar.swift */,
 				AA0000000000000000000167 /* StickyPromptBarModel.swift */,
+				AA0000000000000000000168 /* ShellEditLine.swift */,
 			);
 			path = Completion;
 			sourceTree = "<group>";
@@ -404,7 +443,10 @@
 			isa = PBXGroup;
 			children = (
 				CC000000000000000000006A /* AITests.swift */,
+				MD0000000000000000000021 /* CommandBlocksTests.swift */,
+				MD0000000000000000000011 /* AgentMarkdownTests.swift */,
 				EF0000000000000000000001 /* PromptIntentClassifierTests.swift */,
+				EF0000000000000000000003 /* ShellCommandResolverTests.swift */,
 				EE0000000000000000000003 /* WebpageTests.swift */,
 				AA0000000000000000000110 /* GhosttyInputTests.swift */,
 				AA0000000000000000000111 /* GhosttyClipboardTests.swift */,
@@ -416,6 +458,8 @@
 				AA0000000000000000000150 /* CommandRunFactoryTests.swift */,
 				AA0000000000000000000151 /* CommandHistoryStoreTests.swift */,
 				AA0000000000000000000170 /* PromptBufferTests.swift */,
+				AA0000000000000000000175 /* PromptLineRecoveryTests.swift */,
+				AA0000000000000000000176 /* ShellEditLineTests.swift */,
 				AA0000000000000000000171 /* PathCompleterTests.swift */,
 				AA0000000000000000000172 /* CompletionEngineTests.swift */,
 				AA0000000000000000000173 /* GitRepositoryTests.swift */,
@@ -513,6 +557,8 @@
 				AA0000000000000000000013 /* ghostty in Resources */,
 				AA00000000000000000000B0 /* Assets.xcassets in Resources */,
 				AA0000000000000000000018 /* sora.ghostty in Resources */,
+				AA0000000000000000000019 /* cursor-blink.ghostty in Resources */,
+				AA000000000000000000001A /* cursor-blink.glsl in Resources */,
 				AA00000000000000000000A3 /* zsh in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -534,17 +580,22 @@
                 FA0000000000000000000001,
                 FB0000000000000000000001 /* AgentResumeStrip.swift in Sources */,
 				EF0000000000000000000064 /* PromptIntentClassifier.swift in Sources */,
-				EE0000000000000000000068 /* WebpageAttachmentView.swift in Sources */,
+				EF0000000000000000000069 /* ShellCommandResolver.swift in Sources */,
 				EE0000000000000000000066 /* WebpageFetcher.swift in Sources */,
 				EE0000000000000000000064 /* WebpageAttachment.swift in Sources */,
 				CC00000000000000000000C9 /* AskSession.swift in Sources */,
 				CC00000000000000000000CA /* AskView.swift in Sources */,
+				MD0000000000000000000001 /* AgentMarkdownText.swift in Sources */,
+				MD0000000000000000000004 /* AgentMarkdown.swift in Sources */,
+				MD0000000000000000000006 /* AgentEnvelope.swift in Sources */,
 				CC00000000000000000000CB /* OpenAIProvider.swift in Sources */,
 				CC00000000000000000000CC /* AICredentialStore.swift in Sources */,
 				CC00000000000000000000CD /* AIConversationStore.swift in Sources */,
 				AA0000000000000000000001 /* SoraApp.swift in Sources */,
 				AA0000000000000000000002 /* ContentView.swift in Sources */,
 				AA0000000000000000000005 /* SoraTheme.swift in Sources */,
+				AA00000000000000000000D1 /* TerminalPreferences.swift in Sources */,
+				AA00000000000000000000D2 /* SoraSettingsView.swift in Sources */,
 				AA00000000000000000000A1 /* HushLogin.swift in Sources */,
 				AA00000000000000000000A2 /* SoraZshBootstrap.swift in Sources */,
 				AA0000000000000000000003 /* GhosttyRuntime.swift in Sources */,
@@ -577,6 +628,7 @@
 				AA0000000000000000000065 /* GhostTextView.swift in Sources */,
 				AA0000000000000000000066 /* StickyPromptBar.swift in Sources */,
 				AA0000000000000000000067 /* StickyPromptBarModel.swift in Sources */,
+				AA0000000000000000000068 /* PromptLineRecovery.swift in Sources */,
 				AA0000000000000000000090 /* NextCommandEngine.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -596,6 +648,8 @@
                 FB0000000000000000000002 /* AgentResumeStrip.swift in Sources */,
 				EF0000000000000000000066 /* PromptIntentClassifierTests.swift in Sources */,
 				EF0000000000000000000065 /* PromptIntentClassifier.swift in Sources */,
+				EF000000000000000000006A /* ShellCommandResolver.swift in Sources */,
+				EF000000000000000000006B /* ShellCommandResolverTests.swift in Sources */,
 				EE000000000000000000006B /* WebpageTests.swift in Sources */,
 				EE0000000000000000000067 /* WebpageFetcher.swift in Sources */,
 				EE0000000000000000000065 /* WebpageAttachment.swift in Sources */,
@@ -604,8 +658,13 @@
 				CC0000000000000000000130 /* AICredentialStore.swift in Sources */,
 				CC0000000000000000000131 /* AIConversationStore.swift in Sources */,
 				CC0000000000000000000132 /* AITests.swift in Sources */,
+				MD0000000000000000000020 /* CommandBlocksTests.swift in Sources */,
+				MD0000000000000000000002 /* AgentMarkdownTests.swift in Sources */,
+				MD0000000000000000000005 /* AgentMarkdown.swift in Sources */,
+				MD0000000000000000000007 /* AgentEnvelope.swift in Sources */,
 				AA00000000000000000000B1 /* GhostTextView.swift in Sources */,
 				AA00000000000000000000B2 /* SoraTheme.swift in Sources */,
+				AA00000000000000000000E1 /* TerminalPreferences.swift in Sources */,
 				AA0000000000000000000010 /* GhosttyInputTests.swift in Sources */,
 				AA0000000000000000000011 /* GhosttyClipboardTests.swift in Sources */,
 				AA0000000000000000000014 /* GhosttyInput.swift in Sources */,
@@ -630,11 +689,14 @@
 				AA0000000000000000000072 /* CompletionEngineTests.swift in Sources */,
 				AA0000000000000000000073 /* GitRepositoryTests.swift in Sources */,
 				AA0000000000000000000074 /* CompletionSessionTests.swift in Sources */,
+				AA0000000000000000000075 /* PromptLineRecoveryTests.swift in Sources */,
+				AA0000000000000000000076 /* ShellEditLineTests.swift in Sources */,
 				AA0000000000000000000080 /* PromptBuffer.swift in Sources */,
 				AA0000000000000000000081 /* GitRepository.swift in Sources */,
 				AA0000000000000000000082 /* PathCompleter.swift in Sources */,
 				AA0000000000000000000083 /* CompletionEngine.swift in Sources */,
 				AA0000000000000000000084 /* CompletionSession.swift in Sources */,
+				AA0000000000000000000088 /* PromptLineRecovery.swift in Sources */,
 				AA0000000000000000000091 /* NextCommandEngine.swift in Sources */,
 				AA0000000000000000000092 /* NextCommandEngineTests.swift in Sources */,
 				AA0000000000000000000094 /* StickyPromptBarTests.swift in Sources */,
@@ -707,6 +769,7 @@
 				ENABLE_HARDENED_RUNTIME = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Sora;
+				INFOPLIST_KEY_CFBundleIconName = AppIcon;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSHighResolutionCapable = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -752,6 +815,7 @@
 				ENABLE_HARDENED_RUNTIME = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Sora;
+				INFOPLIST_KEY_CFBundleIconName = AppIcon;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSHighResolutionCapable = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";

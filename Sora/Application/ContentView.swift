@@ -38,7 +38,7 @@ struct ContentView: View {
                 .frame(width: 220)
 
                 Rectangle()
-                    .fill(Color.white.opacity(0.08))
+                    .fill(SoraTheme.hairline)
                     .frame(width: 1)
             }
 
@@ -54,7 +54,8 @@ struct ContentView: View {
                     .frame(minWidth: 480, maxWidth: .infinity, minHeight: 280, maxHeight: .infinity)
             }
         }
-        .animation(.easeOut(duration: 0.18), value: sidebarVisible)
+        .animation(SoraTheme.motionSidebar, value: sidebarVisible)
+        .tint(SoraTheme.accent)
         .background(WindowFrostRepresentable().ignoresSafeArea())
         .background(
             WindowChromeRepresentable(
@@ -76,6 +77,9 @@ struct ContentView: View {
         }
         .onDisappear {
             workspace.refreshWorkingDirectories()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: TerminalPreferences.fontSizeDidChange)) { _ in
+            workspace.applyFontSizeToAllSurfaces()
         }
     }
 }
@@ -111,7 +115,7 @@ struct SidebarCommands: Commands {
     var body: some Commands {
         CommandGroup(after: .sidebar) {
             Button(sidebarVisible?.wrappedValue == false ? "Show Sidebar" : "Hide Sidebar") {
-                withAnimation(.easeOut(duration: 0.18)) {
+                withAnimation(SoraTheme.motionSidebar) {
                     sidebarVisible?.wrappedValue.toggle()
                 }
             }

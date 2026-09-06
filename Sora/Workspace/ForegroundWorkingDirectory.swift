@@ -16,4 +16,12 @@ enum ForegroundWorkingDirectory {
         guard !path.isEmpty else { return nil }
         return URL(fileURLWithPath: path)
     }
+
+    static func executableName(pid: pid_t) -> String? {
+        guard pid > 0 else { return nil }
+        var buffer = [CChar](repeating: 0, count: Int(MAXPATHLEN) * 4)
+        let count = proc_pidpath(pid, &buffer, UInt32(buffer.count))
+        guard count > 0 else { return nil }
+        return URL(fileURLWithPath: String(cString: buffer)).lastPathComponent
+    }
 }

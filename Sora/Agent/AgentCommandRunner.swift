@@ -31,11 +31,23 @@ enum AgentPermissionMode: String, CaseIterable, Identifiable, Sendable {
     var detail: String {
         switch self {
         case .askForApproval:
-            return "Always ask before running commands or fetching webpages"
+            return "Always ask before running commands or fetching webpages."
         case .approveForMe:
-            return "Only ask for actions detected as potentially unsafe"
+            return "Auto-run a fixed list of read-only commands (pwd, ls, du, find). Still ask for every webpage and anything outside that list."
         case .fullAccess:
-            return "Run proposed commands and fetch pages without asking"
+            return "Run any proposed command and fetch any page without asking. Commands use your full file permissions."
+        }
+    }
+
+    /// Status-bar / tooltip summary that matches the active policy.
+    var statusHelp: String {
+        switch self {
+        case .askForApproval:
+            return "Every command and webpage waits for approval."
+        case .approveForMe:
+            return "Read-only listing commands run automatically. Webpages and other commands still ask."
+        case .fullAccess:
+            return "Commands and webpages run without asking, with your full file permissions."
         }
     }
 
@@ -104,11 +116,78 @@ enum AgentCommandPermission {
 
     static func shouldAutoFetchWebpage(mode: AgentPermissionMode) -> Bool {
         switch mode {
-        case .askForApproval:
+        case .askForApproval, .approveForMe:
+            // Approve for me is a command allowlist only — webpages still ask.
             return false
-        case .approveForMe, .fullAccess:
+        case .fullAccess:
             return true
         }
+    }
+}
+
+/// The search path the user's own login shell uses.
+///
+/// A GUI app inherits launchd's minimal path, so agent commands could not see
+/// Homebrew, pipx, mise, or anything else outside `/usr/bin`. The agent then
+/// reported installed tools as missing and proposed reinstalling them. Agent
+/// commands still run with no startup files; only the search path is borrowed.
+enum LoginShellPath {
+    static let beginMarker = "__SORA_PATH_BEGIN__"
+    static let endMarker = "__SORA_PATH_END__"
+
+    /// Used when the login shell cannot be asked. Homebrew's two prefixes cover
+    /// Apple silicon and Intel installs.
+    static let fallback = "/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+
+    /// Resolved once per launch: starting a login shell is not free, and the
+    /// answer does not change while Sora runs.
+    static let value: String = resolve() ?? fallback
+
+    static func parse(_ output: String) -> String? {
+        guard let start = output.range(of: beginMarker),
+              let end = output.range(of: endMarker, range: start.upperBound..<output.endIndex)
+        else { return nil }
+        let value = String(output[start.upperBound..<end.lowerBound])
+        // A path with a newline or NUL is malformed and unsafe to pass on.
+        guard !value.isEmpty, !value.contains("\n"), !value.contains("\0") else { return nil }
+        return value
+    }
+
+    static func resolve(
+        shell: String = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh",
+        timeout: TimeInterval = 5
+    ) -> String? {
+        // Interactive first: many users extend PATH in .zshrc, which a
+        // non-interactive login shell never reads.
+        for arguments in [["-ilc"], ["-lc"]] {
+            let script = "printf '\(beginMarker)%s\(endMarker)' \"$PATH\""
+            if let output = capture(shell: shell, arguments: arguments + [script], timeout: timeout),
+               let path = parse(output) {
+                return path
+            }
+        }
+        return nil
+    }
+
+    private static func capture(shell: String, arguments: [String], timeout: TimeInterval) -> String? {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: shell)
+        process.arguments = arguments
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        // Startup files chatter on stderr; only the marked stdout matters.
+        process.standardError = FileHandle.nullDevice
+        process.standardInput = FileHandle.nullDevice
+        do { try process.run() } catch { return nil }
+
+        let deadline = DispatchWorkItem {
+            if process.isRunning { kill(process.processIdentifier, SIGKILL) }
+        }
+        DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: deadline)
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        deadline.cancel()
+        return String(decoding: data, as: UTF8.self)
     }
 }
 
@@ -120,6 +199,11 @@ final class AgentCommandRunner: @unchecked Sendable {
     private var cancelled = false
     private var interrupted = false
     private let outputLimit = 32_768
+    private let searchPath: String
+
+    init(searchPath: String = LoginShellPath.value) {
+        self.searchPath = searchPath
+    }
 
     func cancel() {
         lock.lock()
@@ -162,7 +246,7 @@ final class AgentCommandRunner: @unchecked Sendable {
         posix_spawnattr_setpgroup(&attributes, 0)
         let arguments = ["/bin/zsh", "-f", "-o", "pipefail", "-c", command].map { value in value.withCString { strdup($0) } }
         var values = ProcessInfo.processInfo.environment
-        values["PATH"] = "/usr/bin:/bin:/usr/sbin:/sbin"
+        values["PATH"] = searchPath
         values["ZDOTDIR"] = "/dev/null"
         let environment = values.map { pair in "\(pair.key)=\(pair.value)".withCString { strdup($0) } }
         defer { (arguments + environment).forEach { free($0) } }
