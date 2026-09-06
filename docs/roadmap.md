@@ -144,6 +144,11 @@ Exit: agents can perform bounded work with visible actions and consistent permis
 - unofficial or scraped provider authentication
 - AI calls on every keystroke
 
+**Shareable CI zip (2026-09-05):** GitHub Actions (`Release zip`) builds an
+ad-hoc Apple Silicon Release zip on `v*` tags or manual dispatch. Not notarized;
+Gatekeeper requires right-click Open / `xattr -cr`. Paid Developer ID and Sparkle
+stay deferred until public distribution matters.
+
 **Persistent agent slice (2026-09-05):** supersedes the earlier autonomous-execution
 restriction for bounded native agent tasks. Agent mode stays open, captures command
 results, and continues automatically for routine read-only listings. Other commands

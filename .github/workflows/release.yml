@@ -1,0 +1,135 @@
+# Build an ad-hoc Release zip and attach it to a GitHub Release.
+# Not notarized — for personal machines and friend feedback only.
+name: Release zip
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Marketing version (e.g. 0.1.0). Empty = 0.1.0-dev."
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-zip-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    runs-on: macos-26
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode 26
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer \
+            || sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+          xcodebuild -version
+          sw_vers
+
+      - name: Install Zig 0.16
+        run: |
+          brew install zig
+          zig version
+          case "$(zig version)" in
+            0.16.*) ;;
+            *) echo "error: need Zig 0.16.x" >&2; exit 1 ;;
+          esac
+
+      - name: Ensure Metal Toolchain
+        run: |
+          if ! xcrun -sdk macosx metal --version >/dev/null 2>&1; then
+            xcodebuild -downloadComponent MetalToolchain
+          fi
+          xcrun -sdk macosx metal --version
+
+      - name: Cache GhosttyKit
+        uses: actions/cache@v4
+        with:
+          path: Vendor/ghostty
+          key: ghosttykit-${{ runner.os }}-${{ runner.arch }}-c81f0b26871c7fbbe2fc35549fdad1f64ed29094-${{ hashFiles('Scripts/build-ghosttykit.sh') }}
+          restore-keys: |
+            ghosttykit-${{ runner.os }}-${{ runner.arch }}-c81f0b26871c7fbbe2fc35549fdad1f64ed29094-
+
+      - name: Resolve version
+        id: ver
+        run: |
+          set -euo pipefail
+          INPUT="${{ github.event.inputs.version }}"
+          REF="${GITHUB_REF_NAME}"
+          if [[ -n "${INPUT}" ]]; then
+            MARKETING="${INPUT#v}"
+          elif [[ "${GITHUB_REF_TYPE}" == "tag" && "${REF}" == v* ]]; then
+            MARKETING="${REF#v}"
+          else
+            MARKETING="0.1.0-dev"
+          fi
+          BUILD="${GITHUB_RUN_NUMBER}"
+          echo "marketing=${MARKETING}" >> "${GITHUB_OUTPUT}"
+          echo "build=${BUILD}" >> "${GITHUB_OUTPUT}"
+          echo "Resolved ${MARKETING} (build ${BUILD})"
+
+      - name: Package zip
+        env:
+          MARKETING_VERSION: ${{ steps.ver.outputs.marketing }}
+          CURRENT_PROJECT_VERSION: ${{ steps.ver.outputs.build }}
+        run: |
+          chmod +x Scripts/build-ghosttykit.sh Scripts/package-app.sh
+          ./Scripts/package-app.sh
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sora-${{ steps.ver.outputs.marketing }}-${{ steps.ver.outputs.build }}-macos-arm64
+          path: dist/*.zip
+          if-no-files-found: error
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MARKETING: ${{ steps.ver.outputs.marketing }}
+          BUILD: ${{ steps.ver.outputs.build }}
+        run: |
+          set -euo pipefail
+          ZIP="$(ls dist/Sora-*-macos-*.zip | head -1)"
+
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            TAG="${GITHUB_REF_NAME}"
+            PRERELEASE_ARGS=()
+          else
+            # Manual runs get a disposable prerelease; no force-push of version tags.
+            TAG="dev-${BUILD}"
+            PRERELEASE_ARGS=(--prerelease --target "${GITHUB_SHA}")
+          fi
+
+          NOTES=$(cat <<EOF
+          ## Sora ${MARKETING} (build ${BUILD})
+
+          Ad-hoc signed **Apple Silicon** zip — not notarized. For personal installs and friend feedback only.
+
+          ### First open
+          1. Unzip and move \`Sora.app\` to Applications (or \`~/Applications\`).
+          2. Right-click → **Open**, or run \`xattr -cr /path/to/Sora.app\`.
+
+          See \`INSTALL.txt\` inside the zip. Ghostty MIT notices are in \`ThirdPartyNotices.txt\`.
+          EOF
+          )
+
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            gh release upload "${TAG}" "${ZIP}" --clobber
+            gh release edit "${TAG}" --notes "${NOTES}"
+          else
+            gh release create "${TAG}" "${ZIP}" \
+              --title "Sora ${MARKETING}" \
+              --notes "${NOTES}" \
+              "${PRERELEASE_ARGS[@]}"
+          fi

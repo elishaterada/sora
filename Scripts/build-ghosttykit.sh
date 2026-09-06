@@ -29,6 +29,18 @@ fi
 git -C "${GHOSTTY_DIR}" fetch --depth 1 origin "${GHOSTTY_COMMIT}"
 git -C "${GHOSTTY_DIR}" checkout --detach "${GHOSTTY_COMMIT}"
 
+XCFRAMEWORK="${GHOSTTY_DIR}/macos/GhosttyKit.xcframework"
+TERMINFO="${GHOSTTY_DIR}/zig-out/share/terminfo/78/xterm-ghostty"
+if [[ -d "${XCFRAMEWORK}" && -e "${TERMINFO}" ]]; then
+  HEAD="$(git -C "${GHOSTTY_DIR}" rev-parse HEAD)"
+  if [[ "${HEAD}" == "${GHOSTTY_COMMIT}" ]]; then
+    echo "GhosttyKit already built for ${GHOSTTY_COMMIT}; skipping zig build"
+    echo "GhosttyKit ready at ${XCFRAMEWORK}"
+    echo "terminfo ready at ${GHOSTTY_DIR}/zig-out/share/terminfo"
+    exit 0
+  fi
+fi
+
 if ! xcrun -sdk macosx metal --version >/dev/null 2>&1; then
   echo "Metal Toolchain missing; downloading..."
   xcodebuild -downloadComponent MetalToolchain
@@ -41,15 +53,15 @@ zig build \
   -Demit-macos-app=false \
   -Doptimize=ReleaseFast
 
-if [[ ! -d "${GHOSTTY_DIR}/macos/GhosttyKit.xcframework" ]]; then
+if [[ ! -d "${XCFRAMEWORK}" ]]; then
   echo "error: GhosttyKit.xcframework was not produced" >&2
   exit 1
 fi
 
-if [[ ! -e "${GHOSTTY_DIR}/zig-out/share/terminfo/78/xterm-ghostty" ]]; then
+if [[ ! -e "${TERMINFO}" ]]; then
   echo "error: terminfo xterm-ghostty was not produced" >&2
   exit 1
 fi
 
-echo "GhosttyKit ready at ${GHOSTTY_DIR}/macos/GhosttyKit.xcframework"
+echo "GhosttyKit ready at ${XCFRAMEWORK}"
 echo "terminfo ready at ${GHOSTTY_DIR}/zig-out/share/terminfo"
