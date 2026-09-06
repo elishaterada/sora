@@ -24,7 +24,7 @@ final class CommandBlocksTests: XCTestCase {
         XCTAssertEqual(lines, ["<1ms", "14ms", "1.25s", "12.4s", "1m15s"])
     }
 
-    func testPrecmdPrintsRuleAndDurationAfterArmedCommand() throws {
+    func testPrecmdPrintsStatsAboveFullWidthRule() throws {
         let script = resourceRoot().appendingPathComponent("Sora/Resources/zsh/command-blocks.zsh")
         let output = try runZsh(
             """
@@ -38,9 +38,15 @@ final class CommandBlocksTests: XCTestCase {
             """,
             argument: script.path
         )
-        XCTAssertTrue(output.contains("─"), output)
-        XCTAssertTrue(output.contains("ms)") || output.contains("s)"), output)
-        XCTAssertFalse(output.contains("exit"), output)
+        let plain = stripANSI(output)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let lines = plain.split(separator: "\n").map(String.init)
+        XCTAssertEqual(lines.count, 2, plain)
+        XCTAssertTrue(lines[0].hasPrefix("(") && lines[0].hasSuffix(")"), lines[0])
+        XCTAssertTrue(lines[0].contains("ms") || lines[0].contains("s"), lines[0])
+        XCTAssertFalse(lines[0].contains("exit"), lines[0])
+        XCTAssertTrue(lines[1].allSatisfy { $0 == "─" }, lines[1])
+        XCTAssertEqual(lines[1].count, 40, plain)
     }
 
     func testFailedCommandIncludesExitCode() throws {
@@ -56,8 +62,9 @@ final class CommandBlocksTests: XCTestCase {
             """,
             argument: script.path
         )
-        XCTAssertTrue(output.contains("exit 1"), output)
-        XCTAssertTrue(output.contains("─"), output)
+        let plain = stripANSI(output)
+        XCTAssertTrue(plain.contains("exit 1"), plain)
+        XCTAssertTrue(plain.contains("─"), plain)
     }
 
     func testAgentHandoffClosesTheBlockWithItsOwnLabel() throws {
@@ -66,17 +73,15 @@ final class CommandBlocksTests: XCTestCase {
             """
             source "$1"
             COLUMNS=40
-            _sora_block_rule ' (agent)'
+            _sora_block_rule '(agent)'
             """,
             argument: script.path
         )
-        XCTAssertTrue(output.contains("─"), output)
-        XCTAssertTrue(output.contains("(agent)"), output)
-        // The rule plus label fills the terminal width, ignoring color escapes.
-        let plain = output
-            .replacingOccurrences(of: "\u{1B}\\[[0-9;]*m", with: "", options: .regularExpression)
+        let plain = stripANSI(output)
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        XCTAssertEqual(plain.count, 40, plain)
+        let lines = plain.split(separator: "\n").map(String.init)
+        XCTAssertEqual(lines[0], "(agent)", plain)
+        XCTAssertEqual(lines[1], String(repeating: "─", count: 40), plain)
     }
 
     func testAgentFlagMakesPrecmdDrawTheAgentRuleWithoutTiming() throws {
@@ -92,9 +97,15 @@ final class CommandBlocksTests: XCTestCase {
             """,
             argument: script.path
         )
-        XCTAssertTrue(output.contains("(agent)"), output)
-        XCTAssertFalse(output.contains("ms)"), output)
-        XCTAssertEqual(output.split(separator: "\n").count, 1, output)
+        let plain = stripANSI(output)
+        XCTAssertTrue(plain.contains("(agent)"), plain)
+        XCTAssertFalse(plain.contains("ms)"), plain)
+        XCTAssertEqual(
+            plain.trimmingCharacters(in: .whitespacesAndNewlines)
+                .split(separator: "\n").count,
+            2,
+            plain
+        )
     }
 
     func testHandoffWidgetIsBoundToTheKeySoraSends() throws {
@@ -112,6 +123,14 @@ final class CommandBlocksTests: XCTestCase {
         XCTAssertEqual(
             key.unicodeScalars.map(\.value),
             [ShellEditLine.agentHandoffControl.value]
+        )
+    }
+
+    private func stripANSI(_ value: String) -> String {
+        value.replacingOccurrences(
+            of: "\u{1B}\\[[0-9;]*m",
+            with: "",
+            options: .regularExpression
         )
     }
 

@@ -1,5 +1,6 @@
-# After each command, print a muted full-width rule and the elapsed time so
-# command+output blocks are easy to scan (Warp-style separators, Sora-owned).
+# After each command, print a compact duration and a full-width hairline so
+# command+output blocks are easy to scan. Keep the label on its own line —
+# embedding it in a dash string wraps and looks like text drawn over a bar.
 # Sourced from zshenv after Ghostty's shell integration.
 
 builtin zmodload zsh/datetime 2>/dev/null || return 0
@@ -29,27 +30,27 @@ _sora_format_duration() {
   fi
 }
 
-# Full-width rule closing a block, with a right-aligned label. `$2` is an
-# optional prompt color for the label; the rule itself is always muted.
+# Stats above the next prompt, then a full-width hairline. Duration stays on
+# its own line so it never sits inside the rule (that wrapped like text over a bar).
+# `$1` is the visible label; `$2` optional prompt color.
 _sora_block_rule() {
   builtin emulate -L zsh
-  local suffix=$1 color=$2
+  local label=$1 color=$2
 
   local cols=${COLUMNS:-0}
   (( cols > 0 )) || cols=80
-  # Visible width of the suffix (ASCII-only labels).
-  local -i fill=$(( cols - ${#suffix} ))
-  (( fill < 4 )) && fill=4
+  (( cols < 4 )) && cols=4
 
   local rule
-  builtin printf -v rule '%*s' "$fill" ''
+  builtin printf -v rule '%*s' "$cols" ''
   rule=${rule// /─}
 
   if [[ -n $color ]]; then
-    builtin print -P -- "%F{240}${rule}%f%F{${color}}${suffix}%f"
+    builtin print -P -- "%F{${color}}${label}%f"
   else
-    builtin print -P -- "%F{240}${rule}${suffix}%f"
+    builtin print -P -- "%F{240}${label}%f"
   fi
+  builtin print -P -- "%F{240}${rule}%f"
 }
 
 _sora_block_preexec() {
@@ -66,7 +67,7 @@ _sora_block_precmd() {
   if (( _sora_block_agent )); then
     _sora_block_agent=0
     _sora_block_armed=0
-    _sora_block_rule ' (agent)' '#19f9d8'
+    _sora_block_rule '(agent)' '#19f9d8'
     return 0
   fi
 
@@ -80,9 +81,9 @@ _sora_block_precmd() {
   dur="$(_sora_format_duration $elapsed)"
 
   if (( _sora_exit != 0 )); then
-    _sora_block_rule " (${dur} · exit ${_sora_exit})" "#ff2c6d"
+    _sora_block_rule "(${dur} · exit ${_sora_exit})" "#ff2c6d"
   else
-    _sora_block_rule " (${dur})"
+    _sora_block_rule "(${dur})"
   fi
 }
 
