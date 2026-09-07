@@ -2,6 +2,19 @@ import Foundation
 import XCTest
 
 final class OpenAIProviderTests: XCTestCase {
+    func testMixedActionEnvelopesRequireRepair() {
+        let command = #"<SORA_COMMAND>{"summary":"List files.","command":"ls"}</SORA_COMMAND>"#
+        let webpage = #"<SORA_WEBPAGE>{"summary":"Read docs.","url":"https://example.com"}</SORA_WEBPAGE>"#
+        XCTAssertFalse(AgentEnvelope.needsRepair(command))
+        XCTAssertFalse(AgentEnvelope.needsRepair(webpage))
+        XCTAssertFalse(AgentEnvelope.needsRepair("An ordinary answer."))
+        XCTAssertTrue(AgentEnvelope.needsRepair(command + webpage))
+        XCTAssertTrue(AgentEnvelope.needsRepair(command + command))
+        XCTAssertTrue(AgentEnvelope.needsRepair("<SORA_COMMAND>"))
+        XCTAssertNil(AgentCommandProposalParser.match(command + webpage))
+        XCTAssertNil(AgentWebpageProposalParser.match(command + webpage))
+    }
+
     func testRealtimeCaptureRecoversFromFaultedVoiceProcessing() {
         var health = RealtimeCaptureHealth()
         XCTAssertEqual(health.action(usesVoiceProcessing: true), .retryWithoutVoiceProcessing)
@@ -784,6 +797,76 @@ final class AskSessionTests: XCTestCase {
         XCTAssertEqual(provider.requests.last?.messages.map(\.text), ["Explain pwd", "Prints the directory.", "And ls?"])
         XCTAssertEqual(provider.requests.last?.messages.first?.webpage, page)
         session.stop()
+    }
+
+    func testMalformedActionAutomaticallyRepairsWithoutDuplicatingTurn() async {
+        let provider = ControlledProvider()
+        let session = makeSession(provider)
+        session.enabled = true
+        session.draft = "Create a folder"
+        session.send()
+        await waitFor { provider.requests.count == 1 }
+        provider.emit(.text("<SORA_COMMAND>{broken}</SORA_COMMAND>"))
+        provider.emit(.completed)
+        provider.finish()
+        await waitFor { provider.requests.count == 2 }
+        XCTAssertTrue(session.isSending)
+        XCTAssertNil(session.messages.last?.commandProposal)
+        XCTAssertEqual(provider.requests.last?.messages.last?.text, AgentEnvelope.repairInstruction)
+        provider.emit(.text(#"<SORA_COMMAND>{"summary":"Create the folder.","command":"mkdir example"}</SORA_COMMAND>"#))
+        provider.emit(.completed)
+        provider.finish()
+        await waitFor { !session.isSending }
+        XCTAssertEqual(session.messages.count, 2)
+        XCTAssertEqual(session.messages.last?.commandProposal?.status, .pending)
+        XCTAssertEqual(session.messages.last?.commandProposal?.command, "mkdir example")
+        XCTAssertNil(session.errorMessage)
+    }
+
+    func testMalformedActionRetriesAreBoundedAndFailedTurnExcluded() async {
+        let provider = ControlledProvider()
+        let session = makeSession(provider)
+        session.enabled = true
+        session.draft = "Find a page"
+        session.send()
+        for count in 1...3 {
+            await waitFor { provider.requests.count == count }
+            provider.emit(.text("<SORA_WEBPAGE>{broken}</SORA_WEBPAGE>"))
+            provider.emit(.completed)
+            provider.finish()
+        }
+        await waitFor { !session.isSending }
+        XCTAssertEqual(provider.requests.count, 3)
+        XCTAssertEqual(session.messages.last?.status, .failed)
+        XCTAssertNil(session.messages.last?.webpageProposal)
+        XCTAssertFalse(session.messages.last?.text.contains("SORA_") ?? true)
+        XCTAssertTrue(session.errorMessage?.contains("two automatic retries") == true)
+        session.draft = "Explain pwd"
+        session.send()
+        await waitFor { provider.requests.count == 4 }
+        XCTAssertEqual(provider.requests.last?.messages.map(\.text), ["Explain pwd"])
+        session.stop()
+    }
+
+    func testStopDuringRepairRejectsLateProposal() async {
+        let provider = ControlledProvider()
+        let session = makeSession(provider)
+        session.enabled = true
+        session.draft = "Create a folder"
+        session.send()
+        await waitFor { provider.requests.count == 1 }
+        provider.emit(.text("<SORA_COMMAND>{broken}</SORA_COMMAND>"))
+        provider.emit(.completed)
+        provider.finish()
+        await waitFor { provider.requests.count == 2 }
+        session.stop()
+        provider.emit(.text(#"<SORA_COMMAND>{"summary":"Create folder.","command":"mkdir example"}</SORA_COMMAND>"#))
+        provider.emit(.completed)
+        provider.finish()
+        for _ in 0..<20 { await Task.yield() }
+        XCTAssertEqual(session.messages.last?.status, .stopped)
+        XCTAssertNil(session.messages.last?.commandProposal)
+        XCTAssertEqual(provider.requests.count, 2)
     }
 
     func testCommandProposalRequiresPersistedApprovalAndCannotRunTwice() async throws {
