@@ -35,6 +35,12 @@ DOWNLOAD_BASE_URL="${SPARKLE_DOWNLOAD_BASE_URL:-https://github.com/elishaterada/
 DOWNLOAD_URL="${DOWNLOAD_BASE_URL}/${ARCHIVE_NAME}"
 RELEASE_URL="https://github.com/elishaterada/sora/releases/tag/${RELEASE_TAG}"
 PUB_DATE="$(LC_ALL=C date -u '+%a, %d %b %Y %H:%M:%S %z')"
+RELEASE_NOTES="$("${ROOT}/Scripts/extract-release-notes.sh" "${MARKETING_VERSION}" "${ROOT}/CHANGELOG.md")"
+
+if [[ "${RELEASE_NOTES}" == *"]]>"* ]]; then
+  echo "error: release notes cannot contain the XML CDATA terminator ]]>" >&2
+  exit 1
+fi
 
 cat > "${APPCAST}" <<EOF
 <?xml version="1.0" encoding="utf-8"?>
@@ -51,6 +57,7 @@ cat > "${APPCAST}" <<EOF
       <sparkle:version>${CURRENT_PROJECT_VERSION}</sparkle:version>
       <sparkle:shortVersionString>${MARKETING_VERSION}</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description sparkle:format="markdown"><![CDATA[${RELEASE_NOTES}]]></description>
       <enclosure url="${DOWNLOAD_URL}" ${SIGNATURE_ATTRIBUTES} type="application/octet-stream" />
     </item>
   </channel>

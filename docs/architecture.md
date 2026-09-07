@@ -56,7 +56,11 @@ Only create directories required by the current phase. Phase 5 creates
 - updates: Sparkle performs one non-blocking check per Release-build launch and
   exposes a native “Check for Updates…” command. The stable feed is
   `appcast.xml` on GitHub's latest release; both the archive and feed are EdDSA
-  signed by the release workflow. Debug builds only check when asked manually.
+  signed by the release workflow. Each tagged version must have a matching
+  human-readable section in `CHANGELOG.md`; packaging fails if it is missing,
+  and the workflow publishes that section both in the GitHub release notes and
+  as embedded Markdown in Sparkle's update-review window. Debug builds only
+  check when asked manually.
 
 ### Terminal
 
