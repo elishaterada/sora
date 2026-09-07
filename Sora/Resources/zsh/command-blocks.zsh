@@ -1,6 +1,5 @@
-# After each command, print a compact duration and a full-width hairline so
-# command+output blocks are easy to scan. Keep the label on its own line —
-# embedding it in a dash string wraps and looks like text drawn over a bar.
+# After each command, print a compact duration above the next prompt. Ghostty
+# draws the boundary from OSC 133 semantic metadata, so it survives reflow.
 # Sourced from zshenv after Ghostty's shell integration.
 
 builtin zmodload zsh/datetime 2>/dev/null || return 0
@@ -30,27 +29,20 @@ _sora_format_duration() {
   fi
 }
 
-# Stats above the next prompt, then a full-width hairline. Duration stays on
-# its own line so it never sits inside the rule (that wrapped like text over a bar).
-# `$1` is the visible label; `$2` optional prompt color.
+# Duration (or agent) label. `$2` optional color.
 _sora_block_rule() {
   builtin emulate -L zsh
   local label=$1 color=$2
-
-  local cols=${COLUMNS:-0}
-  (( cols > 0 )) || cols=80
-  (( cols < 4 )) && cols=4
-
-  local rule
-  builtin printf -v rule '%*s' "$cols" ''
-  rule=${rule// /─}
 
   if [[ -n $color ]]; then
     builtin print -P -- "%F{${color}}${label}%f"
   else
     builtin print -P -- "%F{240}${label}%f"
   fi
-  builtin print -P -- "%F{240}${rule}%f"
+
+  # Keep one real terminal row between groups. Because this row belongs to the
+  # terminal grid, it reflows, scrolls, and clears with the surrounding text.
+  builtin print
 }
 
 _sora_block_preexec() {

@@ -18,6 +18,7 @@ window-padding-x = 14
 window-padding-y = 12
 window-padding-balance = true
 adjust-cell-height = 12%
+semantic-prompt-boundaries = true
 font-size = 18
 font-family = "SF Mono"
 bold-color = bright
