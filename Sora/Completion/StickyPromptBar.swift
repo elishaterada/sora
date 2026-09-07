@@ -8,6 +8,7 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
 
     var onFocusTerminal: (() -> Void)?
     var onAcceptPrediction: (() -> Void)?
+    var onToggleDictation: (() -> Void)?
 
     private let pathButton = StickyContextChipButton()
     private let branchButton = StickyContextChipButton()
@@ -15,6 +16,7 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
     private let hintLabel = NSTextField(labelWithString: "")
     private let routeLabel = NSTextField(labelWithString: "")
     private let effectView: NSView
+    private let microphoneButton = NSButton()
     private let hairline = NSView()
     private var showingPrediction = false
     private var agentResumeAvailable = false
@@ -63,6 +65,14 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
         addSubview(lineLabel)
         addSubview(hintLabel)
         addSubview(routeLabel)
+        microphoneButton.image = NSImage(systemSymbolName: "mic", accessibilityDescription: "Dictate")
+        microphoneButton.isBordered = false
+        microphoneButton.target = self
+        microphoneButton.action = #selector(toggleDictation)
+        microphoneButton.toolTip = "Dictate into the terminal"
+        microphoneButton.setAccessibilityElement(true)
+        microphoneButton.setAccessibilityLabel("Dictate into the terminal")
+        addSubview(microphoneButton)
 
         setAccessibilityElement(true)
         setAccessibilityRole(.group)
@@ -85,7 +95,8 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
     func gestureRecognizer(_ gestureRecognizer: NSGestureRecognizer, shouldAttemptToRecognizeWith event: NSEvent) -> Bool {
         let point = convert(event.locationInWindow, from: nil)
         // Let path/branch chips receive clicks instead of focus-terminal.
-        if pathButton.frame.contains(point) || (!branchButton.isHidden && branchButton.frame.contains(point)) {
+        if pathButton.frame.contains(point) || microphoneButton.frame.contains(point)
+            || (!branchButton.isHidden && branchButton.frame.contains(point)) {
             return false
         }
         return true
@@ -122,7 +133,9 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
         }()
         let chipsEnd = branchButton.isHidden ? pathButton.frame.maxX : branchButton.frame.maxX
         let lineX = chipsEnd + 8
-        let lineMaxX = bounds.width - inset - trailingReserve
+        let micWidth: CGFloat = 28
+        microphoneButton.frame = NSRect(x: bounds.width - inset - micWidth, y: rowY, width: micWidth, height: chipHeight)
+        let lineMaxX = bounds.width - inset - trailingReserve - micWidth - 4
         lineLabel.frame = NSRect(
             x: lineX,
             y: labelY,
@@ -130,7 +143,7 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
             height: labelHeight
         )
 
-        var trailingX = bounds.width - inset
+        var trailingX = microphoneButton.frame.minX - 4
         if !hintLabel.isHidden, !hintLabel.stringValue.isEmpty {
             let w: CGFloat = 92
             trailingX -= w
@@ -218,6 +231,21 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
         needsLayout = true
     }
 
+    func updateDictation(listening: Bool, transcript: String, error: String?) {
+        microphoneButton.image = NSImage(
+            systemSymbolName: listening ? "waveform.circle.fill" : "mic",
+            accessibilityDescription: listening ? "Stop dictating" : "Dictate"
+        )
+        microphoneButton.contentTintColor = listening ? SoraTheme.nsAccent : .secondaryLabelColor
+        microphoneButton.toolTip = error ?? (listening ? "Stop dictating" : "Dictate into the terminal")
+        microphoneButton.setAccessibilityLabel(listening ? "Stop dictating" : "Dictate into the terminal")
+        if listening, !transcript.isEmpty {
+            lineLabel.stringValue = transcript
+            lineLabel.textColor = SoraTheme.nsAccent
+        }
+        needsLayout = true
+    }
+
     private func applyFallbackHint() {
         if showingPrediction {
             hintLabel.stringValue = "→ accept"
@@ -241,6 +269,10 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
     @objc private func acceptIfPossible() {
         onAcceptPrediction?()
         onFocusTerminal?()
+    }
+
+    @objc private func toggleDictation() {
+        onToggleDictation?()
     }
 
     @objc private func showPathMenu(_ sender: NSButton) {

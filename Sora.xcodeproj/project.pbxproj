@@ -44,6 +44,8 @@
 		CC00000000000000000000C9 /* AskSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0000000000000000000065 /* AskSession.swift */; };
 		CC000000000000000000012D /* AskSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0000000000000000000065 /* AskSession.swift */; };
 		CC00000000000000000000CA /* AskView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0000000000000000000066 /* AskView.swift */; };
+		VC0000000000000000000002 /* VoiceInputController.swift in Sources */ = {isa = PBXBuildFile; fileRef = VC0000000000000000000001 /* VoiceInputController.swift */; };
+		RV0000000000000000000002 /* RealtimeVoiceController.swift in Sources */ = {isa = PBXBuildFile; fileRef = RV0000000000000000000001 /* RealtimeVoiceController.swift */; };
 		MD0000000000000000000001 /* AgentMarkdownText.swift in Sources */ = {isa = PBXBuildFile; fileRef = MD0000000000000000000010 /* AgentMarkdownText.swift */; };
 		MD0000000000000000000004 /* AgentMarkdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = MD0000000000000000000012 /* AgentMarkdown.swift */; };
 		MD0000000000000000000005 /* AgentMarkdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = MD0000000000000000000012 /* AgentMarkdown.swift */; };
@@ -184,6 +186,8 @@
 		CC0000000000000000000064 /* AIProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIProvider.swift; sourceTree = "<group>"; };
 		CC0000000000000000000065 /* AskSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AskSession.swift; sourceTree = "<group>"; };
 		CC0000000000000000000066 /* AskView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AskView.swift; sourceTree = "<group>"; };
+		VC0000000000000000000001 /* VoiceInputController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceInputController.swift; sourceTree = "<group>"; };
+		RV0000000000000000000001 /* RealtimeVoiceController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealtimeVoiceController.swift; sourceTree = "<group>"; };
 		MD0000000000000000000010 /* AgentMarkdownText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentMarkdownText.swift; sourceTree = "<group>"; };
 		MD0000000000000000000012 /* AgentMarkdown.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentMarkdown.swift; sourceTree = "<group>"; };
 		MD0000000000000000000014 /* AgentEnvelope.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentEnvelope.swift; sourceTree = "<group>"; };
@@ -311,6 +315,8 @@
 				EE0000000000000000000000 /* WebpageAttachment.swift */,
 				CC0000000000000000000065 /* AskSession.swift */,
 				CC0000000000000000000066 /* AskView.swift */,
+				VC0000000000000000000001 /* VoiceInputController.swift */,
+				RV0000000000000000000001 /* RealtimeVoiceController.swift */,
 				MD0000000000000000000010 /* AgentMarkdownText.swift */,
 				MD0000000000000000000012 /* AgentMarkdown.swift */,
 				MD0000000000000000000014 /* AgentEnvelope.swift */,
@@ -607,6 +613,8 @@
 				EE0000000000000000000064 /* WebpageAttachment.swift in Sources */,
 				CC00000000000000000000C9 /* AskSession.swift in Sources */,
 				CC00000000000000000000CA /* AskView.swift in Sources */,
+				VC0000000000000000000002 /* VoiceInputController.swift in Sources */,
+				RV0000000000000000000002 /* RealtimeVoiceController.swift in Sources */,
 				MD0000000000000000000001 /* AgentMarkdownText.swift in Sources */,
 				MD0000000000000000000004 /* AgentMarkdown.swift in Sources */,
 				MD0000000000000000000006 /* AgentEnvelope.swift in Sources */,

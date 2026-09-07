@@ -15,6 +15,7 @@ struct AIMessage: Codable, Identifiable, Equatable, Sendable {
     var commandState: String?
     var commandDirectory: String?
     var isAgentContinuation: Bool?
+    var isVoiceInput: Bool?
 
     func contentForProvider() throws -> String {
         var content = text
@@ -108,16 +109,32 @@ enum AIError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .disabled: return "Enable Agent in Setup to send a question."
-        case .missingKey: return "Add your API key in Setup."
-        case .invalidModel: return "Enter a model ID in Setup."
+        case .disabled: return "Enable Agent in Settings to send a question."
+        case .missingKey: return "Add your API key in Agent Settings."
+        case .invalidModel: return "Enter a model ID in Agent Settings."
         case .incompleteStream: return "The answer was interrupted before it finished. Try again."
         case .malformedResponse: return "The provider returned an unreadable response."
-        case .requestFailed(401): return "The API key was rejected. Update it in Setup."
+        case .requestFailed(401): return "The API key was rejected. Update it in Agent Settings."
         case .requestFailed(429): return "The provider's usage or rate limit was reached. Check your API billing or try later."
         case .requestFailed(let status): return "The AI request failed (HTTP \(status)). Check the model ID and API access."
         case .responseFailed: return "The provider could not finish the answer. Try again."
         case .contextTooLarge: return "This conversation is too long. Start a new conversation to continue."
+        }
+    }
+}
+
+enum RealtimeVoiceError: LocalizedError {
+    case unavailable(String)
+    case connectionFailed
+    case audioFailed(String)
+    case server(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .unavailable(let reason): return reason
+        case .connectionFailed: return "Realtime voice could not connect. Check your network and API access."
+        case .audioFailed(let reason): return "Realtime audio could not start: \(reason)"
+        case .server(let reason): return "Realtime voice stopped: \(reason)"
         }
     }
 }

@@ -2,6 +2,87 @@ import Foundation
 import XCTest
 
 final class OpenAIProviderTests: XCTestCase {
+    func testRealtimeCaptureRecoversFromFaultedVoiceProcessing() {
+        var health = RealtimeCaptureHealth()
+        XCTAssertEqual(health.action(usesVoiceProcessing: true), .retryWithoutVoiceProcessing)
+        XCTAssertEqual(health.action(usesVoiceProcessing: false), .captureFailed)
+        health.record(hasSignal: false)
+        XCTAssertEqual(health.action(usesVoiceProcessing: true), .retryWithoutVoiceProcessing)
+        // A working raw microphone can legitimately deliver silence.
+        XCTAssertEqual(health.action(usesVoiceProcessing: false), .healthy)
+        health.record(hasSignal: true)
+        health.record(hasSignal: false)
+        XCTAssertEqual(health.action(usesVoiceProcessing: true), .healthy)
+    }
+
+    func testRealtimeVoiceModelCapabilityUsesExplicitCurrentModelsAndSnapshots() {
+        XCTAssertTrue(RealtimeVoiceModel.isSupported("gpt-realtime-2.1"))
+        XCTAssertTrue(RealtimeVoiceModel.isSupported("gpt-realtime-2.1-2026-08-01"))
+        XCTAssertTrue(RealtimeVoiceModel.isSupported(" gpt-realtime-1.5 "))
+        XCTAssertFalse(RealtimeVoiceModel.isSupported("gpt-5.4-mini"))
+        XCTAssertFalse(RealtimeVoiceModel.isSupported("gpt-realtime"))
+        XCTAssertFalse(RealtimeVoiceModel.isSupported(""))
+    }
+
+    func testRealtimeVoiceClientEventsUseTextWebSocketFrames() throws {
+        let message = try RealtimeVoiceWireCodec.outboundMessage(for: [
+            "type": "input_audio_buffer.append",
+            "audio": "AQID"
+        ])
+
+        guard case .string(let text) = message else {
+            return XCTFail("Realtime client events must be sent as text frames.")
+        }
+        let value = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: String]
+        )
+        XCTAssertEqual(value["type"], "input_audio_buffer.append")
+        XCTAssertEqual(value["audio"], "AQID")
+    }
+
+    func testRealtimeVoiceTruncationNeverExceedsReceivedAudio() {
+        let receivedBytesFor7Point3Seconds = 24_000 * 2 * 7_300 / 1_000
+
+        XCTAssertEqual(
+            RealtimeVoiceTiming.truncationMilliseconds(
+                playedMilliseconds: 8_458,
+                receivedPCMByteCount: receivedBytesFor7Point3Seconds
+            ),
+            7_299
+        )
+        XCTAssertEqual(
+            RealtimeVoiceTiming.truncationMilliseconds(
+                playedMilliseconds: 1_500,
+                receivedPCMByteCount: receivedBytesFor7Point3Seconds
+            ),
+            1_500
+        )
+        // An interruption before the player starts must discard all queued audio.
+        XCTAssertEqual(
+            RealtimeVoiceTiming.truncationMilliseconds(
+                playedMilliseconds: 0,
+                receivedPCMByteCount: receivedBytesFor7Point3Seconds
+            ),
+            0
+        )
+        XCTAssertNil(
+            RealtimeVoiceTiming.truncationMilliseconds(
+                playedMilliseconds: 100,
+                receivedPCMByteCount: 0
+            )
+        )
+
+        XCTAssertTrue(
+            RealtimeVoiceTiming.shouldInterruptPlayback(isSpeaking: true, scheduledAudioBuffers: 0)
+        )
+        XCTAssertTrue(
+            RealtimeVoiceTiming.shouldInterruptPlayback(isSpeaking: false, scheduledAudioBuffers: 1)
+        )
+        XCTAssertFalse(
+            RealtimeVoiceTiming.shouldInterruptPlayback(isSpeaking: false, scheduledAudioBuffers: 0)
+        )
+    }
+
     func testCommandProposalEnvelopeIsStrictAndSingleLine() throws {
         let valid = #"<SORA_COMMAND>{"summary":"List the largest files without changing them.","command":"find . -type f -print | head"}</SORA_COMMAND>"#
         XCTAssertEqual(
@@ -237,6 +318,25 @@ final class AskSessionTests: XCTestCase {
     private func makeSession(_ provider: ControlledProvider = ControlledProvider(),
                              key: MemoryKey = MemoryKey(), store: MemoryConversation = MemoryConversation()) -> AskSession {
         AskSession(provider: provider, credentials: key, conversations: store, defaults: defaults)
+    }
+
+    func testRealtimeVoiceAvailabilityAndTranscriptLifecycle() {
+        let store = MemoryConversation()
+        let session = makeSession(store: store)
+        XCTAssertFalse(session.realtimeVoiceAvailability.isAvailable)
+        session.enabled = true
+        XCTAssertTrue(session.realtimeVoiceAvailability.isAvailable)
+        session.realtimeVoiceModel = "gpt-5.4-mini"
+        XCTAssertFalse(session.realtimeVoiceAvailability.isAvailable)
+        session.realtimeVoiceModel = RealtimeVoiceModel.recommended
+
+        let id = session.beginRealtimeVoiceMessage(role: .user)
+        session.updateRealtimeVoiceMessage(id: id, text: "Hello", completed: false)
+        XCTAssertEqual(session.messages.last?.status, .streaming)
+        XCTAssertEqual(session.messages.last?.isVoiceInput, true)
+        session.updateRealtimeVoiceMessage(id: id, text: "Hello Sora", completed: true)
+        XCTAssertEqual(session.messages.last?.status, .complete)
+        XCTAssertEqual(store.messages.last?.text, "Hello Sora")
     }
 
     func testAgentRunsCommandAndFeedsOutputBackBeforeSummarizing() async {

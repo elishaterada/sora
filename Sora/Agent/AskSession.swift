@@ -9,6 +9,9 @@ final class AskSession: ObservableObject {
     @Published var model: String {
         didSet { defaults.set(model, forKey: "ai.model.\(selectedProvider.rawValue)") }
     }
+    @Published var realtimeVoiceModel: String {
+        didSet { defaults.set(realtimeVoiceModel, forKey: "ai.voice.realtimeModel") }
+    }
     @Published var enabled: Bool {
         didSet {
             defaults.set(enabled, forKey: "ai.enabled")
@@ -49,6 +52,7 @@ final class AskSession: ObservableObject {
             if !loaded { load() }
             return
         }
+        finalizeRealtimeVoiceMessages()
         stashCurrentTranscript()
         stop()
         activeTabID = id
@@ -155,11 +159,14 @@ final class AskSession: ObservableObject {
         self.permissionMode = AgentPermissionMode.stored(in: defaults)
         let legacy = selected == .openai ? defaults.string(forKey: "ai.model") : nil
         self.model = defaults.string(forKey: "ai.model.\(selected.rawValue)") ?? legacy ?? selected.defaultModel
+        self.realtimeVoiceModel = defaults.string(forKey: "ai.voice.realtimeModel")
+            ?? RealtimeVoiceModel.recommended
     }
 
     func selectProvider(_ id: AIBackendID) {
         guard id != selectedProvider, backends[id] != nil else { return }
         stop()
+        finalizeRealtimeVoiceMessages()
         stashCurrentTranscript()
         drafts[selectedProvider] = draft
         webpages[selectedProvider] = webpage
@@ -180,6 +187,71 @@ final class AskSession: ObservableObject {
 
     var canSend: Bool {
         enabled && !isSending && !isRunningCommand && !isUpdatingKey && !loadFailed && !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var realtimeVoiceAvailability: RealtimeVoiceAvailability {
+        guard enabled else {
+            return .unavailable("Enable Agent in Settings to use realtime voice.")
+        }
+        guard selectedProvider == .openai else {
+            return .unavailable("Realtime voice currently requires the OpenAI API service.")
+        }
+        guard RealtimeVoiceModel.isSupported(realtimeVoiceModel) else {
+            return .unavailable("Choose a supported realtime model in Voice Settings.")
+        }
+        return .available
+    }
+
+    func realtimeVoiceCredential() async throws -> String {
+        guard realtimeVoiceAvailability.isAvailable else {
+            throw RealtimeVoiceError.unavailable(realtimeVoiceAvailability.reason ?? "Realtime voice is unavailable.")
+        }
+        guard let key = try await credentials.read(), !key.isEmpty else { throw AIError.missingKey }
+        return key
+    }
+
+    func beginRealtimeVoiceMessage(role: AIMessage.Role) -> UUID {
+        load()
+        let message = AIMessage(role: role, text: "", status: .streaming, isVoiceInput: true)
+        messages.append(message)
+        stashCurrentTranscript()
+        return message.id
+    }
+
+    func updateRealtimeVoiceMessage(id: UUID, text: String, completed: Bool) {
+        guard let index = messages.firstIndex(where: { $0.id == id }) else { return }
+        messages[index].text = text
+        messages[index].status = completed ? .complete : .streaming
+        if completed {
+            if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                messages.remove(at: index)
+            }
+            persist()
+        } else {
+            stashCurrentTranscript()
+        }
+    }
+
+    func stopRealtimeVoiceMessage(id: UUID) {
+        guard let index = messages.firstIndex(where: { $0.id == id }),
+              messages[index].status == .streaming else { return }
+        if messages[index].text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            messages.remove(at: index)
+        } else {
+            messages[index].status = .stopped
+        }
+        persist()
+    }
+
+    private func finalizeRealtimeVoiceMessages() {
+        messages.removeAll {
+            $0.isVoiceInput == true && $0.status == .streaming
+                && $0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        for index in messages.indices where messages[index].isVoiceInput == true
+            && messages[index].status == .streaming {
+            messages[index].status = .stopped
+        }
     }
 
     func load() {
