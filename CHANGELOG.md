@@ -4,6 +4,19 @@ Human-readable highlights for each Sora release live here. Add the newest
 version before creating its `vX.Y.Z` tag; the release workflow requires a
 matching section and publishes it to GitHub.
 
+## 0.1.6 — 2026-09-07
+
+### Fixes
+
+- API errors now name the provider, explain what went wrong, and suggest what
+  to do next instead of showing a generic failure.
+- Distinguish exhausted API credits and spending limits from temporary rate
+  limits, including a suggested wait when the provider supplies one.
+- Explain when a conversation exceeds the model’s input limit or a reply is
+  cut off by its output-token limit.
+- Give clearer guidance for rejected credentials, model access, unavailable
+  services, timeouts, and connection failures across Agent and voice errors.
+
 ## 0.1.5 — 2026-09-07
 
 ### What’s new
