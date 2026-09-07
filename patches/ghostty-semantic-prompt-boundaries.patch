@@ -16,7 +16,7 @@ index bf4e75f86..b456c5406 100644
  /// mouse click. Typically, the shift key is used to extend mouse selection.
  ///
 diff --git a/src/renderer/Overlay.zig b/src/renderer/Overlay.zig
-index 46a75be8e..ffa51bd66 100644
+index 46a75be8e..84b4afc8f 100644
 --- a/src/renderer/Overlay.zig
 +++ b/src/renderer/Overlay.zig
 @@ -70,6 +70,7 @@ cell_size: CellSize,
@@ -27,7 +27,7 @@ index 46a75be8e..ffa51bd66 100644
  };
 
  pub const InitError = Allocator.Error || error{
-@@ -144,9 +145,96 @@ pub fn applyFeatures(
+@@ -144,9 +145,97 @@ pub fn applyFeatures(
              alloc,
              state,
          ),
@@ -62,19 +62,20 @@ index 46a75be8e..ffa51bd66 100644
 +    const row_cells = state.row_data.slice().items(.cells);
 +    for (row_raw[1..], 1..) |row, y| {
 +        if (!isCommandBoundary(y, row.semantic_prompt == .prompt)) continue;
-+        // Empty submissions and cancelled prompts are not command blocks.
-+        // Keep the live boundary, but omit abandoned empty prompt rows.
-+        if (y != last_prompt) {
-+            var has_text = false;
-+            for (row_cells[y].slice().items(.raw)) |cell| {
-+                if (cell.codepoint() > 32) {
-+                    has_text = true;
-+                    break;
-+                }
++        var has_text = false;
++        for (row_cells[y].slice().items(.raw)) |cell| {
++            if (cell.codepoint() > 32) {
++                has_text = true;
++                break;
 +            }
-+            if (!has_text) continue;
 +        }
-+        self.drawHorizontalHairline(alloc, y, y != last_prompt, color) catch |err| {
++        // The last visible prompt can be a historical command when the live
++        // prompt is below the viewport. Only an actual visible input prompt
++        // gets the flush boundary treatment.
++        const live_input = y == last_prompt and state.shell_input_active and
++            state.cursor.viewport != null;
++        if (!has_text and !live_input) continue;
++        self.drawHorizontalHairline(alloc, y, !live_input, color) catch |err| {
 +            log.warn("Error drawing command boundary: {}", .{err});
 +        };
 +    }
@@ -103,7 +104,7 @@ index 46a75be8e..ffa51bd66 100644
 +    const padded_y = try std.math.sub(
 +        usize,
 +        row_top,
-+        if (command_padding) self.cell_size.height / 2 + 1 else 1,
++        @min(row_top, if (command_padding) self.cell_size.height + 1 else 1),
 +    );
 +    const pixel_y: f64 = @floatFromInt(
 +        std.math.cast(i32, padded_y) orelse return error.Overflow,
@@ -124,7 +125,7 @@ index 46a75be8e..ffa51bd66 100644
  /// Add rectangles around contiguous hyperlinks in the render state.
  ///
  /// Note: this currently doesn't take into account unique hyperlink IDs
-@@ -414,3 +502,10 @@ fn highlightPixelRect(
+@@ -414,3 +503,10 @@ fn highlightPixelRect(
      ctx.setSourceToPixel(border_color);
      try ctx.stroke();
  }

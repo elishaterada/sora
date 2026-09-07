@@ -40,8 +40,10 @@ _sora_block_rule() {
     builtin print -P -- "%F{240}${label}%f"
   fi
 
-  # Keep one real terminal row between groups. Because this row belongs to the
-  # terminal grid, it reflows, scrolls, and clears with the surrounding text.
+  # Keep two real terminal rows between groups. The renderer places the
+  # divider between them, giving completed output and the next command
+  # equal breathing room while preserving reflow and scrollback.
+  builtin print
   builtin print
 }
 

@@ -30,6 +30,21 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
     private let pathButton = StickyContextChipButton()
     private let branchButton = StickyContextChipButton()
     private let lineLabel = NSTextField(labelWithString: "")
+    private var hintUpdate: DispatchWorkItem?
+    private var desiredHint = "" {
+        didSet {
+            hintUpdate?.cancel()
+            let text = desiredHint
+            let update = DispatchWorkItem { [weak self] in
+                guard let self else { return }
+                self.hintLabel.stringValue = text
+                self.hintLabel.setAccessibilityLabel(text)
+                self.hintLabel.isHidden = false
+            }
+            hintUpdate = update
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: update)
+        }
+    }
     private let hintLabel = NSTextField(labelWithString: "")
     private let routeLabel = NSTextField(labelWithString: "")
     private let effectView: NSView
@@ -155,6 +170,7 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
     }
 
     deinit {
+        hintUpdate?.cancel()
         for observer in focusObservers { NotificationCenter.default.removeObserver(observer) }
     }
 
@@ -173,7 +189,7 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
         pathButton.frame = NSRect(x: inset, y: contextY, width: pathWidth, height: chipHeight)
         let branchWidth = branchButton.isHidden ? 0 : min(max(branchButton.intrinsicContentSize.width, 40), max(40, bounds.width - pathWidth - 128))
         branchButton.frame = NSRect(x: pathButton.frame.maxX + 8, y: contextY, width: branchWidth, height: chipHeight)
-        inputSymbol.frame = NSRect(x: inset, y: bounds.height - 63, width: 12, height: 16)
+        inputSymbol.frame = NSRect(x: inset, y: bounds.height - 68, width: 12, height: 16)
         let font = lineLabel.font ?? SoraTheme.terminalFont
         let width = max(1, bounds.width - inset * 2 - 24 - 8)
         let wrapped = StickyPromptBarModel.wrap(displayText, cursorOffset: caretScalarOffset, width: width) {
@@ -261,8 +277,8 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
                 ? SoraTheme.nsAccent.withAlphaComponent(0.90)
                 : NSColor.labelColor
             lineLabel.setAccessibilityLabel(predicted ? "Prediction: \(line)" : "Prompt line: \(line)")
-            hintLabel.stringValue = predicted ? "Tab  Accept suggestion" : "Return  Run command"
-            hintLabel.isHidden = !predicted
+            desiredHint = predicted ? "Tab  Accept suggestion" : "Return  Run command"
+            hintLabel.isHidden = false
             hintLabel.setAccessibilityLabel(predicted ? "Press Tab or Right Arrow to accept prediction" : nil)
         } else {
             lineLabel.stringValue = promptReady ? "Type a command, or ask Agent…" : "Command running…"
@@ -276,7 +292,7 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
 
     func updateSuggestion(_ suffix: String?) {
         guard promptReady, let suffix, !suffix.isEmpty else { return }
-        hintLabel.stringValue = "Tab  Complete: " + suffix.replacingOccurrences(of: "\n", with: " ↵ ")
+        desiredHint = "Tab  Complete: " + suffix.replacingOccurrences(of: "\n", with: " ↵ ")
         hintLabel.isHidden = false
         hintLabel.toolTip = suffix
         hintLabel.setAccessibilityLabel("Press Tab to complete with " + suffix)
@@ -312,7 +328,7 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
     func updateRoute(_ intent: PromptIntent?) {
         if intent == .agent {
             routeLabel.stringValue = "↵ agent"
-            hintLabel.stringValue = "⌘↵ shell"
+            desiredHint = "⌘↵ shell"
             hintLabel.isHidden = false
             routeLabel.setAccessibilityLabel("Return sends to Agent")
             hintLabel.setAccessibilityLabel("Command-Return runs as shell")
@@ -352,17 +368,17 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
 
     private func applyFallbackHint() {
         if showingPrediction {
-            hintLabel.stringValue = "Tab  Accept suggestion"
+            desiredHint = "Tab  Accept suggestion"
             hintLabel.isHidden = false
             hintLabel.setAccessibilityLabel("Press Tab or Right Arrow to accept prediction")
         } else if agentResumeAvailable {
-            hintLabel.stringValue = "⌘Y continue"
+            desiredHint = "⌘Y continue"
             hintLabel.isHidden = false
             hintLabel.setAccessibilityLabel("Command-Y reopens the agent conversation")
         } else {
-            hintLabel.stringValue = promptReady ? "Return  Run    ·    ⇧Return  New line    ·    ⌘⇧A  Agent" : "Control-C  Stop command"
+            desiredHint = promptReady ? "Return  Run    ·    ⇧Return  New line    ·    ⌘⇧A  Agent" : "Control-C  Stop command"
             hintLabel.isHidden = false
-            hintLabel.setAccessibilityLabel(hintLabel.stringValue)
+            hintLabel.setAccessibilityLabel(desiredHint)
         }
     }
 

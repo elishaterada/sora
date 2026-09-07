@@ -32,6 +32,9 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     private var swallowedKeyCodes: Set<UInt16> = []
     private var isShellPromptReady = false
     /// Live ZLE buffer mirrored by the shell. Nil until the first report.
+    private var promptContextDirectory: URL?
+    private var promptContextBranch: String?
+    private var completionRefreshPending = false
     private var shellRecognizesCommand = false
     private var shellEditLine: String?
     private var shellCursorOffset = 0
@@ -204,7 +207,6 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
                edit == .reset || edit == .stopTracking {
                 ghostTextAnchor = nil
             }
-            refreshCompletion()
             sendKey(event, action: event.isARepeat ? GHOSTTY_ACTION_REPEAT : GHOSTTY_ACTION_PRESS)
             scheduleCompletionRefresh()
         }
@@ -536,6 +538,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
             isShellPromptReady = true
             // Arrives on every redraw; avoid the history/path work in a full refresh.
             refreshPromptRoute()
+            refreshStickyBar()
             return
         }
         lastShellTitle = title
@@ -549,6 +552,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
 
     func applyWorkingDirectory(_ path: String) {
         let url = URL(fileURLWithPath: path)
+        promptContextDirectory = nil
         lastWorkingDirectory = url
         // Ghostty's zsh integration emits OSC 7 while presenting a prompt.
         // Treat that signal as authoritative readiness too: some embedded
@@ -766,8 +770,12 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
 
     private func scheduleCompletionRefresh() {
         runtime.tick()
+        guard !completionRefreshPending else { return }
+        completionRefreshPending = true
         DispatchQueue.main.async { [weak self] in
-            self?.refreshCompletion()
+            guard let self else { return }
+            self.completionRefreshPending = false
+            self.refreshCompletion()
         }
     }
 
@@ -885,7 +893,11 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
             ?? currentWorkingDirectory()
             ?? initialWorkingDirectory
         let path = StickyPromptBarModel.displayPath(for: cwd)
-        let branch = cwd.flatMap { GitRepository.branchName(containing: $0) }
+        if promptContextDirectory != cwd {
+            promptContextDirectory = cwd
+            promptContextBranch = cwd.flatMap { GitRepository.branchName(containing: $0) }
+        }
+        let branch = promptContextBranch
         let suggestion = completion.suggestion
         let buffer = shellEditLine ?? completion.buffer.text
         let predicted = isShellPromptReady && buffer.isEmpty && suggestion?.source == .prediction
