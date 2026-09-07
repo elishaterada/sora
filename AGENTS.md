@@ -50,6 +50,20 @@ These rules apply to every coding agent working in this repository.
 - Preserve required notices for Ghostty or other embedded dependencies.
 - Distinguish studying behavior and architecture from copying implementation.
 
+## Release rules
+
+- Follow `docs/releasing.md` for every release; do not improvise a shortened
+  release path in a new task or thread.
+- Before tagging, add a plain-language entry for the exact version to
+  `CHANGELOG.md`. Describe user-visible benefits and fixes, not commit history
+  or internal implementation details.
+- A release is incomplete until its GitHub page and Sparkle update-review
+  window both expose those human-readable highlights.
+- Never edit a generated `appcast.xml` after signing it. Regenerate and re-sign
+  the feed whenever its contents change.
+- After pushing a version tag, wait for the release workflow and verify the
+  public archive, signed appcast, displayed changelog, and latest-release link.
+
 ## Completion standard
 
 Before declaring a task complete:
@@ -60,4 +74,3 @@ Before declaring a task complete:
 4. Summarize files changed and commands run.
 5. List known issues and decisions requiring human review.
 6. Recommend exactly one next issue.
-

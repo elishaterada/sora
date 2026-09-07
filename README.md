@@ -42,6 +42,8 @@ rendering.
 ## Download
 
 Download the newest build from [GitHub Releases](https://github.com/elishaterada/sora/releases/latest).
+Each release includes a plain-language summary of what changed. The complete
+release history is available in the [changelog](CHANGELOG.md).
 
 Current release artifacts are for **Apple Silicon Macs** running **macOS 13 or
 newer**. Builds are ad-hoc signed but not Apple-notarized, so macOS will show a

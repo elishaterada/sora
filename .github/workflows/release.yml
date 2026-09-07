@@ -124,9 +124,15 @@ jobs:
           set -euo pipefail
           ZIP="$(ls dist/Sora-*-macos-*.zip | head -1)"
           APPCAST="dist/appcast.xml"
+          chmod +x Scripts/extract-release-notes.sh
+          CHANGELOG_NOTES="$(Scripts/extract-release-notes.sh "${MARKETING}")"
 
           NOTES=$(cat <<EOF
           ## Sora ${MARKETING} (build ${BUILD})
+
+          ${CHANGELOG_NOTES}
+
+          ## Install
 
           Ad-hoc signed **Apple Silicon** zip — not notarized. For personal installs and friend feedback only.
 
