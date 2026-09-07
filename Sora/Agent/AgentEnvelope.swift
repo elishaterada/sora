@@ -8,6 +8,23 @@ import Foundation
 /// the transcript, so the scanner tolerates them rather than the user seeing
 /// Sora's wire format.
 enum AgentEnvelope {
+    static let repairInstruction = """
+    Sora could not validate your previous action proposal. Nothing was executed.
+    Answer the original request again. Emit at most ONE action: either
+    <SORA_COMMAND>{"summary":"Short single-line summary","command":"single-line zsh command"}</SORA_COMMAND>
+    or <SORA_WEBPAGE>{"summary":"Short single-line summary","url":"https://example.com/path"}</SORA_WEBPAGE>.
+    Use valid JSON: escape embedded double quotes and backslashes. Include the
+    closing tag. Keep summary under 600 UTF-8 bytes and command under 4096 bytes.
+    Do not put literal or escaped newlines, tabs, or control characters in values.
+    If no valid action is appropriate, give a plain-language answer without tags.
+    """
+
+    static func needsRepair(_ text: String) -> Bool {
+        guard text.contains("<SORA_") || text.contains("</SORA_") else { return false }
+        return AgentCommandProposalParser.match(text) == nil
+            && AgentWebpageProposalParser.match(text) == nil
+    }
+
     struct Span: Equatable {
         let json: String
         /// The message with the envelope removed.
@@ -17,7 +34,9 @@ enum AgentEnvelope {
     /// Finds one envelope anywhere in `text`. Two envelopes are ambiguous about
     /// which action was intended, so that is treated as no match.
     static func span(in text: String, opening: String, closing: String) -> Span? {
-        guard let start = text.range(of: opening),
+        // Mixed command/webpage proposals are as ambiguous as two commands.
+        guard text.components(separatedBy: "<SORA_").count == 2,
+              let start = text.range(of: opening),
               let end = text.range(of: closing, range: start.upperBound..<text.endIndex),
               text.range(of: opening, range: start.upperBound..<text.endIndex) == nil
         else { return nil }

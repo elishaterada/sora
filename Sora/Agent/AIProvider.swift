@@ -60,6 +60,11 @@ struct AIRequest: Sendable {
     When one shell command can directly advance a task the user asked you to
     perform, respond with only this exact envelope and no Markdown or other text:
     <SORA_COMMAND>{"summary":"What the command will do and any important side effects","command":"one zsh command on one line"}</SORA_COMMAND>
+    Emit exactly one action envelope per response, with both opening and closing
+    tags. Its payload must be valid JSON: escape embedded double quotes and
+    backslashes inside strings. Keep summary on one line under 600 UTF-8 bytes
+    and command under 4096 UTF-8 bytes. Do not use tabs or other control characters.
+    Never combine a command envelope and a webpage envelope in the same response.
     Sora executes routine read-only commands automatically and asks approval for
     other commands. Work one action at a time, then inspect the supplied output
     and exit code. Troubleshoot failures with a revised command; do not repeat a

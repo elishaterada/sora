@@ -360,21 +360,37 @@ final class AskSession: ObservableObject {
                     } else { key = "" }
                     try Task.checkCancellation()
                     guard self?.generation == token else { return }
-                    var completed = false
-                    for try await event in provider.events(for: request, credential: key) {
-                        try Task.checkCancellation()
-                        guard let self, self.generation == token else { return }
-                        switch event {
-                        case .text(let text):
-                            guard let index = self.messages.firstIndex(where: { $0.id == response.id }) else { return }
-                            self.messages[index].text += text
-                        case .completed: completed = true
+                    var currentRequest = request
+                    for attempt in 0...2 {
+                        var completed = false
+                        for try await event in provider.events(for: currentRequest, credential: key) {
+                            try Task.checkCancellation()
+                            guard let self, self.generation == token else { return }
+                            switch event {
+                            case .text(let text):
+                                guard let index = self.messages.firstIndex(where: { $0.id == response.id }) else { return }
+                                self.messages[index].text += text
+                            case .completed: completed = true
+                            }
                         }
+                        try Task.checkCancellation()
+                        guard completed else { throw AIError.incompleteStream }
+                        guard let self, self.generation == token,
+                              let index = self.messages.firstIndex(where: { $0.id == response.id }) else { return }
+                        let text = self.messages[index].text
+                        guard !text.isEmpty else { throw AIError.responseFailed }
+                        guard AgentEnvelope.needsRepair(text), attempt < 2 else { break }
+                        // Retry generation only: no command/fetch has been proposed
+                        // or executed. Reuse the original context, not failed turns.
+                        var repairedContext = request.messages
+                        repairedContext.append(AIMessage(role: .user, text: AgentEnvelope.repairInstruction))
+                        guard try repairedContext.reduce(0, { $0 + (try $1.contentForProvider()).utf8.count }) <= 100_000 else {
+                            throw AIError.contextTooLarge
+                        }
+                        currentRequest = AIRequest(model: request.model, messages: repairedContext)
+                        self.messages[index].text = ""
+                        self.errorMessage = nil
                     }
-                    try Task.checkCancellation()
-                    guard completed else { throw AIError.incompleteStream }
-                    guard let text = self?.messages.first(where: { $0.id == response.id })?.text,
-                          !text.isEmpty else { throw AIError.responseFailed }
                     self?.finish(token: token, responseID: response.id, status: .complete)
                 } catch {
                     guard let self, self.generation == token else { return }
@@ -479,15 +495,15 @@ final class AskSession: ObservableObject {
                 } else if let match = AgentWebpageProposalParser.match(text) {
                     messages[index].text = match.prose.isEmpty ? match.proposal.summary : match.prose
                     messages[index].webpageProposal = match.proposal
-                } else if AgentCommandProposalParser.hasOpeningTag(text)
-                            || AgentWebpageProposalParser.hasOpeningTag(text) {
+                } else if AgentEnvelope.needsRepair(text) {
                     // Never leave Sora's wire format in the transcript. Say what
                     // happened instead of silently dropping the request.
                     let prose = AgentCommandProposalParser.proseBeforeEnvelope(in: text)
                         ?? AgentWebpageProposalParser.proseBeforeEnvelope(in: text)
                         ?? ""
                     messages[index].text = prose
-                    envelopeError = "The assistant's request was malformed, so nothing was proposed. Ask again."
+                    messages[index].status = .failed
+                    envelopeError = "The assistant could not produce a valid action after two automatic retries. Nothing was run. Try rephrasing your request."
                 }
             }
         }

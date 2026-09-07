@@ -326,3 +326,16 @@ a credential returned afterward cannot start that request. The macOS Keychain
 operation itself cannot be cancelled. Setup shows progress and prevents duplicate
 key changes while an operation is pending. Failed credential reads leave a failed
 turn visible, with the error and the original question retained in the transcript.
+
+### Malformed action recovery
+
+Command and webpage proposals must contain exactly one action envelope. The
+prompt specifies JSON escaping, closing tags, single-line values, and size
+limits. Mixed action types are rejected rather than selecting one to execute.
+After a completed response contains an invalid envelope, Sora automatically
+requests a replacement up to twice using the original context plus formatting
+feedback. Repairs replace the same pending assistant message, never execute the
+invalid response, and pass through the existing validation and permission flow.
+Stop/provider changes cancel recovery. Exhausted repairs mark the turn failed
+and exclude it from subsequent provider context. Transport failures are not
+automatically replayed by this mechanism.
