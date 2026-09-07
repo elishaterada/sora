@@ -53,6 +53,10 @@ Only create directories required by the current phase. Phase 5 creates
 - app and scene lifecycle
 - native windows and menus
 - settings and keyboard shortcuts
+- updates: Sparkle performs one non-blocking check per Release-build launch and
+  exposes a native “Check for Updates…” command. The stable feed is
+  `appcast.xml` on GitHub's latest release; both the archive and feed are EdDSA
+  signed by the release workflow. Debug builds only check when asked manually.
 
 ### Terminal
 

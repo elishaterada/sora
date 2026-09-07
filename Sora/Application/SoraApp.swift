@@ -4,6 +4,7 @@ import SwiftUI
 struct SoraApp: App {
     @StateObject private var runtime: GhosttyRuntime
     @StateObject private var ask = AskSession(backends: AIBackend.live())
+    private let updates = UpdateController()
 
     init() {
         do {
@@ -22,6 +23,7 @@ struct SoraApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView(runtime: runtime, ask: ask)
+                .task { updates.checkAtLaunch() }
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in ask.stop() }
         }
         .defaultSize(width: 980, height: 620)
@@ -31,6 +33,7 @@ struct SoraApp: App {
             SidebarCommands()
             HistoryCommands()
             AskCommands()
+            UpdateCommands(updates: updates)
             // Standard Edit commands follow the first responder, including
             // SecureField and the Ask composer. GhosttySurfaceView implements
             // the same copy/paste/selectAll actions for terminal focus.
@@ -43,6 +46,18 @@ struct SoraApp: App {
 
         Settings {
             SoraSettingsView()
+        }
+    }
+}
+
+private struct UpdateCommands: Commands {
+    let updates: UpdateController
+
+    var body: some Commands {
+        CommandGroup(after: .appInfo) {
+            Button("Check for Updates…") {
+                updates.checkForUpdates()
+            }
         }
     }
 }
