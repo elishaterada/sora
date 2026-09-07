@@ -3,13 +3,30 @@ import AppKit
 /// Sticky footer under the Ghostty grid. Terminal scrollback never draws
 /// through this strip — it is a sibling view, not an overlay on Metal.
 final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
-    /// Single-row chrome: chip height + tight vertical inset.
-    static let height: CGFloat = 34
+    /// Context, live shell input preview, and keyboard hints.
+    static let height: CGFloat = 112
 
+    var onHeightChange: (() -> Void)?
+    private(set) var preferredHeight: CGFloat = height
+    var onMoveCursor: ((Int) -> Void)?
+    private var selectionAnchor: Int?
+    private var selectionRange: Range<Int>?
+    private var hitRows: [(text: String, start: Int)] = []
     var onFocusTerminal: (() -> Void)?
     var onAcceptPrediction: (() -> Void)?
     var onToggleDictation: (() -> Void)?
 
+    private var promptReady = false
+    private var hasInput = false
+    private var focusObservers: [NSObjectProtocol] = []
+    private let inputClip = NSView()
+    private let caret = NSView()
+    private var displayText = ""
+    private var caretText = ""
+    private var caretScalarOffset = 0
+    private var caretVisible = false
+    private let inputSymbol = NSImageView()
+    private let statusLabel = NSTextField(labelWithString: "Running")
     private let pathButton = StickyContextChipButton()
     private let branchButton = StickyContextChipButton()
     private let lineLabel = NSTextField(labelWithString: "")
@@ -57,12 +74,32 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
         branchButton.action = #selector(showBranchMenu(_:))
         addSubview(pathButton)
         addSubview(branchButton)
+        configureLabel(statusLabel, size: SoraTheme.chromeCaptionSize, color: .secondaryLabelColor)
+        statusLabel.font = .systemFont(ofSize: SoraTheme.chromeCaptionSize, weight: .semibold)
+        addSubview(statusLabel)
+        inputSymbol.image = NSImage(systemSymbolName: "chevron.right", accessibilityDescription: nil)
+        inputSymbol.contentTintColor = SoraTheme.nsAccent
+        addSubview(inputSymbol)
 
         configureLabel(lineLabel, size: SoraTheme.chromeSize, color: .labelColor)
-        configureLabel(hintLabel, size: SoraTheme.chromeCaptionSize, color: .tertiaryLabelColor)
+        configureLabel(hintLabel, size: SoraTheme.chromeCaptionSize, color: NSColor.white.withAlphaComponent(0.65))
         configureLabel(routeLabel, size: SoraTheme.chromeCaptionSize, color: SoraTheme.nsAccent)
-        lineLabel.font = SoraTheme.terminalFont.withSize(SoraTheme.chromeSize)
-        addSubview(lineLabel)
+        lineLabel.font = SoraTheme.terminalFont.withSize(16)
+        inputClip.wantsLayer = true
+        inputClip.layer?.masksToBounds = true
+        addSubview(inputClip)
+        inputClip.addSubview(lineLabel)
+        caret.wantsLayer = true
+        caret.layer?.backgroundColor = SoraTheme.nsAccent.cgColor
+        inputClip.addSubview(caret)
+        if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            let blink = CAKeyframeAnimation(keyPath: "opacity")
+            blink.values = [1, 1, 0, 0]
+            blink.keyTimes = [0, 0.49, 0.5, 1]
+            blink.duration = 1
+            blink.repeatCount = .infinity
+            caret.layer?.add(blink, forKey: "blink")
+        }
         addSubview(hintLabel)
         addSubview(routeLabel)
         microphoneButton.image = NSImage(systemSymbolName: "mic", accessibilityDescription: "Dictate")
@@ -78,9 +115,12 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
         setAccessibilityRole(.group)
         setAccessibilityLabel("Prompt bar")
 
-        let click = NSClickGestureRecognizer(target: self, action: #selector(focusTerminal))
+        let click = NSClickGestureRecognizer(target: self, action: #selector(clickInput(_:)))
         click.delegate = self
         addGestureRecognizer(click)
+        let drag = NSPanGestureRecognizer(target: self, action: #selector(selectInput(_:)))
+        drag.delegate = self
+        addGestureRecognizer(drag)
         let double = NSClickGestureRecognizer(target: self, action: #selector(acceptIfPossible))
         double.numberOfClicksRequired = 2
         double.delegate = self
@@ -102,65 +142,91 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
         return true
     }
 
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        for observer in focusObservers { NotificationCenter.default.removeObserver(observer) }
+        focusObservers = []
+        guard let window else { return }
+        for name in [NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification] {
+            focusObservers.append(NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
+                self?.needsLayout = true
+            })
+        }
+    }
+
+    deinit {
+        for observer in focusObservers { NotificationCenter.default.removeObserver(observer) }
+    }
+
     override func layout() {
         super.layout()
         effectView.frame = bounds
-        hairline.frame = NSRect(x: 0, y: bounds.height - 1, width: bounds.width, height: 1)
-        let inset = SoraTheme.chromeInset
-        let chipHeight = min(SoraTheme.hitCompact, bounds.height - 4)
-        let rowY = (bounds.height - chipHeight) / 2
-        let labelHeight: CGFloat = 16
-        let labelY = (bounds.height - labelHeight) / 2
-
+        hairline.frame = NSRect(x: 0, y: bounds.height - 2, width: bounds.width, height: 2)
+        let inset: CGFloat = 24
+        let chipHeight: CGFloat = 26
+        let contextY = bounds.height - 38
+        statusLabel.frame = NSRect(x: max(inset, bounds.width - 88), y: contextY + 5, width: 72, height: 16)
+        statusLabel.alignment = .right
         pathButton.sizeToFit()
         branchButton.sizeToFit()
-        let pathWidth = min(
-            max(pathButton.fittingSize.width, pathButton.intrinsicContentSize.width),
-            bounds.width * 0.40
-        )
-        pathButton.frame = NSRect(x: inset, y: rowY, width: pathWidth, height: chipHeight)
-        let branchX = pathButton.frame.maxX + 4
-        let branchWidth = branchButton.isHidden
-            ? 0
-            : min(max(branchButton.fittingSize.width, branchButton.intrinsicContentSize.width), 160)
-        branchButton.frame = NSRect(x: branchX, y: rowY, width: branchWidth, height: chipHeight)
-
-        let trailingReserve: CGFloat = {
-            var width: CGFloat = 0
-            if !hintLabel.isHidden, !hintLabel.stringValue.isEmpty { width += 96 }
-            if !routeLabel.isHidden, !routeLabel.stringValue.isEmpty { width += 72 }
-            return width
-        }()
-        let chipsEnd = branchButton.isHidden ? pathButton.frame.maxX : branchButton.frame.maxX
-        let lineX = chipsEnd + 8
-        let micWidth: CGFloat = 28
-        microphoneButton.frame = NSRect(x: bounds.width - inset - micWidth, y: rowY, width: micWidth, height: chipHeight)
-        let lineMaxX = bounds.width - inset - trailingReserve - micWidth - 4
-        lineLabel.frame = NSRect(
-            x: lineX,
-            y: labelY,
-            width: max(0, lineMaxX - lineX),
-            height: labelHeight
-        )
-
-        var trailingX = microphoneButton.frame.minX - 4
-        if !hintLabel.isHidden, !hintLabel.stringValue.isEmpty {
-            let w: CGFloat = 92
-            trailingX -= w
-            hintLabel.frame = NSRect(x: trailingX, y: labelY, width: w, height: labelHeight)
-            hintLabel.alignment = .right
-            trailingX -= 4
-        } else {
-            hintLabel.frame = .zero
+        let pathWidth = min(max(pathButton.intrinsicContentSize.width, 40), max(40, bounds.width * 0.4))
+        pathButton.frame = NSRect(x: inset, y: contextY, width: pathWidth, height: chipHeight)
+        let branchWidth = branchButton.isHidden ? 0 : min(max(branchButton.intrinsicContentSize.width, 40), max(40, bounds.width - pathWidth - 128))
+        branchButton.frame = NSRect(x: pathButton.frame.maxX + 8, y: contextY, width: branchWidth, height: chipHeight)
+        inputSymbol.frame = NSRect(x: inset, y: bounds.height - 63, width: 12, height: 16)
+        let font = lineLabel.font ?? SoraTheme.terminalFont
+        let width = max(1, bounds.width - inset * 2 - 24 - 8)
+        let wrapped = StickyPromptBarModel.wrap(displayText, cursorOffset: caretScalarOffset, width: width) {
+            ($0 as NSString).size(withAttributes: [.font: font]).width
         }
-        if !routeLabel.isHidden, !routeLabel.stringValue.isEmpty {
-            let w: CGFloat = 68
-            trailingX -= w
-            routeLabel.frame = NSRect(x: trailingX, y: labelY, width: w, height: labelHeight)
-            routeLabel.alignment = .right
-        } else {
-            routeLabel.frame = .zero
+        let lines = wrapped.lines
+        let visibleLines = min(6, max(1, lines.count))
+        let height = Self.height + CGFloat(visibleLines - 1) * 24
+        if preferredHeight != height {
+            preferredHeight = height
+            onHeightChange?()
         }
+        let firstLine = max(0, wrapped.cursorRow + 1 - visibleLines)
+        hitRows = Array(zip(lines, wrapped.starts).dropFirst(firstLine).prefix(visibleLines)).map { (text: $0.0, start: $0.1) }
+        let visibleText = lines.dropFirst(firstLine).prefix(visibleLines).joined(separator: "\n")
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.minimumLineHeight = 24
+        paragraph.maximumLineHeight = 24
+        paragraph.lineBreakMode = .byClipping
+        lineLabel.maximumNumberOfLines = 0
+        lineLabel.cell?.usesSingleLineMode = false
+        let styled = NSMutableAttributedString(string: visibleText, attributes: [
+            .font: font, .foregroundColor: lineLabel.textColor ?? NSColor.labelColor,
+            .paragraphStyle: paragraph
+        ])
+        if let selectionRange {
+            var utf16Start = 0
+            for row in hitRows {
+                let count = row.text.unicodeScalars.count
+                let lower = max(selectionRange.lowerBound, row.start)
+                let upper = min(selectionRange.upperBound, row.start + count)
+                if lower < upper {
+                    let prefix = String(row.text.unicodeScalars.prefix(lower - row.start))
+                    let selected = String(row.text.unicodeScalars.dropFirst(lower - row.start).prefix(upper - lower))
+                    styled.addAttribute(.backgroundColor, value: NSColor.selectedTextBackgroundColor,
+                                        range: NSRange(location: utf16Start + prefix.utf16.count, length: selected.utf16.count))
+                }
+                utf16Start += row.text.utf16.count + 1
+            }
+        }
+        lineLabel.attributedStringValue = styled
+        inputClip.frame = NSRect(x: inset + 24, y: 42, width: max(0, bounds.width - inset * 2 - 24), height: CGFloat(visibleLines) * 24)
+        let cursorX = (wrapped.cursorPrefix as NSString).size(withAttributes: [.font: font]).width
+        let textWidth = lines.map { ($0 as NSString).size(withAttributes: [.font: font]).width }.max() ?? 0
+        let offset = max(0, cursorX - inputClip.bounds.width + 8)
+        lineLabel.frame = NSRect(x: -offset, y: 0, width: max(inputClip.bounds.width, textWidth + 8), height: inputClip.bounds.height)
+        caret.frame = NSRect(x: cursorX - offset, y: inputClip.bounds.height - CGFloat(wrapped.cursorRow + 1 - firstLine) * 24 + 3, width: 1.5, height: 19)
+        caret.isHidden = !caretVisible || window?.isKeyWindow != true
+        hintLabel.frame = NSRect(x: inset, y: 12, width: max(0, bounds.width - 160), height: 16)
+        hintLabel.alignment = .left
+        routeLabel.frame = NSRect(x: max(inset, bounds.width - 130), y: 12, width: 76, height: 16)
+        routeLabel.alignment = .right
+        microphoneButton.frame = NSRect(x: bounds.width - inset - 24, y: 7, width: 24, height: 26)
     }
 
     func update(
@@ -171,6 +237,7 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
         predicted: Bool
     ) {
         showingPrediction = predicted
+        hasInput = !(line?.isEmpty ?? true)
         currentDirectory = directory
         currentBranch = branch
         pathButton.chipTitle = path
@@ -194,15 +261,52 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
                 ? SoraTheme.nsAccent.withAlphaComponent(0.90)
                 : NSColor.labelColor
             lineLabel.setAccessibilityLabel(predicted ? "Prediction: \(line)" : "Prompt line: \(line)")
-            hintLabel.stringValue = predicted ? "→ accept" : ""
+            hintLabel.stringValue = predicted ? "Tab  Accept suggestion" : "Return  Run command"
             hintLabel.isHidden = !predicted
             hintLabel.setAccessibilityLabel(predicted ? "Press Tab or Right Arrow to accept prediction" : nil)
         } else {
-            lineLabel.stringValue = ""
-            lineLabel.setAccessibilityLabel(nil)
+            lineLabel.stringValue = promptReady ? "Type a command, or ask Agent…" : "Command running…"
+            lineLabel.textColor = .secondaryLabelColor
+            lineLabel.setAccessibilityLabel("Terminal input preview")
             applyFallbackHint()
         }
+        displayText = lineLabel.stringValue
         needsLayout = true
+    }
+
+    func updateSuggestion(_ suffix: String?) {
+        guard promptReady, let suffix, !suffix.isEmpty else { return }
+        hintLabel.stringValue = "Tab  Complete: " + suffix.replacingOccurrences(of: "\n", with: " ↵ ")
+        hintLabel.isHidden = false
+        hintLabel.toolTip = suffix
+        hintLabel.setAccessibilityLabel("Press Tab to complete with " + suffix)
+    }
+
+    func updateCaret(text: String, scalarOffset: Int, visible: Bool) {
+        if caretText != text { clearInputSelection() }
+        caretText = text
+        caretScalarOffset = min(max(0, scalarOffset), text.unicodeScalars.count)
+        caretVisible = visible
+        needsLayout = true
+    }
+
+    func updatePromptReady(_ ready: Bool) {
+        promptReady = ready
+        if !hasInput {
+            lineLabel.stringValue = ready ? "Type a command, or ask Agent…" : "Command running…"
+            lineLabel.textColor = .secondaryLabelColor
+        }
+        displayText = lineLabel.stringValue
+        inputSymbol.contentTintColor = ready ? SoraTheme.nsAccent : .secondaryLabelColor
+        statusLabel.stringValue = ready ? "Ready" : "Running"
+        statusLabel.textColor = ready ? SoraTheme.nsAccent : .secondaryLabelColor
+        statusLabel.setAccessibilityLabel(ready ? "Terminal ready for a new command" : "Terminal command running")
+        hairline.layer?.backgroundColor = (ready
+            ? SoraTheme.nsAccent.withAlphaComponent(0.8)
+            : NSColor.white.withAlphaComponent(0.25)).cgColor
+        // Keep readiness legible even over a bright desktop background.
+        effectView.isHidden = true
+        layer?.backgroundColor = NSColor(white: 0.065, alpha: 0.98).cgColor
     }
 
     func updateRoute(_ intent: PromptIntent?) {
@@ -248,7 +352,7 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
 
     private func applyFallbackHint() {
         if showingPrediction {
-            hintLabel.stringValue = "→ accept"
+            hintLabel.stringValue = "Tab  Accept suggestion"
             hintLabel.isHidden = false
             hintLabel.setAccessibilityLabel("Press Tab or Right Arrow to accept prediction")
         } else if agentResumeAvailable {
@@ -256,10 +360,54 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
             hintLabel.isHidden = false
             hintLabel.setAccessibilityLabel("Command-Y reopens the agent conversation")
         } else {
-            hintLabel.stringValue = ""
-            hintLabel.isHidden = true
-            hintLabel.setAccessibilityLabel(nil)
+            hintLabel.stringValue = promptReady ? "Return  Run    ·    ⇧Return  New line    ·    ⌘⇧A  Agent" : "Control-C  Stop command"
+            hintLabel.isHidden = false
+            hintLabel.setAccessibilityLabel(hintLabel.stringValue)
         }
+    }
+
+    var selectedInputText: String? {
+        guard let selectionRange, !selectionRange.isEmpty else { return nil }
+        return StickyPromptBarModel.selectedText(caretText, range: selectionRange)
+    }
+
+    func clearInputSelection() {
+        selectionAnchor = nil
+        selectionRange = nil
+        needsLayout = true
+    }
+
+    private func inputOffset(at point: NSPoint) -> Int? {
+        guard promptReady, !showingPrediction, !hitRows.isEmpty else { return nil }
+        let row = min(hitRows.count - 1, max(0, Int((inputClip.bounds.height - point.y) / 24)))
+        let font = lineLabel.font ?? SoraTheme.terminalFont
+        let offset = StickyPromptBarModel.hitOffset(in: hitRows[row].text, x: point.x) {
+            ($0 as NSString).size(withAttributes: [.font: font]).width
+        }
+        return min(caretText.unicodeScalars.count, hitRows[row].start + offset)
+    }
+
+    @objc private func selectInput(_ recognizer: NSPanGestureRecognizer) {
+        let point = recognizer.location(in: inputClip)
+        if recognizer.state == .began {
+            let translation = recognizer.translation(in: inputClip)
+            let start = NSPoint(x: point.x - translation.x, y: point.y - translation.y)
+            guard inputClip.bounds.contains(start) else { return }
+            onFocusTerminal?()
+            selectionAnchor = inputOffset(at: start)
+        }
+        guard let anchor = selectionAnchor, let end = inputOffset(at: point) else { return }
+        selectionRange = min(anchor, end)..<max(anchor, end)
+        needsLayout = true
+        if recognizer.state == .ended || recognizer.state == .cancelled { selectionAnchor = nil }
+    }
+
+    @objc private func clickInput(_ recognizer: NSClickGestureRecognizer) {
+        onFocusTerminal?()
+        clearInputSelection()
+        let point = recognizer.location(in: inputClip)
+        guard inputClip.bounds.contains(point), let offset = inputOffset(at: point) else { return }
+        onMoveCursor?(offset)
     }
 
     @objc private func focusTerminal() {

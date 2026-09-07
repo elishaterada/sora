@@ -1,6 +1,40 @@
 import XCTest
 
 final class StickyPromptBarTests: XCTestCase {
+    func testSelectionCopiesOriginalBufferWithoutVisualWraps() {
+        XCTAssertEqual(StickyPromptBarModel.selectedText("abcdef", range: 1..<5), "bcde")
+        XCTAssertEqual(StickyPromptBarModel.selectedText("ab\n😀cd", range: 1..<5), "b\n😀c")
+        XCTAssertEqual(StickyPromptBarModel.selectedText("abc", range: 2..<2), "")
+    }
+
+    func testClickOffsetsPreserveWrappedAndUnicodePositions() {
+        let result = StickyPromptBarModel.wrap("abcde\nf", cursorOffset: 0, width: 3) { CGFloat($0.count) }
+        XCTAssertEqual(result.starts, [0, 3, 6])
+        XCTAssertEqual(StickyPromptBarModel.hitOffset(in: "a😀b", x: 1.6) { CGFloat($0.count) }, 2)
+        XCTAssertEqual(StickyPromptBarModel.hitOffset(in: "abc", x: -1) { CGFloat($0.count) }, 0)
+        XCTAssertEqual(StickyPromptBarModel.hitOffset(in: "abc", x: 99) { CGFloat($0.count) }, 3)
+    }
+
+    func testWrappingPreservesInputAndTracksCursor() {
+        let wrapped = StickyPromptBarModel.wrap("abcdef\ngh", cursorOffset: 5, width: 3) { CGFloat($0.count) }
+        XCTAssertEqual(wrapped.lines, ["abc", "def", "gh"])
+        XCTAssertEqual(wrapped.cursorRow, 1)
+        XCTAssertEqual(wrapped.cursorPrefix, "de")
+        let unicode = StickyPromptBarModel.wrap("a😀e\u{301}", cursorOffset: 4, width: 1) { CGFloat($0.count) }
+        XCTAssertEqual(unicode.lines, ["a", "😀", "e\u{301}"])
+        XCTAssertEqual(unicode.cursorRow, 2)
+        let boundary = StickyPromptBarModel.wrap("abcd", cursorOffset: 3, width: 3) { CGFloat($0.count) }
+        XCTAssertEqual(boundary.cursorRow, 1)
+        XCTAssertEqual(boundary.cursorPrefix, "")
+    }
+
+    func testInputNeverAppendsSuggestionToShellText() {
+        XCTAssertEqual(StickyPromptBarModel.inputText(buffer: "ls -lah", prediction: "ls"), "ls -lah")
+        XCTAssertEqual(StickyPromptBarModel.inputText(buffer: "ls -lah", prediction: nil), "ls -lah")
+        XCTAssertEqual(StickyPromptBarModel.inputText(buffer: "", prediction: "ls"), "ls")
+        XCTAssertEqual(StickyPromptBarModel.inputText(buffer: "", prediction: nil), "")
+    }
+
     func testLivePromptWhenScrollbarAtBottom() {
         XCTAssertTrue(
             StickyPromptBarModel.isViewingLivePrompt(total: 100, offset: 80, len: 20)

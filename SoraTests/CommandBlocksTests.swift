@@ -122,6 +122,26 @@ final class CommandBlocksTests: XCTestCase {
         )
     }
 
+    func testEmptyPrimaryReturnDoesNotAcceptButOtherInputDoes() throws {
+        let script = resourceRoot().appendingPathComponent("Sora/Resources/zsh/command-blocks.zsh")
+        let result = try runZsh(
+            """
+            source "$1"
+            zle() { print -r -- "accepted:$BUFFER"; }
+            CONTEXT=start BUFFER=''
+            _sora_accept_line
+            BUFFER='pwd'
+            _sora_accept_line
+            BUFFER=' '
+            _sora_accept_line
+            CONTEXT=cont BUFFER=''
+            _sora_accept_line
+            """,
+            argument: script.path
+        )
+        XCTAssertEqual(result, "accepted:pwd\naccepted: \naccepted:\n")
+    }
+
     private func stripANSI(_ value: String) -> String {
         value
             .replacingOccurrences(

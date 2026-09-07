@@ -33,7 +33,10 @@ final class TerminalPaneView: NSView {
         self.tabID = tabID
         super.init(frame: .zero)
         wantsLayer = true
-        layer?.backgroundColor = SoraTheme.nsClear.cgColor
+        // The reserved resume strip belongs to the input surface, so it must
+        // not expose a contrasting wallpaper gutter when the strip is hidden.
+        layer?.backgroundColor = NSColor(srgbRed: 20.0 / 255, green: 22.0 / 255,
+                                        blue: 26.0 / 255, alpha: 1).cgColor
         addSubview(surface)
         addSubview(stickyBar)
 
@@ -61,6 +64,8 @@ final class TerminalPaneView: NSView {
         stickyBar.autoresizingMask = []
         resumeHost.autoresizingMask = []
         agentHost.autoresizingMask = []
+        stickyBar.onHeightChange = { [weak self] in self?.needsLayout = true }
+        stickyBar.onMoveCursor = { [weak surface] offset in surface?.moveShellCursor(to: offset) }
         surface.attachStickyPromptBar(stickyBar)
         stickyBar.onFocusTerminal = { [weak self] in
             guard let self else { return }
@@ -217,7 +222,7 @@ final class TerminalPaneView: NSView {
 
     override func layout() {
         super.layout()
-        let barH = StickyPromptBar.height
+        let barH = stickyBar.preferredHeight
         let resumeSlot = Self.resumeSlotHeight
         // Surface height is always bounds - sticky - resume slot, whether or
         // not a thread is resumable — PTY rows never change on Escape.

@@ -1,6 +1,14 @@
 import XCTest
 
 final class PromptIntentClassifierTests: XCTestCase {
+    func testLiveShellDefinitionsOverrideImplicitAgentRouting() {
+        for line in ["..", "please help", "my_function arg"] {
+            XCTAssertEqual(PromptIntentClassifier.intent(for: line, shellCommandKnown: true, commandExists: { _ in false }), .shell)
+            XCTAssertEqual(PromptIntentClassifier.submission(for: line, shellCommandKnown: true, commandExists: { _ in false }), .shell)
+        }
+        XCTAssertEqual(PromptIntentClassifier.submission(for: "/agent explain this", shellCommandKnown: true), .agent("explain this"))
+    }
+
     /// Deterministic PATH for classifier tests — never depend on the host.
     private let known: (String) -> Bool = { line in
         let command = ShellCommandResolver.primaryCommand(in: line) ?? ""

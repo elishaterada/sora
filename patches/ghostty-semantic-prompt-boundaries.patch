@@ -1,12 +1,12 @@
 diff --git a/src/config/Config.zig b/src/config/Config.zig
-index bf4e75f86..d3ebc046d 100644
+index bf4e75f86..b456c5406 100644
 --- a/src/config/Config.zig
 +++ b/src/config/Config.zig
 @@ -947,6 +947,12 @@ palette: Palette = .{},
  /// The default is `keystroke, no-output`.
  @"scroll-to-bottom": ScrollToBottom = .default,
- 
-+/// Draw a subtle horizontal boundary above primary semantic prompts. This relies
+
++/// Draw a high-contrast horizontal boundary above primary semantic prompts. This relies
 +/// on shell integration (OSC 133) and is intended for block-oriented terminal
 +/// hosts that want command output groups to remain legible through reflow,
 +/// scrolling, and screen clearing.
@@ -16,7 +16,7 @@ index bf4e75f86..d3ebc046d 100644
  /// mouse click. Typically, the shift key is used to extend mouse selection.
  ///
 diff --git a/src/renderer/Overlay.zig b/src/renderer/Overlay.zig
-index 46a75be8e..ef51ff02f 100644
+index 46a75be8e..ffa51bd66 100644
 --- a/src/renderer/Overlay.zig
 +++ b/src/renderer/Overlay.zig
 @@ -70,6 +70,7 @@ cell_size: CellSize,
@@ -25,9 +25,9 @@ index 46a75be8e..ef51ff02f 100644
      semantic_prompts,
 +    command_boundaries,
  };
- 
+
  pub const InitError = Allocator.Error || error{
-@@ -144,9 +145,78 @@ pub fn applyFeatures(
+@@ -144,9 +145,96 @@ pub fn applyFeatures(
              alloc,
              state,
          ),
@@ -37,7 +37,7 @@ index 46a75be8e..ef51ff02f 100644
 +        ),
      };
  }
- 
+
 +/// Draw a one-pixel rule above each primary semantic prompt except at row zero.
 +/// The row metadata is owned by the terminal, so these rules automatically
 +/// follow reflow and scrollback and disappear when the screen is cleared.
@@ -52,12 +52,29 @@ index 46a75be8e..ef51ff02f 100644
 +        .r = 255,
 +        .g = 255,
 +        .b = 255,
-+        .a = 72,
++        .a = 85,
 +    }).multiply().asPixel();
 +
++    var last_prompt: usize = 0;
++    for (row_raw, 0..) |row, y| {
++        if (row.semantic_prompt == .prompt) last_prompt = y;
++    }
++    const row_cells = state.row_data.slice().items(.cells);
 +    for (row_raw[1..], 1..) |row, y| {
 +        if (!isCommandBoundary(y, row.semantic_prompt == .prompt)) continue;
-+        self.drawHorizontalHairline(alloc, y, color) catch |err| {
++        // Empty submissions and cancelled prompts are not command blocks.
++        // Keep the live boundary, but omit abandoned empty prompt rows.
++        if (y != last_prompt) {
++            var has_text = false;
++            for (row_cells[y].slice().items(.raw)) |cell| {
++                if (cell.codepoint() > 32) {
++                    has_text = true;
++                    break;
++                }
++            }
++            if (!has_text) continue;
++        }
++        self.drawHorizontalHairline(alloc, y, y != last_prompt, color) catch |err| {
 +            log.warn("Error drawing command boundary: {}", .{err});
 +        };
 +    }
@@ -74,6 +91,7 @@ index 46a75be8e..ef51ff02f 100644
 +    self: *Overlay,
 +    alloc: Allocator,
 +    y: usize,
++    command_padding: bool,
 +    color: z2d.Pixel,
 +) !void {
 +    const width: f64 = @floatFromInt(self.surface.getWidth());
@@ -85,7 +103,7 @@ index 46a75be8e..ef51ff02f 100644
 +    const padded_y = try std.math.sub(
 +        usize,
 +        row_top,
-+        self.cell_size.height / 2,
++        if (command_padding) self.cell_size.height / 2 + 1 else 1,
 +    );
 +    const pixel_y: f64 = @floatFromInt(
 +        std.math.cast(i32, padded_y) orelse return error.Overflow,
@@ -106,7 +124,7 @@ index 46a75be8e..ef51ff02f 100644
  /// Add rectangles around contiguous hyperlinks in the render state.
  ///
  /// Note: this currently doesn't take into account unique hyperlink IDs
-@@ -414,3 +484,10 @@ fn highlightPixelRect(
+@@ -414,3 +502,10 @@ fn highlightPixelRect(
      ctx.setSourceToPixel(border_color);
      try ctx.stroke();
  }
@@ -118,18 +136,27 @@ index 46a75be8e..ef51ff02f 100644
 +    try testing.expect(!isCommandBoundary(1, false));
 +}
 diff --git a/src/renderer/generic.zig b/src/renderer/generic.zig
-index 2a81f42b4..54441183f 100644
+index 2a81f42b4..e57ce7961 100644
 --- a/src/renderer/generic.zig
 +++ b/src/renderer/generic.zig
-@@ -582,6 +582,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
+@@ -233,6 +233,8 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
+
+         /// The render state we update per loop.
+         terminal_state: terminal.RenderState = .empty,
++        command_background_end: usize = 0,
++        shell_input_was_active: bool = false,
+
+         /// The number of frames since the last terminal state reset.
+         /// We reset the terminal state after ~100,000 frames (about 10 to
+@@ -582,6 +584,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
              blending: configpkg.Config.AlphaBlending,
              background_blur: configpkg.Config.BackgroundBlur,
              scroll_to_bottom_on_output: bool,
 +            semantic_prompt_boundaries: bool,
              custom_shader_animation: configpkg.CustomShaderAnimation,
- 
+
              pub fn init(
-@@ -657,6 +658,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
+@@ -657,6 +660,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                      .blending = config.@"alpha-blending",
                      .background_blur = config.@"background-blur",
                      .scroll_to_bottom_on_output = config.@"scroll-to-bottom".output,
@@ -137,9 +164,9 @@ index 2a81f42b4..54441183f 100644
                      .custom_shader_animation = config.@"custom-shader-animation",
                      .arena = arena,
                  };
-@@ -1439,11 +1441,24 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
+@@ -1439,11 +1443,24 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                  };
- 
+
                  const overlay_features: []const Overlay.Feature = overlay: {
 -                    const insp = state.inspector orelse break :overlay &.{};
 -                    const renderer_info = insp.rendererInfo();
@@ -165,5 +192,78 @@ index 2a81f42b4..54441183f 100644
 +                    @memcpy(features[1..], inspector_features);
 +                    break :overlay features;
                  };
- 
+
                  break :critical .{
+@@ -2522,7 +2539,21 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
+                 self.uniforms.grid_size = .{ new_size.columns, new_size.rows };
+             }
+
+-            const rebuild = state.dirty == .full or grid_size_diff;
++            const command_end: usize = command_end: {
++                if (!self.config.semantic_prompt_boundaries or state.screen != .primary)
++                    break :command_end 0;
++                if (state.cursor.viewport == null) break :command_end state.rows;
++                var end: usize = 0;
++                for (state.row_data.items(.raw), 0..) |row, y| {
++                    if (row.semantic_prompt == .prompt) end = y;
++                }
++                break :command_end end;
++            };
++            const rebuild = state.dirty == .full or grid_size_diff or
++                command_end != self.command_background_end or
++                state.shell_input_active != self.shell_input_was_active;
++            self.command_background_end = command_end;
++            self.shell_input_was_active = state.shell_input_active;
+             if (rebuild) {
+                 // If we are doing a full rebuild, then we clear the entire cell buffer.
+                 self.cells.reset();
+@@ -2627,6 +2658,20 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
+                     log.warn("error building row y={} err={}", .{ y, err });
+                     self.cells.clear(y);
+                 };
++                if (self.config.semantic_prompt_boundaries and state.screen == .primary) {
++                    // Sora presents the live ZLE buffer in its native input panel.
++                    // Rebuild it normally as soon as OSC 133 marks command output.
++                    if (state.shell_input_active and y_usize >= command_end) self.cells.clear(y);
++                    for (0..self.cells.size.columns) |x| {
++                        const bg = self.cells.bgCell(y, @intCast(x));
++                        // Preserve application colors and selection highlights.
++                        if (bg.*[3] != 0) continue;
++                        bg.* = if (y_usize < command_end)
++                            .{ 35, 38, 43, 240 }
++                        else
++                            .{ 20, 22, 26, 240 };
++                    }
++                }
+             }
+
+             // Setup our cursor rendering information.
+@@ -2641,6 +2686,8 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
+                 // If the cursor isn't visible on the viewport, don't show
+                 // a cursor. Otherwise, get our cursor cell, because we may
+                 // need it for styling.
++                if (self.config.semantic_prompt_boundaries and
++                    state.screen == .primary and state.shell_input_active) break :cursor;
+                 const cursor_vp = state.cursor.viewport orelse break :cursor;
+                 const cursor_style: terminal.Style = cursor_style: {
+                     const cells = state.row_data.items(.cells);
+diff --git a/src/terminal/render.zig b/src/terminal/render.zig
+index 6bcddb2c2..7787a2108 100644
+--- a/src/terminal/render.zig
++++ b/src/terminal/render.zig
+@@ -104,6 +104,7 @@ pub const RenderState = struct {
+     /// The screen type that this state represents. This is used primarily
+     /// to detect changes.
+     screen: ScreenSet.Key,
++    shell_input_active: bool = false,
+
+     /// The last viewport pin used to generate this state. This is NOT
+     /// a tracked pin and is generally NOT safe to read other than the direct
+@@ -419,6 +420,7 @@ pub const RenderState = struct {
+         self.viewport_pin = viewport_pin;
+         self.cursor.active = .{ .x = s.cursor.x, .y = s.cursor.y };
+         self.cursor.cell = s.cursor.page_cell.*;
++        self.shell_input_active = s.cursor.semantic_content == .input;
+         self.cursor.style = s.cursor.style;
+         self.cursor.visual_style = s.cursor.cursor_style;
+         self.cursor.password_input = t.flags.password_input;

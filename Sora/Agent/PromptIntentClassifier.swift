@@ -25,11 +25,14 @@ enum PromptIntentClassifier {
 
     static func intent(
         for line: String,
+        shellCommandKnown: Bool = false,
         commandExists: (String) -> Bool = { ShellCommandResolver.isResolvable($0) }
     ) -> PromptIntent {
         let value = line.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty else { return .shell }
         if explicitQuestion(in: value) != nil { return .agent }
+
+        if shellCommandKnown { return .shell }
 
         // Clear shell syntax stays with the shell even when a token is missing —
         // the user is writing a pipeline/path, not chatting.
@@ -50,13 +53,14 @@ enum PromptIntentClassifier {
         for line: String,
         forceShell: Bool = false,
         allowImplicitAgent: Bool = true,
+        shellCommandKnown: Bool = false,
         commandExists: (String) -> Bool = { ShellCommandResolver.isResolvable($0) }
     ) -> PromptSubmission {
         if forceShell { return .shell }
         if let explicit = explicitQuestion(in: line) { return .agent(explicit) }
         guard allowImplicitAgent else { return .shell }
         let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-        return intent(for: line, commandExists: commandExists) == .agent
+        return intent(for: line, shellCommandKnown: shellCommandKnown, commandExists: commandExists) == .agent
             ? .agent(trimmed)
             : .shell
     }

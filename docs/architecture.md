@@ -79,7 +79,7 @@ Only create directories required by the current phase. Phase 5 creates
   OpenAI Realtime WebSocket controller owns bidirectional PCM audio, turn
   detection, playback, and tab-scoped transcripts; see `voice.md`.
 - session chrome: flush two-column `HStack` (sidebar | terminal). Transparent titlebar with `fullSizeContentView` so close/minimize/zoom sit in the sidebar next to the collapse control. Collapsing the sidebar hides that column; the traffic lights, sidebar toggle, session title, path, and new-tab control move into a thin terminal header. Do not use `.toolbar(.hidden, for: .windowToolbar)` — that hides the window buttons. No `NavigationSplitView` (Tahoe draws that as floating rounded cards). Window frost is a square `NSGlassEffectView` behind both columns.
-- shell presentation: `~/.hushlogin` suppresses `login(1)` "Last login"; a Sora `ZDOTDIR` sources Ghostty's zsh integration, replaces the stock macOS `user@host` prompt with an empty prompt (blinking bar cursor only), and colors the input line (command/flags/paths/strings) unless the user already has zsh-syntax-highlighting. The first command starts flush at the top with no spacer. After each command, zsh `precmd` prints a muted duration followed by one empty terminal row. A small tracked patch adds Ghostty's opt-in `semantic-prompt-boundaries` renderer feature: its one-pixel rules are derived from OSC 133 primary prompt rows, so they appear before the user types and share the terminal grid's reflow, scrollback, and clear-screen lifecycle. The rule is centered vertically inside the empty row to create balanced padding above and below without offsetting the next command. Sora enables that option in `sora.ghostty`; there is no AppKit position cache or title-sequence sentinel. Unicode dashes are not used because they become terminal content and reflow. Paste and completion-accept inserts use `paste:none` so zsh's default paste standout does not paint spaces as opaque blocks. The bar cursor uses Ghostty's built-in blink (`cursor-style-blink = true`); a custom-shader soft fade was dropped because a failed shader load left blink disabled with a solid caret. Reduce Motion forces a steady bar via an overlay config. Chrome motion tokens are ease-in-out.
+- shell presentation: `~/.hushlogin` suppresses `login(1)` "Last login"; a Sora `ZDOTDIR` sources Ghostty's zsh integration, replaces the stock macOS `user@host` prompt with an empty prompt (blinking bar cursor only), and colors the input line (command/flags/paths/strings) unless the user already has zsh-syntax-highlighting. The first command starts flush at the top with no spacer. After each command, zsh `precmd` prints a muted duration followed by one empty terminal row. A small tracked patch adds Ghostty's opt-in `semantic-prompt-boundaries` renderer feature: its subtle one-pixel rules are derived from OSC 133 primary prompt rows, so they appear before the user types and share the terminal grid's reflow, scrollback, and clear-screen lifecycle. Empty historical prompt rows do not receive rules; the current live prompt keeps its boundary. The rule sits on the last device pixel of the completed block, flush with the transition into the next input region. Sora enables that option in `sora.ghostty`; there is no AppKit position cache or title-sequence sentinel. Unicode dashes are not used because they become terminal content and reflow. Paste and completion-accept inserts use `paste:none` so zsh's default paste standout does not paint spaces as opaque blocks. The bar cursor uses Ghostty's built-in blink (`cursor-style-blink = true`); a custom-shader soft fade was dropped because a failed shader load left blink disabled with a solid caret. Reduce Motion forces a steady bar via an overlay config. Chrome motion tokens are ease-in-out.
 
 Unit tests must not link GhosttyKit. `GhosttyInput.swift` and `GhosttyClipboard.swift` stay Ghostty-free; `GhosttyInputKit.swift` and `GhosttyClipboardKit.swift` are app-only.
 
@@ -193,3 +193,49 @@ The future app owns context, tools, permissions, session state, and the agent lo
 ### AI is optional
 
 Disabling or removing every provider must not affect shell startup, rendering, history, completion, workspace features, or settings unrelated to AI.
+
+## Terminal input and command blocks
+
+The footer labels shell readiness as Ready or Running. Its nearly opaque dark
+backing and accent rule remain legible over desktop wallpaper. Directory and
+branch chips, input, and keyboard hints share the terminal's horizontal inset.
+The panel starts at 112 points high and grows to six visual input rows.
+
+ZLE owns the command buffer and reports its cursor offset through an escaped
+title message. The panel preserves explicit newlines and wraps long lines at
+measured grapheme boundaries, following the caret beyond six rows. Shift-Return
+inserts a newline through the existing paste path; Return submits through zsh.
+Ghostty suppresses live prompt rows and its grid caret while semantic shell
+input is active. Submitted commands and alternate-screen programs render
+normally. Keyboard events continue through the same Ghostty surface and PTY.
+
+The panel displays only the authoritative shell buffer while typing. Completion
+suffixes appear separately in the hint row when the tracked and authoritative
+buffers agree and the caret is at the end. Next-command predictions appear only
+when the buffer is empty. ZLE also reports whether the first token resolves in
+the live shell using `whence`. Aliases, functions, builtins, and shell PATH
+commands take precedence over implicit Agent routing; explicit `/agent`
+requests retain their meaning. Alias definitions are not sent to the app.
+
+Clicking input maps the visible row and nearest character boundary back to a
+shell cursor offset, then forwards arrow keys. Custom arrow bindings can affect
+positioning. Dragging selects visible input for Command-C; copying reads the
+original buffer so visual wrapping adds no newlines. Selection follows terminal
+semantics: typing clears the highlight and edits at the shell cursor rather than
+replacing the selection. Drag selection does not auto-scroll. Clicking terminal
+output clears the input selection so copying targets the output instead.
+
+Semantic block boundaries remain in Ghostty's renderer and follow reflow and
+scrollback. Completed blocks use charcoal (35, 38, 43 at 240/255 alpha); the
+active region uses a darker base. Fills affect default-colored cells, preserving
+selection and explicit ANSI backgrounds. Alternate-screen applications are
+excluded. Backgrounds extend through window padding to the pane edges using
+`window-padding-color = extend-always`. Text has 24-point horizontal and 18-point
+vertical insets. The reserved Agent-resume strip shares the dark backing.
+
+Historical dividers sit half a terminal row above the command; the live divider
+is flush with the region transition. Empty historical prompts receive no rule.
+Empty Return at a primary ZLE prompt is ignored without advancing the grid. The
+accept-line wrapper preserves the previously configured widget for nonempty
+input and continuation prompts. Interactive programs bypass ZLE and retain
+ordinary Return behavior; whitespace-only input retains shell semantics.
