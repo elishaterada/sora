@@ -2,6 +2,36 @@ import Foundation
 import XCTest
 
 final class OpenAIProviderTests: XCTestCase {
+    func testProviderErrorsExplainQuotaAndRateLimitsSeparately() {
+        let quota = ProviderAPIError.parse(provider: "OpenAI", status: 429, object: ["error": ["code": "insufficient_quota"]]).localizedDescription
+        XCTAssertTrue(quota.contains("credits or spending limit"))
+        let rate = ProviderAPIError.parse(provider: "OpenAI", status: 429, retryAfter: "12").localizedDescription
+        XCTAssertTrue(rate.contains("Retry in 12 seconds"))
+        XCTAssertFalse(rate.contains("exhausted"))
+    }
+
+    func testStreamingOutputLimitsAreActionable() throws {
+        XCTAssertThrowsError(try OpenAIProvider.parse(line: #"data: {"type":"response.incomplete","response":{"incomplete_details":{"reason":"max_output_tokens"}}}"#)) { error in
+            XCTAssertTrue(error.localizedDescription.contains("output-token limit"))
+        }
+        var decoder = ProviderStreamDecoder(kind: .anthropic)
+        XCTAssertThrowsError(try decoder.parse(line: #"data: {"type":"message_delta","delta":{"stop_reason":"max_tokens"}}"#)) { error in
+            XCTAssertTrue(error.localizedDescription.contains("output-token limit"))
+        }
+        var gateway = ProviderStreamDecoder(kind: .gateway)
+        XCTAssertThrowsError(try gateway.parse(line: #"data: {"choices":[{"finish_reason":"length"}]}"#)) { error in
+            XCTAssertTrue(error.localizedDescription.contains("output-token limit"))
+        }
+    }
+
+    func testAPIErrorsCoverAccessContextAndServerWithoutLeakingBody() {
+        for (status, word) in [(401, "Authentication"), (403, "Access denied"), (404, "not found"), (413, "input limit"), (503, "overloaded"), (400, "invalid")] {
+            XCTAssertTrue(ProviderAPIError.parse(provider: "Test", status: status).localizedDescription.contains(word))
+        }
+        let error = ProviderAPIError.parse(provider: "Test", status: 400, object: ["error": ["message": "secret-key-value"]])
+        XCTAssertFalse(error.localizedDescription.contains("secret-key-value"))
+    }
+
     func testMixedActionEnvelopesRequireRepair() {
         let command = #"<SORA_COMMAND>{"summary":"List files.","command":"ls"}</SORA_COMMAND>"#
         let webpage = #"<SORA_WEBPAGE>{"summary":"Read docs.","url":"https://example.com"}</SORA_WEBPAGE>"#
@@ -198,7 +228,13 @@ final class OpenAIProviderTests: XCTestCase {
             do {
                 for try await _ in provider.events(for: request, credential: mode) {}
                 XCTFail("Expected a visible failure for \(mode)")
-            } catch { XCTAssertTrue(error is AIError) }
+            } catch { if mode.hasSuffix("eof") {
+                    XCTAssertTrue(error is AIError)
+                } else {
+                    XCTAssertTrue(error is ProviderAPIError)
+                    let expected = mode.hasSuffix("401") ? "Authentication" : mode.hasSuffix("length") ? "output-token limit" : mode.hasSuffix("quota") ? "credits or spending limit" : "temporarily limited"
+                    XCTAssertTrue(error.localizedDescription.contains(expected), error.localizedDescription)
+                } }
         }
     }
 
@@ -249,12 +285,18 @@ final class OpenAIProviderTests: XCTestCase {
         var events: [AIEvent] = []
         for try await event in provider.events(for: request, credential: "fixture-success") { events.append(event) }
         XCTAssertEqual(events, [.text("Hello 猫"), .completed])
-        for mode in ["fixture-401", "fixture-429", "fixture-eof"] {
+        for mode in ["fixture-401", "fixture-429", "fixture-quota", "fixture-eof"] {
             do {
                 for try await _ in provider.events(for: request, credential: mode) {}
                 XCTFail("Expected a visible failure for \(mode)")
             } catch {
-                XCTAssertTrue(error is AIError)
+                if mode.hasSuffix("eof") {
+                    XCTAssertTrue(error is AIError)
+                } else {
+                    XCTAssertTrue(error is ProviderAPIError)
+                    let expected = mode.hasSuffix("401") ? "Authentication" : mode.hasSuffix("length") ? "output-token limit" : mode.hasSuffix("quota") ? "credits or spending limit" : "temporarily limited"
+                    XCTAssertTrue(error.localizedDescription.contains(expected), error.localizedDescription)
+                }
             }
         }
     }
@@ -295,7 +337,7 @@ private final class AIHTTPFixture: URLProtocol {
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
         let mode = request.value(forHTTPHeaderField: "Authorization") ?? ""
-        let status = mode.hasSuffix("401") ? 401 : mode.hasSuffix("429") ? 429 : 200
+        let status = mode.hasSuffix("401") ? 401 : (mode.hasSuffix("429") || mode.hasSuffix("quota")) ? 429 : 200
         let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: "HTTP/1.1",
                                        headerFields: ["Content-Type": "text/event-stream"])!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
@@ -307,6 +349,9 @@ private final class AIHTTPFixture: URLProtocol {
                 let reason = mode.hasSuffix("length") ? "length" : "stop"
                 body += "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"\(reason)\"}]}\n\ndata: [DONE]\n\n"
             }
+        }
+        if mode.hasSuffix("quota") {
+            body = #"{"error":{"type":"insufficient_quota","message":"You exceeded your current quota"}}"#
         }
         for byte in body.utf8 { client?.urlProtocol(self, didLoad: Data([byte])) }
         client?.urlProtocolDidFinishLoading(self)

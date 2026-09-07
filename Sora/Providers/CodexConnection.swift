@@ -162,7 +162,7 @@ final class CodexConnection: @unchecked Sendable {
             lock.lock()
             let continuation = pending.removeValue(forKey: id)
             lock.unlock()
-            if object["error"] != nil { continuation?.resume(throwing: CodexError.requestFailed) }
+            if object["error"] != nil { continuation?.resume(throwing: ProviderAPIError.parse(provider: "Codex", object: object)) }
             else if let result = object["result"] as? [String: Any] { continuation?.resume(returning: result) }
             else { continuation?.resume(throwing: AIError.malformedResponse) }
         } else { receive(object) }

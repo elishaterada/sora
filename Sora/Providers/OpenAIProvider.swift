@@ -40,8 +40,8 @@ struct OpenAIProvider: AIProvider {
             guard let delta = object["delta"] as? String else { throw AIError.malformedResponse }
             return .text(delta)
         case "response.completed": return .completed
-        case "response.failed", "error": throw AIError.responseFailed
-        case "response.incomplete": throw AIError.incompleteStream
+        case "response.failed", "error": throw ProviderAPIError.parse(provider: "OpenAI API", object: object)
+        case "response.incomplete": throw ProviderAPIError.parse(provider: "OpenAI API", object: object)
         default: return nil
         }
     }

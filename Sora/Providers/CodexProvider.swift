@@ -56,11 +56,11 @@ struct CodexProvider: AIProvider {
             return .text(delta)
         case "turn/completed":
             guard let turn = params["turn"] as? [String: Any], turn["status"] as? String == "completed" else {
-                throw AIError.responseFailed
+                throw ProviderAPIError.parse(provider: "Codex", object: params["turn"] as? [String: Any] ?? params)
             }
             return .completed
         case "error":
-            if params["willRetry"] as? Bool != true { throw AIError.responseFailed }
+            if params["willRetry"] as? Bool != true { throw ProviderAPIError.parse(provider: "Codex", object: params) }
             return nil
         default: return nil
         }

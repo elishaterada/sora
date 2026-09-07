@@ -246,3 +246,5 @@ Hint messages settle for 150 ms before replacing the visible hint, avoiding flas
 Shell-mirror updates render input immediately, independently of deferred completion refreshes. Key events reach the PTY before completion lookup, queued refreshes coalesce, and directory/branch context is cached until the shell reports its working directory again. Hint settling never gates input rendering.
 
 Divider padding depends on whether the prompt is actual visible live input, not merely the last prompt in the viewport. Historical commands retain their spacing when the live prompt scrolls off-screen.
+
+Provider failures are classified from bounded structured HTTP error bodies (up to 64 KiB) and streaming error events. User messages identify the provider, distinguish exhausted credits from temporary throttling, explain input/output token limits, authentication/access/model failures, and service/network failures, and suggest an action. HTTP status is retained; raw provider bodies and credentials are not displayed. Numeric Retry-After values are honored in the suggested wait. These messages do not automatically retry requests or spend additional API credit.

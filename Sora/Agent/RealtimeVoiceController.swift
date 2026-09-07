@@ -170,9 +170,7 @@ final class RealtimeVoiceController: ObservableObject {
             assistantAudioStreamFinished = true
             finishAssistantPlaybackIfReady()
         case "error":
-            let detail = (event["error"] as? [String: Any])?["message"] as? String
-                ?? "The voice service returned an error."
-            fail(RealtimeVoiceError.server(detail))
+            fail(ProviderAPIError.parse(provider: "OpenAI Realtime", object: event))
         default:
             break
         }

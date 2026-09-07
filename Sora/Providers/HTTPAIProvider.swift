@@ -11,7 +11,17 @@ struct HTTPAIProvider: AIProvider {
                 do {
                     let (bytes, response) = try await session.bytes(for: Self.urlRequest(kind: kind, request: request, credential: credential))
                     guard let http = response as? HTTPURLResponse else { throw AIError.malformedResponse }
-                    guard (200..<300).contains(http.statusCode) else { throw AIError.requestFailed(http.statusCode) }
+                    guard (200..<300).contains(http.statusCode) else {
+                        var body = Data()
+                        for try await byte in bytes {
+                            try Task.checkCancellation()
+                            body.append(byte)
+                            if body.count >= 65536 { break }
+                        }
+                        let object = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any] ?? [:]
+                        throw ProviderAPIError.parse(provider: kind.name, status: http.statusCode, object: object,
+                                                     retryAfter: http.value(forHTTPHeaderField: "Retry-After"))
+                    }
                     guard http.value(forHTTPHeaderField: "Content-Type")?.lowercased().contains("text/event-stream") == true
                     else { throw AIError.malformedResponse }
                     var decoder = ProviderStreamDecoder(kind: kind)
@@ -26,6 +36,11 @@ struct HTTPAIProvider: AIProvider {
                     }
                     guard completed else { throw AIError.incompleteStream }
                     continuation.finish()
+                } catch let error as URLError where error.code != .cancelled {
+                    let reason = error.code == .timedOut
+                        ? "The API request timed out. Try again; a busy provider or slow network may be responsible."
+                        : "Could not reach the API. Check your internet connection, VPN, and provider availability."
+                    continuation.finish(throwing: ProviderAPIError(provider: kind.name, reason: reason, status: nil))
                 } catch { continuation.finish(throwing: error) }
             }
             continuation.onTermination = { _ in task.cancel() }
@@ -80,7 +95,7 @@ struct ProviderStreamDecoder {
         guard let object = try? JSONSerialization.jsonObject(with: Data(data.utf8)) as? [String: Any] else {
             throw AIError.malformedResponse
         }
-        if object["error"] != nil || object["type"] as? String == "error" { throw AIError.responseFailed }
+        if object["error"] != nil || object["type"] as? String == "error" { throw ProviderAPIError.parse(provider: kind.name, object: object) }
         if kind == .anthropic {
             guard let type = object["type"] as? String else { throw AIError.malformedResponse }
             switch type {
@@ -89,6 +104,7 @@ struct ProviderStreamDecoder {
                 if delta?["type"] as? String == "text_delta", let text = delta?["text"] as? String { return [.text(text)] }
             case "message_delta":
                 if let reason = (object["delta"] as? [String: Any])?["stop_reason"] as? String {
+                    if reason == "max_tokens" { throw ProviderAPIError.outputLimit(provider: kind.name) }
                     guard ["end_turn", "stop_sequence", "refusal"].contains(reason) else { throw AIError.incompleteStream }
                     endedNormally = true
                 }
@@ -102,6 +118,8 @@ struct ProviderStreamDecoder {
         guard let choices = object["choices"] as? [[String: Any]] else { throw AIError.malformedResponse }
         guard let choice = choices.first else { return [] } // Usage-only chunk.
         if let reason = choice["finish_reason"] as? String {
+            if reason == "length" { throw ProviderAPIError.outputLimit(provider: kind.name) }
+            if reason == "content_filter" { throw ProviderAPIError.parse(provider: kind.name, object: ["code": reason]) }
             guard reason == "stop" else { throw AIError.incompleteStream }
             endedNormally = true
         }
