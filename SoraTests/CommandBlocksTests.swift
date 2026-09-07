@@ -5,6 +5,7 @@ final class CommandBlocksTests: XCTestCase {
         let zshenv = resourceRoot().appendingPathComponent("Sora/Resources/zsh/zshenv")
         let source = try String(contentsOf: zshenv, encoding: .utf8)
         XCTAssertTrue(source.contains("command-blocks.zsh"))
+        XCTAssertTrue(source.contains("PS1=''"))
     }
 
     func testFormatsSubSecondAndMultiSecondDurations() throws {
@@ -24,14 +25,13 @@ final class CommandBlocksTests: XCTestCase {
         XCTAssertEqual(lines, ["<1ms", "14ms", "1.25s", "12.4s", "1m15s"])
     }
 
-    func testPrecmdPrintsStatsAboveFullWidthRule() throws {
+    func testPrecmdPrintsDurationAndOneSpacingRowWithoutTerminalWidthRule() throws {
         let script = resourceRoot().appendingPathComponent("Sora/Resources/zsh/command-blocks.zsh")
         let output = try runZsh(
             """
             source "$1"
             COLUMNS=40
             _sora_block_preexec
-            # Simulate ~20ms of work without sleeping flaky amounts.
             _sora_block_start=$(( EPOCHREALTIME - 0.02 ))
             true
             _sora_block_precmd
@@ -39,14 +39,15 @@ final class CommandBlocksTests: XCTestCase {
             argument: script.path
         )
         let plain = stripANSI(output)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let lines = plain.split(separator: "\n").map(String.init)
-        XCTAssertEqual(lines.count, 2, plain)
-        XCTAssertTrue(lines[0].hasPrefix("(") && lines[0].hasSuffix(")"), lines[0])
-        XCTAssertTrue(lines[0].contains("ms") || lines[0].contains("s"), lines[0])
-        XCTAssertFalse(lines[0].contains("exit"), lines[0])
-        XCTAssertTrue(lines[1].allSatisfy { $0 == "─" }, lines[1])
-        XCTAssertEqual(lines[1].count, 40, plain)
+        let lines = plain.split(separator: "\n", omittingEmptySubsequences: false)
+        XCTAssertEqual(lines.count, 3, plain)
+        XCTAssertFalse(lines[0].isEmpty, plain)
+        XCTAssertTrue(lines[1].isEmpty, plain)
+        XCTAssertTrue(lines[2].isEmpty, plain)
+        XCTAssertFalse(plain.contains("─"), plain)
+        XCTAssertTrue(plain.hasPrefix("(") && plain.contains(")"), plain)
+        XCTAssertTrue(plain.contains("ms") || plain.contains("s"), plain)
+        XCTAssertFalse(output.contains("SORA_SEP"), output)
     }
 
     func testFailedCommandIncludesExitCode() throws {
@@ -64,7 +65,7 @@ final class CommandBlocksTests: XCTestCase {
         )
         let plain = stripANSI(output)
         XCTAssertTrue(plain.contains("exit 1"), plain)
-        XCTAssertTrue(plain.contains("─"), plain)
+        XCTAssertFalse(plain.contains("─"), plain)
     }
 
     func testAgentHandoffClosesTheBlockWithItsOwnLabel() throws {
@@ -77,11 +78,9 @@ final class CommandBlocksTests: XCTestCase {
             """,
             argument: script.path
         )
-        let plain = stripANSI(output)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let lines = plain.split(separator: "\n").map(String.init)
-        XCTAssertEqual(lines[0], "(agent)", plain)
-        XCTAssertEqual(lines[1], String(repeating: "─", count: 40), plain)
+        XCTAssertTrue(stripANSI(output).contains("(agent)"), output)
+        XCTAssertFalse(output.contains("SORA_SEP"), output)
+        XCTAssertFalse(stripANSI(output).contains("─"), output)
     }
 
     func testAgentFlagMakesPrecmdDrawTheAgentRuleWithoutTiming() throws {
@@ -92,7 +91,6 @@ final class CommandBlocksTests: XCTestCase {
             COLUMNS=48
             _sora_block_agent=1
             _sora_block_precmd
-            # The flag is consumed, so the next prompt draws nothing.
             _sora_block_precmd
             """,
             argument: script.path
@@ -101,9 +99,8 @@ final class CommandBlocksTests: XCTestCase {
         XCTAssertTrue(plain.contains("(agent)"), plain)
         XCTAssertFalse(plain.contains("ms)"), plain)
         XCTAssertEqual(
-            plain.trimmingCharacters(in: .whitespacesAndNewlines)
-                .split(separator: "\n").count,
-            2,
+            plain.split(separator: "\n", omittingEmptySubsequences: false).count,
+            3,
             plain
         )
     }
@@ -112,7 +109,6 @@ final class CommandBlocksTests: XCTestCase {
         let script = resourceRoot().appendingPathComponent("Sora/Resources/zsh/command-blocks.zsh")
         let source = try String(contentsOf: script, encoding: .utf8)
         XCTAssertTrue(source.contains("bindkey -- \"$_SORA_AGENT_HANDOFF_KEY\" _sora_agent_handoff"), source)
-        // The shell binding and the character Sora writes must not drift apart.
         let key = try runZsh(
             """
             source "$1"
@@ -127,11 +123,17 @@ final class CommandBlocksTests: XCTestCase {
     }
 
     private func stripANSI(_ value: String) -> String {
-        value.replacingOccurrences(
-            of: "\u{1B}\\[[0-9;]*m",
-            with: "",
-            options: .regularExpression
-        )
+        value
+            .replacingOccurrences(
+                of: "\u{1B}\\[[0-9;]*m",
+                with: "",
+                options: .regularExpression
+            )
+            .replacingOccurrences(
+                of: "\u{1B}\\][^\u{07}]*\u{07}",
+                with: "",
+                options: .regularExpression
+            )
     }
 
     private func resourceRoot() -> URL {

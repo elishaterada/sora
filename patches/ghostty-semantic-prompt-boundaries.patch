@@ -1,0 +1,169 @@
+diff --git a/src/config/Config.zig b/src/config/Config.zig
+index bf4e75f86..d3ebc046d 100644
+--- a/src/config/Config.zig
++++ b/src/config/Config.zig
+@@ -947,6 +947,12 @@ palette: Palette = .{},
+ /// The default is `keystroke, no-output`.
+ @"scroll-to-bottom": ScrollToBottom = .default,
+ 
++/// Draw a subtle horizontal boundary above primary semantic prompts. This relies
++/// on shell integration (OSC 133) and is intended for block-oriented terminal
++/// hosts that want command output groups to remain legible through reflow,
++/// scrolling, and screen clearing.
++@"semantic-prompt-boundaries": bool = false,
++
+ /// Determines whether running programs can detect the shift key pressed with a
+ /// mouse click. Typically, the shift key is used to extend mouse selection.
+ ///
+diff --git a/src/renderer/Overlay.zig b/src/renderer/Overlay.zig
+index 46a75be8e..ef51ff02f 100644
+--- a/src/renderer/Overlay.zig
++++ b/src/renderer/Overlay.zig
+@@ -70,6 +70,7 @@ cell_size: CellSize,
+ pub const Feature = union(enum) {
+     highlight_hyperlinks,
+     semantic_prompts,
++    command_boundaries,
+ };
+ 
+ pub const InitError = Allocator.Error || error{
+@@ -144,9 +145,78 @@ pub fn applyFeatures(
+             alloc,
+             state,
+         ),
++        .command_boundaries => self.drawCommandBoundaries(
++            alloc,
++            state,
++        ),
+     };
+ }
+ 
++/// Draw a one-pixel rule above each primary semantic prompt except at row zero.
++/// The row metadata is owned by the terminal, so these rules automatically
++/// follow reflow and scrollback and disappear when the screen is cleared.
++fn drawCommandBoundaries(
++    self: *Overlay,
++    alloc: Allocator,
++    state: *const terminal.RenderState,
++) void {
++    const row_raw = state.row_data.slice().items(.raw);
++    if (row_raw.len < 2) return;
++    const color = (z2d.pixel.RGBA{
++        .r = 255,
++        .g = 255,
++        .b = 255,
++        .a = 72,
++    }).multiply().asPixel();
++
++    for (row_raw[1..], 1..) |row, y| {
++        if (!isCommandBoundary(y, row.semantic_prompt == .prompt)) continue;
++        self.drawHorizontalHairline(alloc, y, color) catch |err| {
++            log.warn("Error drawing command boundary: {}", .{err});
++        };
++    }
++}
++
++fn isCommandBoundary(
++    y: usize,
++    starts_primary_prompt: bool,
++) bool {
++    return y > 0 and starts_primary_prompt;
++}
++
++fn drawHorizontalHairline(
++    self: *Overlay,
++    alloc: Allocator,
++    y: usize,
++    color: z2d.Pixel,
++) !void {
++    const width: f64 = @floatFromInt(self.surface.getWidth());
++    const row_top = try std.math.mul(
++        usize,
++        y,
++        self.cell_size.height,
++    );
++    const padded_y = try std.math.sub(
++        usize,
++        row_top,
++        self.cell_size.height / 2,
++    );
++    const pixel_y: f64 = @floatFromInt(
++        std.math.cast(i32, padded_y) orelse return error.Overflow,
++    );
++
++    var ctx: z2d.Context = .init(global.io(), alloc, &self.surface);
++    defer ctx.deinit();
++    ctx.setAntiAliasingMode(.none);
++    ctx.setSourceToPixel(color);
++    try ctx.moveTo(0, pixel_y);
++    try ctx.lineTo(width, pixel_y);
++    try ctx.lineTo(width, pixel_y + 1);
++    try ctx.lineTo(0, pixel_y + 1);
++    try ctx.closePath();
++    try ctx.fill();
++}
++
+ /// Add rectangles around contiguous hyperlinks in the render state.
+ ///
+ /// Note: this currently doesn't take into account unique hyperlink IDs
+@@ -414,3 +484,10 @@ fn highlightPixelRect(
+     ctx.setSourceToPixel(border_color);
+     try ctx.stroke();
+ }
++
++test "command boundaries follow primary prompts below the first row" {
++    const testing = std.testing;
++    try testing.expect(!isCommandBoundary(0, true));
++    try testing.expect(isCommandBoundary(1, true));
++    try testing.expect(!isCommandBoundary(1, false));
++}
+diff --git a/src/renderer/generic.zig b/src/renderer/generic.zig
+index 2a81f42b4..54441183f 100644
+--- a/src/renderer/generic.zig
++++ b/src/renderer/generic.zig
+@@ -582,6 +582,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
+             blending: configpkg.Config.AlphaBlending,
+             background_blur: configpkg.Config.BackgroundBlur,
+             scroll_to_bottom_on_output: bool,
++            semantic_prompt_boundaries: bool,
+             custom_shader_animation: configpkg.CustomShaderAnimation,
+ 
+             pub fn init(
+@@ -657,6 +658,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
+                     .blending = config.@"alpha-blending",
+                     .background_blur = config.@"background-blur",
+                     .scroll_to_bottom_on_output = config.@"scroll-to-bottom".output,
++                    .semantic_prompt_boundaries = config.@"semantic-prompt-boundaries",
+                     .custom_shader_animation = config.@"custom-shader-animation",
+                     .arena = arena,
+                 };
+@@ -1439,11 +1441,24 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
+                 };
+ 
+                 const overlay_features: []const Overlay.Feature = overlay: {
+-                    const insp = state.inspector orelse break :overlay &.{};
+-                    const renderer_info = insp.rendererInfo();
+-                    break :overlay renderer_info.overlayFeatures(
+-                        arena_alloc,
+-                    ) catch &.{};
++                    const inspector_features: []const Overlay.Feature = inspector: {
++                        const insp = state.inspector orelse break :inspector &.{};
++                        const renderer_info = insp.rendererInfo();
++                        break :inspector renderer_info.overlayFeatures(
++                            arena_alloc,
++                        ) catch &.{};
++                    };
++                    if (!self.config.semantic_prompt_boundaries) {
++                        break :overlay inspector_features;
++                    }
++
++                    const features = arena_alloc.alloc(
++                        Overlay.Feature,
++                        inspector_features.len + 1,
++                    ) catch break :overlay inspector_features;
++                    features[0] = .command_boundaries;
++                    @memcpy(features[1..], inspector_features);
++                    break :overlay features;
+                 };
+ 
+                 break :critical .{

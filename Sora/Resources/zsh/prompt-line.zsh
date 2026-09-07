@@ -1,7 +1,7 @@
 # Mirrors the live ZLE edit buffer to Sora so terminal → agent routing reads the
 # real line instead of inferring it from keystrokes or the rendered grid.
 # Screen scraping cannot work here: PS1 is empty, so nothing on screen marks
-# where the prompt begins. Sora consumes this title and never displays it.
+# where input begins. Sora consumes this title and never displays it.
 
 _sora_report_line() {
   emulate -L zsh
