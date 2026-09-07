@@ -9,7 +9,9 @@ struct AskView: View {
     @StateObject private var codexLogin = CodexLogin()
     @State private var showingSetup = false
     @State private var keyDraft = ""
+    @State private var streamingScrollTask: Task<Void, Never>?
     @FocusState private var composerFocused: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var visibleMessages: [AIMessage] {
         session.messages.filter { $0.isAgentContinuation != true }
@@ -43,8 +45,14 @@ struct AskView: View {
                     .frame(maxWidth: 760, alignment: .leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .onChange(of: session.messages.last?.text) { _ in proxy.scrollTo("bottom", anchor: .bottom) }
+                .onChange(of: session.messages.last?.text) { _ in
+                    scheduleStreamingScroll(using: proxy)
+                }
                 .onChange(of: session.messages.count) { _ in proxy.scrollTo("bottom", anchor: .bottom) }
+                .onDisappear {
+                    streamingScrollTask?.cancel()
+                    streamingScrollTask = nil
+                }
             }
 
             if let error = session.errorMessage {
@@ -75,6 +83,28 @@ struct AskView: View {
             // Do not stop the stream — Escape / hide is a glance, not a cancel.
             codexLogin.cancel()
             keyDraft = ""
+        }
+    }
+
+    /// Coalesce token-sized changes into a steady visual cadence. This is a
+    /// throttle rather than a debounce, so a response that never pauses still
+    /// follows the newest content. The scroll target remains the live bottom.
+    private func scheduleStreamingScroll(using proxy: ScrollViewProxy) {
+        guard streamingScrollTask == nil else { return }
+        let shouldReduceMotion = reduceMotion
+
+        streamingScrollTask = Task { @MainActor in
+            defer { streamingScrollTask = nil }
+            try? await Task.sleep(nanoseconds: 75_000_000)
+            guard !Task.isCancelled else { return }
+
+            if shouldReduceMotion {
+                proxy.scrollTo("bottom", anchor: .bottom)
+            } else {
+                withAnimation(SoraTheme.motionStreamingScroll) {
+                    proxy.scrollTo("bottom", anchor: .bottom)
+                }
+            }
         }
     }
 

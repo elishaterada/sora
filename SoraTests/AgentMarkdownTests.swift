@@ -163,11 +163,32 @@ final class AgentMarkdownTests: XCTestCase {
         XCTAssertFalse(attributed.runs.contains { $0.link != nil })
     }
 
-    func testStreamingPrefersInlineParseOverBlanking() {
-        // Unclosed fence should still yield visible text while streaming.
-        let partial = "Here is a command:\n```\npwd"
-        let attributed = AgentMarkdown.attributed(partial, streaming: true)
-        XCTAssertNotNil(attributed)
-        XCTAssertTrue(String(attributed!.characters).contains("pwd"))
+    func testStreamingFormatsCompleteBlocksAndKeepsIncompleteFenceVisible() throws {
+        let partial = """
+        ## Result
+
+        - Ready now
+
+        Here is a command:
+        ```
+        pwd
+        """
+        let blocks = try XCTUnwrap(AgentMarkdown.blocks(partial, streaming: true))
+
+        XCTAssertEqual(blocks.map(\.kind), [
+            .heading(level: 2),
+            .listItem(marker: "•", depth: 1),
+            .paragraph,
+            .codeBlock,
+        ])
+        XCTAssertEqual(String(blocks[0].text.characters), "Result")
+        XCTAssertEqual(String(blocks[1].text.characters), "Ready now")
+        XCTAssertEqual(String(blocks[3].text.characters), "pwd")
+    }
+
+    func testStreamingKeepsIncompleteInlineSyntaxVisible() throws {
+        let partial = "Still writing **this thought"
+        let attributed = try XCTUnwrap(AgentMarkdown.attributed(partial, streaming: true))
+        XCTAssertEqual(String(attributed.characters), partial)
     }
 }

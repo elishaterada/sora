@@ -84,11 +84,14 @@ enum SoraTheme {
     static let hitCompact: CGFloat = 28
     static let hitMinimum: CGFloat = 32
 
-    // MARK: - Motion (ease-in-out everywhere)
+    // MARK: - Motion
 
     static let motionSidebar = Animation.easeInOut(duration: 0.18)
     static let motionCrossfade = Animation.easeInOut(duration: 0.12)
     static let motionFeedback = Animation.easeInOut(duration: 0.10)
+    /// Frequent transcript growth should settle confidently without making
+    /// each token feel like a fresh animation.
+    static let motionStreamingScroll = Animation.timingCurve(0.16, 1, 0.3, 1, duration: 0.20)
 
     // MARK: - Typography
 
