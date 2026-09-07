@@ -83,6 +83,12 @@ cp "${ROOT}/docs/licensing.md" "${STAGE}/LICENSING.md"
 if [[ -f "${ROOT}/ThirdPartyNotices.txt" ]]; then
   cp "${ROOT}/ThirdPartyNotices.txt" "${STAGE}/ThirdPartyNotices.txt"
 fi
+SPARKLE_LICENSE="${DERIVED}/SourcePackages/checkouts/Sparkle/LICENSE"
+if [[ ! -f "${SPARKLE_LICENSE}" ]]; then
+  echo "error: Sparkle license missing at ${SPARKLE_LICENSE}" >&2
+  exit 1
+fi
+cp "${SPARKLE_LICENSE}" "${STAGE}/Sparkle-LICENSE.txt"
 
 ZIP="${ROOT}/dist/${STAGE_NAME}.zip"
 rm -f "${ZIP}"

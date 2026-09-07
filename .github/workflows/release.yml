@@ -74,9 +74,17 @@ jobs:
             MARKETING="0.1.0-dev"
           fi
           BUILD="${GITHUB_RUN_NUMBER}"
+          if [[ "${GITHUB_REF_TYPE}" == "tag" && "${GITHUB_REF_NAME}" == v* ]]; then
+            TAG="${GITHUB_REF_NAME}"
+          elif [[ "${MARKETING}" != *-dev* && "${MARKETING}" != *dev* ]]; then
+            TAG="v${MARKETING}"
+          else
+            TAG="dev-${BUILD}"
+          fi
           echo "marketing=${MARKETING}" >> "${GITHUB_OUTPUT}"
           echo "build=${BUILD}" >> "${GITHUB_OUTPUT}"
-          echo "Resolved ${MARKETING} (build ${BUILD})"
+          echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
+          echo "Resolved ${MARKETING} (build ${BUILD}, tag ${TAG})"
 
       - name: Package zip
         env:
@@ -86,11 +94,24 @@ jobs:
           chmod +x Scripts/build-ghosttykit.sh Scripts/package-app.sh
           ./Scripts/package-app.sh
 
+      - name: Generate signed update feed
+        env:
+          MARKETING_VERSION: ${{ steps.ver.outputs.marketing }}
+          CURRENT_PROJECT_VERSION: ${{ steps.ver.outputs.build }}
+          RELEASE_TAG: ${{ steps.ver.outputs.tag }}
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+        run: |
+          chmod +x Scripts/make-appcast.sh
+          ZIP="$(ls dist/Sora-*-macos-*.zip | head -1)"
+          ./Scripts/make-appcast.sh "${ZIP}"
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: Sora-${{ steps.ver.outputs.marketing }}-${{ steps.ver.outputs.build }}-macos-arm64
-          path: dist/*.zip
+          path: |
+            dist/*.zip
+            dist/appcast.xml
           if-no-files-found: error
 
       - name: Create GitHub Release
@@ -98,9 +119,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           MARKETING: ${{ steps.ver.outputs.marketing }}
           BUILD: ${{ steps.ver.outputs.build }}
+          TAG: ${{ steps.ver.outputs.tag }}
         run: |
           set -euo pipefail
           ZIP="$(ls dist/Sora-*-macos-*.zip | head -1)"
+          APPCAST="dist/appcast.xml"
 
           NOTES=$(cat <<EOF
           ## Sora ${MARKETING} (build ${BUILD})
@@ -115,25 +138,16 @@ jobs:
           EOF
           )
 
-          # Prefer the real version tag when the workflow runs against it.
-          if [[ "${GITHUB_REF_TYPE}" == "tag" && "${GITHUB_REF_NAME}" == v* ]]; then
-            TAG="${GITHUB_REF_NAME}"
-          elif [[ "${MARKETING}" != *-dev* && "${MARKETING}" != *dev* ]]; then
-            TAG="v${MARKETING}"
-          else
-            TAG="dev-${BUILD}"
-          fi
-
           if gh release view "${TAG}" >/dev/null 2>&1; then
-            gh release upload "${TAG}" "${ZIP}" --clobber
+            gh release upload "${TAG}" "${ZIP}" "${APPCAST}" --clobber
             gh release edit "${TAG}" --notes "${NOTES}"
           elif [[ "${TAG}" == v* ]]; then
-            gh release create "${TAG}" "${ZIP}" \
+            gh release create "${TAG}" "${ZIP}" "${APPCAST}" \
               --title "Sora ${MARKETING}" \
               --notes "${NOTES}" \
               --target "${GITHUB_SHA}"
           else
-            gh release create "${TAG}" "${ZIP}" \
+            gh release create "${TAG}" "${ZIP}" "${APPCAST}" \
               --title "Sora ${MARKETING}" \
               --notes "${NOTES}" \
               --prerelease \

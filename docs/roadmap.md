@@ -146,8 +146,10 @@ Exit: agents can perform bounded work with visible actions and consistent permis
 
 **Shareable CI zip (2026-09-05):** GitHub Actions (`Release zip`) builds an
 ad-hoc Apple Silicon Release zip on `v*` tags or manual dispatch. Not notarized;
-Gatekeeper requires right-click Open / `xattr -cr`. Paid Developer ID and Sparkle
-stay deferred until public distribution matters.
+Gatekeeper requires right-click Open / `xattr -cr`. Paid Developer ID stays
+deferred until public distribution matters. Sparkle 2.9.6 checks once per launch
+and installs EdDSA-signed updates from the latest GitHub Release; the first
+Sparkle-capable version still requires a manual install.
 
 **Persistent agent slice (2026-09-05):** supersedes the earlier autonomous-execution
 restriction for bounded native agent tasks. Agent mode stays open, captures command

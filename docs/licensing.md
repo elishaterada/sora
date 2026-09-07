@@ -98,6 +98,21 @@ Do not add [`lakr233/libghostty-spm`](https://github.com/lakr233/libghostty-spm)
 or similar wrappers in V0. They wrap the same GhosttyKit API and add another
 license to track.
 
+## Sparkle
+
+Sora uses Sparkle 2.9.6 for signed, in-place application updates. Sparkle is
+MIT-licensed and includes small components under compatible licenses. Xcode
+resolves the package from `sparkle-project/Sparkle`; the release packager copies
+Sparkle's complete `LICENSE` into every distribution as
+`Sparkle-LICENSE.txt`.
+
+Sparkle is used instead of an application-owned installer because safely
+replacing and relaunching a running macOS app requires privileged-location,
+atomic replacement, signature-validation, and recovery behavior. Update
+archives and the feed are signed with a dedicated EdDSA key. The public key is
+embedded in Sora; the private key is held in the maintainer's login Keychain
+and the `SPARKLE_ED_PRIVATE_KEY` GitHub Actions secret, never in the repository.
+
 ## Other dependencies
 
 For each added dependency, document:
@@ -115,9 +130,10 @@ Phase 1 expected third-party set:
 | Dependency | Purpose | License |
 | --- | --- | --- |
 | GhosttyKit from pinned Ghostty commit | terminal core | MIT plus bundled notices above |
+| Sparkle 2.9.6 | signed application replacement and relaunch | MIT plus bundled notices |
 | Apple SDK (Swift, SwiftUI, AppKit, Metal) | host app | Apple |
 
-No Swift packages are required for the vertical slice.
+Sparkle is the only Swift package dependency.
 
 ## Release gate
 

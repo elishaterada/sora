@@ -26,3 +26,13 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 Source: https://github.com/ghostty-org/ghostty (MIT)
+
+## Sparkle
+
+Copyright (c) 2006-2013 Andy Matuschak and other Sparkle contributors.
+
+Sparkle is distributed under the MIT license and includes components under
+compatible licenses. The complete notices are distributed alongside the app in
+`Sparkle-LICENSE.txt`.
+
+Source: https://github.com/sparkle-project/Sparkle (MIT and bundled notices)

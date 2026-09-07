@@ -7,6 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		UP0000000000000000000001 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = UP0000000000000000000005 /* Sparkle */; };
+		UP0000000000000000000006 /* UpdateController.swift in Sources */ = {isa = PBXBuildFile; fileRef = UP0000000000000000000008 /* UpdateController.swift */; };
+		UP0000000000000000000007 /* UpdateCheckPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = UP0000000000000000000009 /* UpdateCheckPolicy.swift */; };
+		UP000000000000000000000A /* UpdateCheckPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = UP0000000000000000000009 /* UpdateCheckPolicy.swift */; };
+		UP000000000000000000000B /* UpdateCheckPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = UP000000000000000000000C /* UpdateCheckPolicyTests.swift */; };
         FA0000000000000000000001 = {isa = PBXBuildFile; fileRef = FA0000000000000000000000; };
         FA0000000000000000000002 = {isa = PBXBuildFile; fileRef = FA0000000000000000000000; };
         FB0000000000000000000001 = {isa = PBXBuildFile; fileRef = FB0000000000000000000000 /* AgentResumeStrip.swift */; };
@@ -157,6 +162,10 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		UP0000000000000000000008 /* UpdateController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateController.swift; sourceTree = "<group>"; };
+		UP0000000000000000000009 /* UpdateCheckPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateCheckPolicy.swift; sourceTree = "<group>"; };
+		UP000000000000000000000C /* UpdateCheckPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateCheckPolicyTests.swift; sourceTree = "<group>"; };
+		UP000000000000000000000D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
         FA0000000000000000000000 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentCommandRunner.swift; sourceTree = "<group>"; };
         FB0000000000000000000000 /* AgentResumeStrip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentResumeStrip.swift; sourceTree = "<group>"; };
 		FG0000000000000000000000 /* AgentCommandProposal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentCommandProposal.swift; sourceTree = "<group>"; };
@@ -261,6 +270,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				UP0000000000000000000001 /* Sparkle in Frameworks */,
 				AA0000000000000000000008 /* GhosttyKit.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -323,6 +333,7 @@
 		AA0000000000000000000501 /* Sora */ = {
 			isa = PBXGroup;
 			children = (
+				UP000000000000000000000D /* Info.plist */,
 				AA0000000000000000000502 /* Application */,
 				AA0000000000000000000503 /* Terminal */,
 				AA0000000000000000000506 /* Workspace */,
@@ -341,6 +352,8 @@
 			isa = PBXGroup;
 			children = (
 				AA0000000000000000000101 /* SoraApp.swift */,
+				UP0000000000000000000008 /* UpdateController.swift */,
+				UP0000000000000000000009 /* UpdateCheckPolicy.swift */,
 				AA0000000000000000000102 /* ContentView.swift */,
 				AA0000000000000000000105 /* SoraTheme.swift */,
 				AA00000000000000000001D1 /* TerminalPreferences.swift */,
@@ -442,6 +455,7 @@
 		AA0000000000000000000504 /* SoraTests */ = {
 			isa = PBXGroup;
 			children = (
+				UP000000000000000000000C /* UpdateCheckPolicyTests.swift */,
 				CC000000000000000000006A /* AITests.swift */,
 				MD0000000000000000000021 /* CommandBlocksTests.swift */,
 				MD0000000000000000000011 /* AgentMarkdownTests.swift */,
@@ -498,6 +512,9 @@
 			dependencies = (
 			);
 			name = Sora;
+			packageProductDependencies = (
+				UP0000000000000000000005 /* Sparkle */,
+			);
 			productName = Sora;
 			productReference = AA0000000000000000000112 /* Sora.app */;
 			productType = "com.apple.product-type.application";
@@ -538,6 +555,9 @@
 				Base,
 			);
 			mainGroup = AA0000000000000000000500;
+			packageReferences = (
+				UP0000000000000000000004 /* XCRemoteSwiftPackageReference "Sparkle" */,
+			);
 			productRefGroup = AA0000000000000000000505 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -570,6 +590,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				UP0000000000000000000006 /* UpdateController.swift in Sources */,
+				UP0000000000000000000007 /* UpdateCheckPolicy.swift in Sources */,
 				DD00000000000000000000C8 /* AIBackend.swift in Sources */,
 				DD00000000000000000000C9 /* HTTPAIProvider.swift in Sources */,
 				DD00000000000000000000CA /* CodexConnection.swift in Sources */,
@@ -637,6 +659,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				UP000000000000000000000A /* UpdateCheckPolicy.swift in Sources */,
+				UP000000000000000000000B /* UpdateCheckPolicyTests.swift in Sources */,
 				DD000000000000000000012C /* AIBackend.swift in Sources */,
 				DD000000000000000000012D /* HTTPAIProvider.swift in Sources */,
 				DD000000000000000000012E /* CodexConnection.swift in Sources */,
@@ -719,6 +743,25 @@
 		};
 /* End PBXTargetDependency section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		UP0000000000000000000004 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.9.6;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		UP0000000000000000000005 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = UP0000000000000000000004 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
+/* End XCSwiftPackageProductDependency section */
+
 /* Begin XCBuildConfiguration section */
 		AA0000000000000000000701 /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -767,7 +810,8 @@
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = NO;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Sora/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Sora;
 				INFOPLIST_KEY_CFBundleIconName = AppIcon;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
@@ -813,7 +857,8 @@
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = NO;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Sora/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Sora;
 				INFOPLIST_KEY_CFBundleIconName = AppIcon;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
