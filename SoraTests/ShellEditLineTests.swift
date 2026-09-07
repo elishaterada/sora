@@ -1,6 +1,42 @@
 import XCTest
 
 final class ShellEditLineTests: XCTestCase {
+    func testMultilineTransportPreservesLiteralEscapesAndCursor() {
+        let title = ShellEditLine.multilineSentinel + "8;1;echo a%0Aecho %250A"
+        XCTAssertEqual(ShellEditLine.parse(title: title), "echo a\necho %0A")
+        XCTAssertEqual(ShellEditLine.cursorOffset(title: title), 8)
+        XCTAssertTrue(ShellEditLine.shellRecognizesCommand(title: title))
+    }
+
+    func testLiveShellCommandRecognitionReport() {
+        let title = ShellEditLine.inputSentinel + "2;1;.."
+        XCTAssertEqual(ShellEditLine.parse(title: title), "..")
+        XCTAssertEqual(ShellEditLine.cursorOffset(title: title), 2)
+        XCTAssertTrue(ShellEditLine.shellRecognizesCommand(title: title))
+        XCTAssertTrue(ShellEditLine.isMirror(title: title))
+        XCTAssertFalse(ShellEditLine.shellRecognizesCommand(title: ShellEditLine.inputSentinel + "2;0;hi"))
+    }
+
+    func testCursorReportsPreserveSemicolonsAndUnicode() {
+        let title = ShellEditLine.cursorSentinel + "3;a😀b; echo hi"
+        XCTAssertEqual(ShellEditLine.parse(title: title), "a😀b; echo hi")
+        XCTAssertEqual(ShellEditLine.cursorOffset(title: title), 3)
+        XCTAssertEqual(ShellEditLine.textBeforeCursor("a😀b; echo hi", scalarOffset: 2), "a😀")
+        XCTAssertTrue(ShellEditLine.isMirror(title: title))
+    }
+
+    func testCursorReportValidationAndBounds() {
+        for value in ["-1;text", "bad;text", "2"] {
+            let title = ShellEditLine.cursorSentinel + value
+            XCTAssertNil(ShellEditLine.parse(title: title))
+            XCTAssertNil(ShellEditLine.cursorOffset(title: title))
+        }
+        XCTAssertEqual(ShellEditLine.parse(title: ShellEditLine.cursorSentinel + "0;"), "")
+        XCTAssertEqual(ShellEditLine.textBeforeCursor("hello", scalarOffset: 99), "hello")
+        XCTAssertEqual(ShellEditLine.textBeforeCursor("hello", scalarOffset: -1), "")
+        XCTAssertEqual(ShellEditLine.textBeforeCursor("e\u{301}x", scalarOffset: 2), "e\u{301}")
+    }
+
     private func mirror(_ line: String) -> String {
         ShellEditLine.sentinel + line
     }

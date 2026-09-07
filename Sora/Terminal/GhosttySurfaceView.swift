@@ -32,7 +32,9 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     private var swallowedKeyCodes: Set<UInt16> = []
     private var isShellPromptReady = false
     /// Live ZLE buffer mirrored by the shell. Nil until the first report.
+    private var shellRecognizesCommand = false
     private var shellEditLine: String?
+    private var shellCursorOffset = 0
     private var promptIntent: PromptIntent?
     var onAgentPrompt: ((String) -> Void)?
     var onContinueAgent: (() -> Bool)?
@@ -134,11 +136,17 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     // MARK: - Input
 
     override func keyDown(with event: NSEvent) {
+        stickyBar?.clearInputSelection()
         captureGhostTextAnchor()
         let characters = event.characters ?? ""
         let isReturn = event.keyCode == PromptEvent.returnKey
             || event.keyCode == PromptEvent.keypadEnter
             || characters == "\r" || characters == "\n"
+        if isReturn && event.modifierFlags.contains(.shift) && isShellPromptReady {
+            swallowedKeyCodes.insert(event.keyCode)
+            insertText("\n")
+            return
+        }
         if isReturn {
             let forceShell = event.modifierFlags.contains(.command)
             let promptReady = isShellPromptReady || foregroundProcessIsShell()
@@ -149,7 +157,8 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
             let submission = PromptIntentClassifier.submission(
                 for: line,
                 forceShell: forceShell,
-                allowImplicitAgent: promptReady
+                allowImplicitAgent: promptReady,
+                shellCommandKnown: shellRecognizesCommand && line == shellEditLine
             )
             switch submission {
             case .agent(let question) where !question.isEmpty:
@@ -283,6 +292,10 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     }
 
     func copySelectionToPasteboard() {
+        if let text = stickyBar?.selectedInputText {
+            GhosttyClipboard.writePlainText(text, to: .general)
+            return
+        }
         guard let surface, ghostty_surface_has_selection(surface) else { return }
         var text = ghostty_text_s()
         guard ghostty_surface_read_selection(surface, &text) else { return }
@@ -309,6 +322,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         switch menuItem.action {
         case #selector(copy(_:)):
+            if stickyBar?.selectedInputText != nil { return true }
             guard let surface else { return false }
             return ghostty_surface_has_selection(surface)
         default:
@@ -319,6 +333,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     // MARK: - Mouse
 
     override func mouseDown(with event: NSEvent) {
+        stickyBar?.clearInputSelection()
         window?.makeFirstResponder(self)
         // Focusing a ready prompt must not kill AI routing. Clicks used to
         // stop tracking whenever text was present, which sent conversational
@@ -514,7 +529,9 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         // zsh mirrors its live edit buffer through a sentinel title. Consume it
         // as routing state; it is never a window or tab title.
         if let line = ShellEditLine.parse(title: title) {
+            shellRecognizesCommand = ShellEditLine.shellRecognizesCommand(title: title)
             shellEditLine = line
+            shellCursorOffset = ShellEditLine.cursorOffset(title: title) ?? line.unicodeScalars.count
             // Only ZLE emits this, so the shell is definitionally at a prompt.
             isShellPromptReady = true
             // Arrives on every redraw; avoid the history/path work in a full refresh.
@@ -679,6 +696,25 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         sendControlKey(keyCode: 8, unshifted: UnicodeScalar("c"))
     }
 
+    func moveShellCursor(to offset: Int) {
+        guard isShellPromptReady, let line = shellEditLine, let surface else { return }
+        let target = min(max(0, offset), line.unicodeScalars.count)
+        let delta = target - shellCursorOffset
+        guard delta != 0 else { return }
+        completion.stopTracking()
+        var key = ghostty_input_key_s()
+        key.keycode = delta < 0 ? 123 : 124
+        key.mods = GHOSTTY_MODS_NONE
+        key.consumed_mods = GHOSTTY_MODS_NONE
+        for _ in 0..<abs(delta) {
+            key.action = GHOSTTY_ACTION_PRESS
+            _ = ghostty_surface_key(surface, key)
+            key.action = GHOSTTY_ACTION_RELEASE
+            _ = ghostty_surface_key(surface, key)
+        }
+        runtime.tick()
+    }
+
     private func sendControlKey(
         keyCode: UInt32,
         unshifted: UnicodeScalar,
@@ -745,7 +781,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     private func refreshPromptRoute() {
         let line = promptLineForSubmission()
         promptIntent = isShellPromptReady && !line.isEmpty
-            ? PromptIntentClassifier.intent(for: line)
+            ? PromptIntentClassifier.intent(for: line, shellCommandKnown: shellRecognizesCommand && line == shellEditLine)
             : nil
         stickyBar?.updateRoute(promptIntent)
     }
@@ -760,7 +796,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         // Show the route from whatever line Return would actually submit.
         let routableLine = promptLineForSubmission()
         let route = isShellPromptReady && !routableLine.isEmpty
-            ? PromptIntentClassifier.intent(for: routableLine)
+            ? PromptIntentClassifier.intent(for: routableLine, shellCommandKnown: shellRecognizesCommand && routableLine == shellEditLine)
             : nil
         promptIntent = route
         refreshStickyBar()
@@ -770,7 +806,8 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
             offset: scrollbarOffset,
             len: scrollbarLen
         )
-        guard let suggestion = completion.suggestion, let surface, atLivePrompt, window != nil, !isHidden else {
+        guard !isShellPromptReady,
+              let suggestion = completion.suggestion, let surface, atLivePrompt, window != nil, !isHidden else {
             ghostText.hide()
             return
         }
@@ -849,31 +886,12 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
             ?? initialWorkingDirectory
         let path = StickyPromptBarModel.displayPath(for: cwd)
         let branch = cwd.flatMap { GitRepository.branchName(containing: $0) }
-        let atLivePrompt = StickyPromptBarModel.isViewingLivePrompt(
-            total: scrollbarTotal,
-            offset: scrollbarOffset,
-            len: scrollbarLen
-        )
         let suggestion = completion.suggestion
-        let line: String?
-        let predicted: Bool
-        if let suggestion, suggestion.source == .prediction {
-            line = suggestion.displayText
-            predicted = true
-        } else if !atLivePrompt {
-            let buffer = completion.buffer.text
-            if buffer.isEmpty, suggestion == nil {
-                line = nil
-                predicted = false
-            } else {
-                let suffix = suggestion?.displayText ?? ""
-                line = buffer + suffix
-                predicted = suggestion?.source == .prediction
-            }
-        } else {
-            line = nil
-            predicted = false
-        }
+        let buffer = shellEditLine ?? completion.buffer.text
+        let predicted = isShellPromptReady && buffer.isEmpty && suggestion?.source == .prediction
+        let line: String? = isShellPromptReady
+            ? StickyPromptBarModel.inputText(buffer: buffer, prediction: predicted ? suggestion?.displayText : nil)
+            : nil
         stickyBar.update(
             path: path,
             directory: cwd,
@@ -881,7 +899,14 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
             line: line,
             predicted: predicted
         )
+        stickyBar.updateCaret(text: buffer, scalarOffset: shellCursorOffset,
+                              visible: isShellPromptReady)
+        stickyBar.updatePromptReady(isShellPromptReady)
         stickyBar.updateRoute(promptIntent)
+        let validSuffix = completion.buffer.isTracking && completion.buffer.text == buffer
+            && shellCursorOffset == buffer.unicodeScalars.count && !buffer.isEmpty
+            && suggestion?.source != .prediction && promptIntent != .agent
+        stickyBar.updateSuggestion(validSuffix ? suggestion?.insertSuffix : nil)
     }
 
     func acceptStickyPrediction() {

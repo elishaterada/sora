@@ -1,6 +1,6 @@
 # Panda (default) — https://terminalcolors.com/themes/panda/default/
-background = #292a2b
-background-opacity = 0.20
+background = #14161a
+background-opacity = 0.96
 background-blur = macos-glass-regular
 foreground = #cccccc
 cursor-color = #19f9d8
@@ -14,9 +14,11 @@ cursor-style-blink = true
 adjust-cursor-thickness = 1
 selection-background = #5f4e3b
 selection-foreground = #cccccc
-window-padding-x = 14
-window-padding-y = 12
-window-padding-balance = true
+window-padding-x = 24
+window-padding-y = 18
+window-padding-balance = false
+# Extend each block surface through the inset; only its text is padded.
+window-padding-color = extend-always
 adjust-cell-height = 12%
 semantic-prompt-boundaries = true
 font-size = 18

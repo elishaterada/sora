@@ -6,14 +6,21 @@
 _sora_report_line() {
   emulate -L zsh
   local buf=$BUFFER
-  buf=${buf//$'\n'/ }
-  buf=${buf//$'\r'/ }
-  buf=${buf//$'\e'/}
-  buf=${buf//$'\a'/}
-  (( ${#buf} > 2048 )) && buf=${buf[1,2048]}
-  builtin printf '\e]2;%s%s\a' "$_SORA_LINE_SENTINEL" "$buf"
+  buf=${buf//\%/\%25}
+  buf=${buf//$'\n'/\%0A}
+  buf=${buf//$'\r'/\%0D}
+  buf=${buf//$'\e'/\%1B}
+  buf=${buf//$'\a'/\%07}
+  local -a words
+  words=( ${(z)BUFFER} )
+  local known=0
+  if (( ${#words} )) && builtin whence -w -- "${(Q)words[1]}" >/dev/null 2>&1; then
+    known=1
+  fi
+  builtin printf '\e]2;%s%d;%d;%s\a' "$_SORA_CURSOR_SENTINEL" "$CURSOR" "$known" "$buf"
 }
 
+typeset -g _SORA_CURSOR_SENTINEL=$'\u2400sora-multiline\u2400'
 typeset -g _SORA_LINE_SENTINEL=$'\u2400sora-line\u2400'
 
 _sora_report_line_install() {

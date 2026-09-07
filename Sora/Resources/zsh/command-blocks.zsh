@@ -110,3 +110,21 @@ if [[ -o interactive ]]; then
   zle -N _sora_agent_handoff
   bindkey -- "$_SORA_AGENT_HANDOFF_KEY" _sora_agent_handoff
 fi
+
+# Ignore an empty primary prompt in ZLE itself, where BUFFER is authoritative.
+# Continuation prompts and interactive programs retain normal Return behavior.
+_sora_accept_line() {
+  builtin emulate -L zsh
+  if [[ $CONTEXT == start && -z $BUFFER ]]; then
+    (( $+functions[_sora_report_line] )) && _sora_report_line
+    return 0
+  fi
+  zle _sora_original_accept_line -- "$@"
+}
+
+_sora_accept_line_install() {
+  zle -A accept-line _sora_original_accept_line
+  zle -N accept-line _sora_accept_line
+  precmd_functions=(${precmd_functions:#_sora_accept_line_install})
+}
+precmd_functions+=(_sora_accept_line_install)
