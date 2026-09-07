@@ -289,9 +289,41 @@ final class GhosttyRuntime: ObservableObject {
                 view?.applyMouseShape(action.action.mouse_shape)
             }
             return true
+        case GHOSTTY_ACTION_OPEN_URL:
+            let request = action.action.open_url
+            guard let bytes = request.url, request.len > 0 else { return true }
+            let value = String(
+                decoding: UnsafeRawBufferPointer(
+                    start: UnsafeRawPointer(bytes),
+                    count: Int(request.len)
+                ),
+                as: UTF8.self
+            )
+            DispatchQueue.main.async {
+                openExternalURL(value)
+            }
+            return true
         default:
             return true
         }
+    }
+
+    /// Ghostty owns link recognition and only emits this action after the user
+    /// activates a highlighted terminal link. Sora owns the native handoff to
+    /// the default browser/application because returning `true` from the
+    /// embedded runtime suppresses Ghostty's standalone fallback opener.
+    private static func openExternalURL(_ value: String) {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        if let url = URL(string: trimmed), url.scheme != nil {
+            NSWorkspace.shared.open(url)
+            return
+        }
+
+        let path = (trimmed as NSString).expandingTildeInPath
+        guard path.hasPrefix("/") else { return }
+        NSWorkspace.shared.open(URL(fileURLWithPath: path))
     }
 
     private static func surfaceView(from target: ghostty_target_s) -> GhosttySurfaceView? {

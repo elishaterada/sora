@@ -55,7 +55,12 @@ enum AgentMarkdown {
         guard !trimmed.isEmpty else { return nil }
 
         var options = AttributedString.MarkdownParsingOptions()
-        options.interpretedSyntax = streaming ? .inlineOnlyPreservingWhitespace : .full
+        // Foundation's partial-failure policy keeps incomplete trailing syntax
+        // visible, including an open code fence, while the full parser styles
+        // every complete heading, list, quote, link, and code span immediately.
+        // The previous inline-only streaming mode delayed all block formatting
+        // until the response completed.
+        options.interpretedSyntax = .full
         options.failurePolicy = .returnPartiallyParsedIfPossible
 
         guard var attributed = try? AttributedString(

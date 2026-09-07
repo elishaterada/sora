@@ -6,7 +6,8 @@ import SwiftUI
 struct AgentMarkdownText: View {
     let text: String
     var relativeTo: URL?
-    /// While streaming, prefer inline syntax so unclosed fences do not blank the view.
+    /// While streaming, tolerate incomplete trailing Markdown without delaying
+    /// formatting for blocks that have already arrived.
     var streaming = false
 
     private var lineSpacing: CGFloat { 3 }

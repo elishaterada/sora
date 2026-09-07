@@ -1,92 +1,172 @@
-# Sora
+<p align="center">
+  <img src="app-icon.png" width="112" alt="Sora app icon">
+</p>
 
-> Working name. Public naming and trademark clearance are not complete.
+<h1 align="center">Sora</h1>
 
-Sora is a macOS-first terminal that combines a strong native terminal experience with local command intelligence and an optional built-in AI agent.
+<p align="center">
+  A fast, native macOS terminal with local command intelligence and an optional AI agent.
+</p>
 
-The product must remain fully useful when AI is disabled. The intended progression is:
+> [!IMPORTANT]
+> Sora is an early preview and a working name. It has not completed public
+> naming or trademark review.
 
-1. Great terminal
-2. Smart terminal
-3. AI-assisted terminal
-4. Agentic development environment
+Sora starts with a real terminal and adds assistance without making the terminal
+depend on AI. It is built in Swift for macOS and uses
+[libghostty](https://github.com/ghostty-org/ghostty) for terminal emulation and
+rendering.
 
-## Initial stack
+## Highlights
 
-- Swift
-- SwiftUI with AppKit where necessary
-- Xcode
-- `libghostty` (GhosttyKit / libghostty-internal) for terminal emulation and rendering
-- SQLite for local structured history and workspace state
-- macOS Keychain for secrets when provider support is added
+- **A native terminal:** Ghostty-backed rendering, a real login `zsh`, tabs,
+  copy and paste, responsive resizing, scrollback, clickable links, and macOS
+  window materials.
+- **Readable command history:** command output is grouped with durable visual
+  boundaries that reflow, scroll, and clear with the terminal grid.
+- **Local command intelligence:** inline completion from local history plus
+  lightweight next-command suggestions. No AI call is made for either feature.
+- **Agent in the same tab:** ask a question at the prompt and move into a native
+  Agent view without losing the terminal beneath it. Escape returns to the
+  prompt while an answer continues.
+- **Progressive answers:** Agent replies render Markdown, links, code, and
+  filesystem paths as they stream.
+- **Your choice of provider:** OpenAI API, Codex with ChatGPT sign-in, Anthropic
+  API, Vercel AI Gateway, and Grok (xAI).
+- **Bounded command execution:** review proposed commands before running them,
+  allow a narrow set of read-only commands automatically, or explicitly enable
+  full access.
+- **Signed in-place updates:** release builds check GitHub once at launch and
+  can download, replace, and relaunch the app through Sparkle.
 
-Do not introduce Electron, Tauri, Flutter, Qt, a webview UI, or a separate Rust core during V0.
+## Download
 
-## V0 goal
+Download the newest build from [GitHub Releases](https://github.com/elishaterada/sora/releases/latest).
 
-Prove the native terminal foundation with the smallest useful vertical slice:
+Current release artifacts are for **Apple Silicon Macs** running **macOS 13 or
+newer**. Builds are ad-hoc signed but not Apple-notarized, so macOS will show a
+Gatekeeper warning on first launch.
 
-- launch a native macOS app
-- embed a Ghostty-backed terminal surface
-- start the user's `zsh`
-- accept keyboard input
-- render terminal output
-- resize correctly
-- support copy and paste
-- manage terminal lifecycle cleanly
-- build and run reliably from Xcode
+1. Download and unzip the latest `Sora-*-macos-arm64.zip`.
+2. Move `Sora.app` to `/Applications` or `~/Applications`.
+3. Right-click Sora and choose **Open**, then confirm **Open**.
 
-The original V0 scope excluded AI, accounts, sync, and cloud services. The user has since authorized the optional Phase 6 Ask slice described below; accounts and sync remain deferred; bounded agent execution is authorized. Local history completion (Phase 4) is in.
-
-## Build and run
-
-Requirements:
-
-- macOS 13+ to run (building current Ghostty `main` needs Xcode 26 and the macOS 26 SDK)
-- [Zig 0.16.x](https://ziglang.org/download/) (`brew install zig`)
-- Metal Toolchain (`xcodebuild -downloadComponent MetalToolchain` if `xcrun -sdk macosx metal --version` fails)
+If Gatekeeper still blocks the app, clear the downloaded quarantine attribute:
 
 ```sh
-# 1. Build GhosttyKit and terminfo (clones Ghostty at the pinned commit)
+xattr -cr /Applications/Sora.app
+```
+
+Version 0.1.3 and newer can install subsequent signed updates from inside the
+app. The first Sparkle-capable version must be installed manually.
+
+## Using Agent
+
+Agent is optional and disabled until you configure it.
+
+1. Open **Agent** from the window chrome, or press **Cmd+Shift+A**.
+2. Choose a provider and model.
+3. Add that provider's API key, or use Codex with ChatGPT sign-in.
+4. Enable Agent.
+
+At a ready prompt, type a conversational request such as:
+
+```text
+Help me find the largest files in this folder
+```
+
+Sora labels conversational input before submission. Press **Return** to send it
+to Agent, **Cmd+Return** to force it to the shell, or begin with `/agent ` to
+force a command-like question to Agent.
+
+### Command permissions
+
+| Mode | Behavior |
+| --- | --- |
+| Ask for approval | Every proposed command and webpage fetch waits for you. This is the default. |
+| Approve for me | A small, validated set of read-only listing commands may run automatically. Everything else still waits. |
+| Full access | Validated proposals run without confirmation using your user account's filesystem permissions. |
+
+Agent actions are limited to six per turn, each command has a 60-second timeout,
+and captured output is bounded. This approval layer is intentionally
+conservative, but it is not an operating-system sandbox.
+
+Provider access is not included with Sora. API providers may require their own
+account, key, or paid usage. Codex authentication uses the user's existing
+ChatGPT/Codex access.
+
+## Privacy and data
+
+- The terminal, history completion, and next-command suggestions work without
+  Agent and make no AI requests.
+- Sora does not automatically send terminal output, repository contents,
+  environment variables, working directories, or command history to a provider.
+- Agent sends only the question, completed conversation turns, and results from
+  actions you approved or allowed through the selected permission mode.
+- API keys are stored in the macOS Keychain and are not written to settings,
+  SQLite, conversation files, or source control.
+- Conversations are stored locally per provider in
+  `~/Library/Application Support/Sora/` as plaintext files with user-only
+  permissions.
+- There is no Sora account, cloud sync, analytics service, or hosted backend.
+
+Each AI provider has its own data-retention and billing terms. Review those
+terms before enabling Agent.
+
+## Build from source
+
+Building currently requires macOS, Xcode 26 with the macOS 26 SDK, the Metal
+toolchain, and Zig 0.16.x. The resulting app runs on macOS 13 or newer.
+
+```sh
+brew install zig
+
+# Install the Metal toolchain if it is not already available.
+xcodebuild -downloadComponent MetalToolchain
+
+# Build the pinned GhosttyKit framework and terminal resources.
 ./Scripts/build-ghosttykit.sh
 
-# 2. Build the app
-xcodebuild -project Sora.xcodeproj -scheme Sora -configuration Debug -destination 'platform=macOS' build
+# Build Sora.
+xcodebuild \
+  -project Sora.xcodeproj \
+  -scheme Sora \
+  -configuration Debug \
+  -destination 'platform=macOS' \
+  build
 
-# 3. Tests (do not link libghostty; serial to avoid duplicate xctest workers)
-xcodebuild -project Sora.xcodeproj -scheme Sora -configuration Debug -destination 'platform=macOS' -parallel-testing-enabled NO test
+# Run the test suite.
+xcodebuild \
+  -project Sora.xcodeproj \
+  -scheme Sora \
+  -configuration Debug \
+  -destination 'platform=macOS' \
+  -parallel-testing-enabled NO \
+  test
 ```
 
-The first launch starts a login `zsh` in a single window. Cmd+N opens a new tab; Cmd+W closes the current tab. The app is unsandboxed and ad-hoc signed for local use. Launch creates `~/.hushlogin` if missing so `login(1)` does not print the last-login banner.
+Ghostty is pinned to commit
+[`c81f0b26871c7fbbe2fc35549fdad1f64ed29094`](https://github.com/ghostty-org/ghostty/commit/c81f0b26871c7fbbe2fc35549fdad1f64ed29094).
 
-## Shareable zip (friends / other Macs)
+## Project status
 
-No Apple Developer Program required. CI builds an **ad-hoc Apple Silicon** zip and attaches it to a GitHub Release. Gatekeeper will warn; that is expected until notarization.
+Sora is under active development. The native terminal, tabs, command history,
+local completion, next-command prediction, optional Agent providers, bounded
+agent actions, and signed update flow are implemented. Accounts, cloud sync,
+collaboration, a hosted backend, and cross-platform support are intentionally
+out of scope for this preview.
 
-```sh
-# Local package (same script CI runs)
-./Scripts/package-app.sh
-# → dist/Sora-<version>-<build>-macos-arm64.zip
-```
+For implementation details, see:
 
-**CI:** push a tag `v0.1.0`, or run **Actions → Release zip → Run workflow**. Download the zip from the Release (or the workflow artifact). First open: right-click → Open, or `xattr -cr Sora.app`.
+- [Architecture](docs/architecture.md)
+- [Agent behavior, permissions, and provider boundaries](docs/ai-ask.md)
+- [Roadmap](docs/roadmap.md)
+- [Ghostty integration](docs/libghostty-integration.md)
+- [Licensing and third-party notices](docs/licensing.md)
+- [Working-name notes](docs/naming.md)
 
-Intel Macs are not covered by the default `macos-26` runner artifact.
+## Licensing
 
-Ghostty is pinned to commit `c81f0b26871c7fbbe2fc35549fdad1f64ed29094`. See [`docs/libghostty-integration.md`](docs/libghostty-integration.md).
-
-## Documents
-
-- [`CURSOR_HANDOFF.md`](CURSOR_HANDOFF.md): first prompt and stopping point for Cursor
-- [`AGENTS.md`](AGENTS.md): persistent rules for coding agents
-- [`docs/architecture.md`](docs/architecture.md): target architecture and boundaries
-- [`docs/roadmap.md`](docs/roadmap.md): phased delivery plan
-- [`docs/libghostty-integration.md`](docs/libghostty-integration.md): integration research and decision checklist
-- [`docs/licensing.md`](docs/licensing.md): dependency and reference-project constraints
-- [`docs/naming.md`](docs/naming.md): working-name status
-
-Open **Window → Command History** after running a command to confirm structured history. Type a command prefix to see ghost text; Tab or Right Arrow accepts it. After a successful `git status` then `git push`, run `git status` again and look for italic `→ git push` on the empty prompt.
-
-## Current status
-
-Phase 5 next-command prediction is in the tree. Session chrome uses a native split view, 18pt type, Panda identity colors, and Ghostty macOS glass. Optional Agent mode supports **OpenAI API, Codex, Anthropic API, Vercel AI Gateway, and Grok (xAI)**. At a ready shell prompt, type a clear conversational request such as `Help me find the largest files` and press Return. Sora marks it as **↵ agent** while typing and continues into Agent in the same tab (full-bleed; Escape returns to the terminal without stopping a running answer; a floating agent summary / ⌘Y resumes). Each new handoff starts a fresh per-tab conversation. Press Cmd+Return to run a detected sentence as shell input, or start with `/agent ` to force a command-like question to the agent. When one command can advance the request, Sora displays its purpose, working directory, and full command in an approval card. Permission modes: **Ask for approval** (default), **Approve for me** (read-only command allowlist only; webpages still ask), and **Full access**. Runs use the tab’s directory in a separate noninteractive shell, with a six-command limit and a 60-second timeout per command. **Agent → Open Agent** (Cmd+Shift+A) opens the same inline panel directly. Select a provider and enable Agent in Setup. Save an API key to Keychain, or use Codex's ChatGPT sign-in with an installed Codex 0.153.0+ CLI/app. Stop cancels. See [`docs/ai-ask.md`](docs/ai-ask.md).
+No license for Sora's original source code has been published yet. Third-party
+components retain their own licenses; see [ThirdPartyNotices.txt](ThirdPartyNotices.txt)
+and [docs/licensing.md](docs/licensing.md).

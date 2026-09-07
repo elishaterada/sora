@@ -248,6 +248,13 @@ own view; rendering the string as a single `Text` ran blocks together. Inline
 code is tinted peach rather than boxed in a background fill, which kept
 identifier-dense paragraphs unreadable.
 
+Streaming answers use the same full Markdown parser with its partial-result
+policy, so complete headings, lists, quotes, links, and code blocks take shape
+as soon as they arrive while incomplete trailing syntax remains visible. Agent
+autoscroll is throttled to a steady cadence and uses a short decelerating ease
+instead of jumping on every token; Reduce Motion keeps the follow behavior but
+removes its animation.
+
 Filesystem paths the agent mentions become `file://` links that reveal in
 Finder, resolved against the agent working directory. A whole code span counts
 as one token so paths containing spaces resolve, bare words like `ffmpeg` are
