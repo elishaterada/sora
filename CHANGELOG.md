@@ -4,7 +4,7 @@ Human-readable highlights for each Sora release live here. Add the newest
 version before creating its `vX.Y.Z` tag; the release workflow requires a
 matching section and publishes it to GitHub.
 
-## Unreleased
+## 0.1.5 — 2026-09-07
 
 ### What’s new
 
@@ -15,6 +15,19 @@ matching section and publishes it to GitHub.
 - Configure Terminal, Agent providers, credentials, permissions, and Voice in
   a dedicated, expandable macOS Settings window while conversations stay
   focused on interacting with Agent.
+
+- Edit commands in a distinct bottom input panel with multiline input,
+  automatic wrapping, click-to-position, and drag-to-copy selection.
+- Read command history more easily with darker output blocks and balanced
+  spacing around separators.
+
+### Fixes
+
+- Shell aliases and functions take precedence over automatic Agent routing.
+- Agent automatically retries malformed action requests.
+- Empty Returns no longer add blank rows to command history.
+- Input updates promptly while completion hints settle without flashing.
+- Command spacing stays consistent when scrolling through older output.
 
 ### Safety and privacy
 

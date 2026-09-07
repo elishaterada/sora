@@ -25,7 +25,7 @@ final class CommandBlocksTests: XCTestCase {
         XCTAssertEqual(lines, ["<1ms", "14ms", "1.25s", "12.4s", "1m15s"])
     }
 
-    func testPrecmdPrintsDurationAndOneSpacingRowWithoutTerminalWidthRule() throws {
+    func testPrecmdPrintsDurationAndTwoSpacingRowsWithoutTerminalWidthRule() throws {
         let script = resourceRoot().appendingPathComponent("Sora/Resources/zsh/command-blocks.zsh")
         let output = try runZsh(
             """
@@ -40,10 +40,11 @@ final class CommandBlocksTests: XCTestCase {
         )
         let plain = stripANSI(output)
         let lines = plain.split(separator: "\n", omittingEmptySubsequences: false)
-        XCTAssertEqual(lines.count, 3, plain)
+        XCTAssertEqual(lines.count, 4, plain)
         XCTAssertFalse(lines[0].isEmpty, plain)
         XCTAssertTrue(lines[1].isEmpty, plain)
         XCTAssertTrue(lines[2].isEmpty, plain)
+        XCTAssertTrue(lines[3].isEmpty, plain)
         XCTAssertFalse(plain.contains("─"), plain)
         XCTAssertTrue(plain.hasPrefix("(") && plain.contains(")"), plain)
         XCTAssertTrue(plain.contains("ms") || plain.contains("s"), plain)
@@ -100,7 +101,7 @@ final class CommandBlocksTests: XCTestCase {
         XCTAssertFalse(plain.contains("ms)"), plain)
         XCTAssertEqual(
             plain.split(separator: "\n", omittingEmptySubsequences: false).count,
-            3,
+            4,
             plain
         )
     }
