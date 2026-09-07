@@ -52,7 +52,10 @@ Only create directories required by the current phase. Phase 5 creates
 
 - app and scene lifecycle
 - native windows and menus
-- settings and keyboard shortcuts
+- settings and keyboard shortcuts: the standard macOS Settings scene owns a
+  scalable sidebar for Terminal, Agent, and Voice configuration. Agent views
+  show current provider context and link to Settings but do not embed setup or
+  credential forms in the conversation.
 - updates: Sparkle performs one non-blocking check per Release-build launch and
   exposes a native “Check for Updates…” command. The stable feed is
   `appcast.xml` on GitHub's latest release; both the archive and feed are EdDSA
@@ -71,6 +74,10 @@ Only create directories required by the current phase. Phase 5 creates
 - resize and backing-scale propagation
 - clipboard: Cmd+C/V and Edit menu copy/paste via `ghostty_surface_read_selection` / `ghostty_surface_text`; OSC 52 via Ghostty runtime callbacks plus `NSPasteboard`
 - terminal links: Ghostty detects plain URLs and OSC 8 hyperlinks, highlights them using its native macOS interaction, and sends activation through `GHOSTTY_ACTION_OPEN_URL`; the embedded runtime hands that action to `NSWorkspace` so links open in the user's default browser/application
+- voice input: macOS Speech Recognition provides user-initiated dictation into
+  editable terminal and Agent inputs without auto-submission. A separate
+  OpenAI Realtime WebSocket controller owns bidirectional PCM audio, turn
+  detection, playback, and tab-scoped transcripts; see `voice.md`.
 - session chrome: flush two-column `HStack` (sidebar | terminal). Transparent titlebar with `fullSizeContentView` so close/minimize/zoom sit in the sidebar next to the collapse control. Collapsing the sidebar hides that column; the traffic lights, sidebar toggle, session title, path, and new-tab control move into a thin terminal header. Do not use `.toolbar(.hidden, for: .windowToolbar)` — that hides the window buttons. No `NavigationSplitView` (Tahoe draws that as floating rounded cards). Window frost is a square `NSGlassEffectView` behind both columns.
 - shell presentation: `~/.hushlogin` suppresses `login(1)` "Last login"; a Sora `ZDOTDIR` sources Ghostty's zsh integration, replaces the stock macOS `user@host` prompt with an empty prompt (blinking bar cursor only), and colors the input line (command/flags/paths/strings) unless the user already has zsh-syntax-highlighting. The first command starts flush at the top with no spacer. After each command, zsh `precmd` prints a muted duration followed by one empty terminal row. A small tracked patch adds Ghostty's opt-in `semantic-prompt-boundaries` renderer feature: its one-pixel rules are derived from OSC 133 primary prompt rows, so they appear before the user types and share the terminal grid's reflow, scrollback, and clear-screen lifecycle. The rule is centered vertically inside the empty row to create balanced padding above and below without offsetting the next command. Sora enables that option in `sora.ghostty`; there is no AppKit position cache or title-sequence sentinel. Unicode dashes are not used because they become terminal content and reflow. Paste and completion-accept inserts use `paste:none` so zsh's default paste standout does not paint spaces as opaque blocks. The bar cursor uses Ghostty's built-in blink (`cursor-style-blink = true`); a custom-shader soft fade was dropped because a failed shader load left blink disabled with a solid caret. Reduce Motion forces a steady bar via an overlay config. Chrome motion tokens are ease-in-out.
 

@@ -338,6 +338,15 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         refreshCompletion()
     }
 
+    func insertDictatedText(_ value: String) {
+        guard !value.isEmpty else { return }
+        captureGhostTextAnchor()
+        completion.handlePaste(value)
+        refreshCompletion()
+        insertText(value)
+        scheduleCompletionRefresh()
+    }
+
     private func applyPromptMouseFocus() {
         completion.applyMouseFocus(isShellPromptReady: isShellPromptReady)
     }

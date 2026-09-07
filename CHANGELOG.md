@@ -4,6 +4,23 @@ Human-readable highlights for each Sora release live here. Add the newest
 version before creating its `vX.Y.Z` tag; the release workflow requires a
 matching section and publishes it to GitHub.
 
+## Unreleased
+
+### What’s new
+
+- Dictate editable text into the terminal prompt or Agent composer using the
+  microphone, then review it before submitting.
+- Have a live spoken conversation in Agent with supported OpenAI Realtime
+  models, including streaming transcripts, spoken replies, and interruption.
+- Configure Terminal, Agent providers, credentials, permissions, and Voice in
+  a dedicated, expandable macOS Settings window while conversations stay
+  focused on interacting with Agent.
+
+### Safety and privacy
+
+- Realtime voice stops when Agent is hidden and cannot execute terminal
+  commands; terminal actions still go through the typed approval flow.
+
 ## 0.1.4 — 2026-09-06
 
 ### What’s new

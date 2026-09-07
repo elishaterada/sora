@@ -26,6 +26,8 @@ rendering.
   boundaries that reflow, scroll, and clear with the terminal grid.
 - **Local command intelligence:** inline completion from local history plus
   lightweight next-command suggestions. No AI call is made for either feature.
+- **Voice input:** dictate editable terminal or Agent input, or have a live
+  spoken Agent conversation with a supported OpenAI Realtime model.
 - **Agent in the same tab:** ask a question at the prompt and move into a native
   Agent view without losing the terminal beneath it. Escape returns to the
   prompt while an answer continues.
@@ -101,6 +103,11 @@ ChatGPT/Codex access.
 
 - The terminal, history completion, and next-command suggestions work without
   Agent and make no AI requests.
+- Voice dictation uses macOS Speech Recognition only while the microphone
+  control is active. It never submits the resulting text automatically.
+- Realtime voice sends microphone audio and conversation transcripts to the
+  OpenAI API while its visible waveform control is active. Leaving Agent ends
+  the session and releases the microphone.
 - Sora does not automatically send terminal output, repository contents,
   environment variables, working directories, or command history to a provider.
 - Agent sends only the question, completed conversation turns, and results from

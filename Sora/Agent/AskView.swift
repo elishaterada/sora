@@ -6,9 +6,10 @@ struct AskView: View {
     var inline = false
     var onClose: (() -> Void)?
     var onRunCommand: ((UUID) -> Void)?
-    @StateObject private var codexLogin = CodexLogin()
-    @State private var showingSetup = false
-    @State private var keyDraft = ""
+    @StateObject private var voiceInput = VoiceInputController()
+    @StateObject private var realtimeVoice = RealtimeVoiceController()
+    @State private var dictationPrefix = ""
+    @State private var realtimeStartError: String?
     @State private var streamingScrollTask: Task<Void, Never>?
     @FocusState private var composerFocused: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -24,11 +25,9 @@ struct AskView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            if showingSetup || !session.enabled {
-                setup
-                Divider().opacity(0.35)
+            if realtimeVoice.isActive || realtimeVoice.errorMessage != nil || realtimeStartError != nil {
+                realtimeVoiceBar
             }
-
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 18) {
@@ -72,17 +71,23 @@ struct AskView: View {
         .tint(SoraTheme.accent)
         .onAppear {
             session.load()
-            if !session.enabled { showingSetup = true }
         }
         .onChange(of: session.selectedProvider) { _ in
-            keyDraft = ""
-            codexLogin.cancel()
-            showingSetup = true
+            voiceInput.stop()
+            realtimeVoice.stop()
+        }
+        .onChange(of: session.enabled) { enabled in
+            if !enabled { realtimeVoice.stop() }
         }
         .onDisappear {
             // Do not stop the stream — Escape / hide is a glance, not a cancel.
-            codexLogin.cancel()
-            keyDraft = ""
+            voiceInput.stop()
+            // Live microphone and speaker access always ends when Agent is hidden.
+            realtimeVoice.stop()
+        }
+        .onChange(of: voiceInput.transcript) { transcript in
+            guard !transcript.isEmpty else { return }
+            session.draft = dictationPrefix + transcript
         }
     }
 
@@ -169,13 +174,28 @@ struct AskView: View {
 
                 Spacer(minLength: SoraTheme.space2)
 
+                Button {
+                    toggleRealtimeVoice()
+                } label: {
+                    Image(systemName: realtimeVoice.isActive ? "waveform.circle.fill" : "waveform.circle")
+                        .frame(width: SoraTheme.hitCompact, height: SoraTheme.hitCompact)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(realtimeVoice.isActive ? SoraTheme.accent : .secondary)
+                .disabled(!realtimeVoice.isActive && (!session.realtimeVoiceAvailability.isAvailable
+                          || session.isSending || session.isRunningCommand))
+                .help(realtimeVoice.isActive ? "End voice conversation"
+                      : session.realtimeVoiceAvailability.reason ?? "Start realtime voice conversation")
+                .accessibilityLabel(realtimeVoice.isActive ? "End voice conversation" : "Start voice conversation")
+
                 if !inline {
-                    Button("Clear Conversation") { session.newConversation() }
+                    Button("Clear Conversation") { clearConversation() }
                         .disabled(session.messages.isEmpty)
                 }
                 Menu {
-                    Button(showingSetup ? "Hide Setup" : "Setup") { showingSetup.toggle() }
-                    Button("Clear Conversation") { session.newConversation() }
+                    Button("Agent Settings…") { SoraSettingsOpener.open() }
+                    Button("Clear Conversation") { clearConversation() }
                         .disabled(session.messages.isEmpty)
                     if !inline {
                         Button("Close", role: .cancel) { onClose?() }
@@ -192,6 +212,66 @@ struct AskView: View {
             .padding(.horizontal, SoraTheme.gridPaddingX)
             .padding(.vertical, inline ? SoraTheme.space2 : SoraTheme.space3)
         }
+    }
+
+    private var realtimeVoiceBar: some View {
+        HStack(spacing: SoraTheme.space2) {
+            Image(systemName: realtimeVoice.isActive ? "waveform" : "exclamationmark.circle")
+                .foregroundStyle(realtimeVoice.isActive ? SoraTheme.accent : SoraTheme.danger)
+            Text(realtimeVoice.errorMessage ?? realtimeStartError ?? realtimeVoice.state.title)
+                .font(SoraTheme.agentCaption)
+                .foregroundStyle(realtimeVoice.isActive ? .primary : SoraTheme.danger)
+            if let notice = realtimeVoice.audioNotice {
+                Text(notice)
+                    .font(SoraTheme.agentCaption2)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            if realtimeVoice.isActive {
+                Text(session.realtimeVoiceModel)
+                    .font(SoraTheme.agentCaption2.monospaced())
+                    .foregroundStyle(.tertiary)
+                Button("End") { realtimeVoice.stop() }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+            } else {
+                Button("Voice Settings…") { SoraSettingsOpener.open(page: .voice) }
+                    .buttonStyle(.borderless)
+            }
+        }
+        .padding(.horizontal, SoraTheme.gridPaddingX)
+        .padding(.vertical, SoraTheme.space2)
+        .background(SoraTheme.fillCard)
+        .overlay(alignment: .bottom) { Divider().opacity(0.35) }
+    }
+
+    private func toggleRealtimeVoice() {
+        if realtimeVoice.isActive {
+            realtimeVoice.stop()
+            return
+        }
+        voiceInput.stop()
+        realtimeStartError = nil
+        Task {
+            do {
+                let key = try await session.realtimeVoiceCredential()
+                await realtimeVoice.start(
+                    apiKey: key,
+                    model: session.realtimeVoiceModel,
+                    onBeginMessage: { session.beginRealtimeVoiceMessage(role: $0) },
+                    onUpdateMessage: { session.updateRealtimeVoiceMessage(id: $0, text: $1, completed: $2) },
+                    onStopMessage: { session.stopRealtimeVoiceMessage(id: $0) }
+                )
+            } catch {
+                realtimeStartError = error.localizedDescription
+            }
+        }
+    }
+
+    private func clearConversation() {
+        voiceInput.stop()
+        realtimeVoice.stop()
+        session.newConversation()
     }
 
     private var emptyState: some View {
@@ -211,6 +291,10 @@ struct AskView: View {
             .buttonStyle(.link)
             .font(SoraTheme.agentBody)
             .tint(SoraTheme.accent)
+            if !session.enabled {
+                Button("Configure Agent…") { SoraSettingsOpener.open() }
+                    .buttonStyle(.borderedProminent)
+            }
         }
         .padding(.vertical, inline ? SoraTheme.space2 : 28)
     }
@@ -235,6 +319,20 @@ struct AskView: View {
                         .foregroundStyle(.tertiary)
                 }
                 Spacer()
+                Button {
+                    if voiceInput.isListening {
+                        voiceInput.stop()
+                    } else {
+                        dictationPrefix = session.draft.isEmpty || session.draft.hasSuffix(" ")
+                            ? session.draft : session.draft + " "
+                        voiceInput.toggle()
+                    }
+                } label: {
+                    Image(systemName: voiceInput.isListening ? "waveform.circle.fill" : "mic")
+                }
+                .buttonStyle(.borderless)
+                .help(voiceInput.isListening ? "Stop dictating" : "Dictate into Agent")
+                .accessibilityLabel(voiceInput.isListening ? "Stop dictating" : "Dictate into Agent")
                 if session.isSending || session.isRunningCommand {
                     Button("Stop", systemImage: "stop.fill") { session.stop() }
                 } else {
@@ -242,6 +340,9 @@ struct AskView: View {
                         .keyboardShortcut(.return, modifiers: [])
                         .disabled(!session.canSend)
                 }
+            }
+            if let error = voiceInput.errorMessage {
+                Text(error).font(SoraTheme.agentCaption2).foregroundStyle(SoraTheme.danger)
             }
         }
         .padding(.horizontal, SoraTheme.gridPaddingX)
@@ -251,6 +352,8 @@ struct AskView: View {
 
     private func submitComposer() {
         guard session.canSend else { return }
+        voiceInput.stop()
+        realtimeVoice.stop()
         session.send()
     }
 
@@ -276,15 +379,10 @@ struct AskView: View {
                 }
                 Text("·").foregroundStyle(.tertiary)
             }
-            Picker("Provider", selection: Binding(get: { session.selectedProvider }, set: { session.selectProvider($0) })) {
-                ForEach(session.availableProviders) { id in Text(id.name).tag(id) }
-            }
-            .labelsHidden()
-            .pickerStyle(.menu)
-            .fixedSize()
-            .help("Choose provider")
+            Text(session.selectedProvider.name)
+                .lineLimit(1)
             Button {
-                showingSetup = true
+                SoraSettingsOpener.open()
             } label: {
                 Text(session.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                       ? "Choose model"
@@ -295,9 +393,8 @@ struct AskView: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(SoraChromeButtonStyle())
-            .help("Choose an agent model")
-            .accessibilityLabel("Choose model")
-            AgentPermissionModeMenu(mode: $session.permissionMode)
+            .help("Open Agent settings")
+            .accessibilityLabel("Open Agent settings")
             Spacer(minLength: 0)
             if !inline {
                 Text(session.selectedProvider.disclosure)
@@ -309,52 +406,6 @@ struct AskView: View {
         .foregroundStyle(SoraTheme.muted)
         .padding(.horizontal, SoraTheme.gridPaddingX)
         .padding(.bottom, 10)
-    }
-
-    private var setup: some View {
-        VStack(alignment: .leading, spacing: SoraTheme.space3) {
-            Toggle("Enable Agent", isOn: $session.enabled)
-            AgentPermissionModePicker(mode: $session.permissionMode)
-            if session.selectedProvider == .codex {
-                Text("Use the installed Codex CLI with your Codex / ChatGPT sign-in. Sora does not copy login tokens.")
-                    .font(SoraTheme.agentCaption).foregroundStyle(SoraTheme.muted)
-                HStack {
-                    Button("Check Sign-In") { codexLogin.connect(signIn: false) }
-                    Button("Sign In with ChatGPT") { codexLogin.connect(signIn: true) }
-                    if codexLogin.isBusy { Button("Cancel") { codexLogin.cancel() } }
-                }
-                .disabled(session.isSending)
-                Text(codexLogin.status).font(SoraTheme.agentCaption).foregroundStyle(SoraTheme.muted)
-            } else {
-                Text(session.selectedProvider == .openai
-                     ? "Use your OpenAI API key. API usage is billed separately from ChatGPT."
-                     : "Use your \(session.selectedProvider.name) key. Usage is billed by that service.")
-                    .font(SoraTheme.agentCaption).foregroundStyle(SoraTheme.muted)
-                HStack {
-                    SecureField("\(session.selectedProvider.name) key", text: $keyDraft)
-                    Button("Save Key") {
-                        let value = keyDraft
-                        Task { if await session.saveKey(value), keyDraft == value { keyDraft = "" } }
-                    }
-                    .disabled(keyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || session.isSending || session.isUpdatingKey)
-                    Button("Remove Key") { Task { await session.removeKey(); keyDraft = "" } }
-                    .disabled(session.isUpdatingKey || session.isSending)
-                }
-            }
-            if session.isUpdatingKey {
-                InlineProgressLabel(title: "Waiting for Keychain…")
-            }
-            TextField(session.selectedProvider == .codex ? "Model ID (blank uses Codex default)" : "Model ID", text: $session.model)
-                .font(SoraTheme.agentBody)
-                .disabled(session.isSending)
-            if let message = session.setupMessage {
-                Text(message).font(SoraTheme.agentCaption).foregroundStyle(SoraTheme.muted)
-            }
-            Text("Credentials stay in macOS Keychain. Each provider has its own local conversation. The agent can run approved commands and fetch public HTTPS pages.")
-                .font(SoraTheme.agentCaption).foregroundStyle(SoraTheme.muted)
-        }
-        .textFieldStyle(.roundedBorder)
-        .padding(SoraTheme.space4)
     }
 
     private func streamingEnvelope(_ text: String) -> (prose: String, title: String)? {
@@ -370,7 +421,7 @@ struct AskView: View {
     private func messageView(_ message: AIMessage) -> some View {
         VStack(alignment: .leading, spacing: SoraTheme.space2) {
             if message.role == .user {
-                userPrompt(message.text)
+                userPrompt(message.text, voice: message.isVoiceInput == true)
             } else {
                 HStack {
                     Text("Sora").font(SoraTheme.agentCaption.weight(.semibold)).foregroundStyle(SoraTheme.muted)
@@ -499,13 +550,15 @@ struct AskView: View {
         }
     }
 
-    private func userPrompt(_ text: String) -> some View {
+    private func userPrompt(_ text: String, voice: Bool) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Text("/agent")
+            Text(voice ? "/voice" : "/agent")
                 .font(SoraTheme.agentMonoSemibold)
                 .foregroundStyle(SoraTheme.accent)
                 .contextMenu {
-                    Button("Copy /agent") { PathActions.copy("/agent") }
+                    Button(voice ? "Copy /voice" : "Copy /agent") {
+                        PathActions.copy(voice ? "/voice" : "/agent")
+                    }
                 }
             Text(text)
                 .font(SoraTheme.agentMono)
@@ -516,7 +569,7 @@ struct AskView: View {
                 }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Agent prompt: \(text)")
+        .accessibilityLabel(voice ? "Voice prompt: \(text)" : "Agent prompt: \(text)")
     }
 
     private func commandCard(_ proposal: AgentCommandProposal, messageID: UUID) -> some View {
@@ -638,7 +691,7 @@ private struct AgentPermissionModeMenu: View {
 }
 
 /// Setup list matching the three ChatGPT-style approval modes.
-private struct AgentPermissionModePicker: View {
+struct AgentPermissionModePicker: View {
     @Binding var mode: AgentPermissionMode
 
     var body: some View {

@@ -1,49 +1,191 @@
+import AppKit
 import SwiftUI
 
-/// macOS Settings → Sora. Font size pushes live into every Ghostty surface.
 struct SoraSettingsView: View {
-    @State private var fontSize = TerminalPreferences.fontSize
+    enum Page: String, CaseIterable, Identifiable {
+        case terminal = "Terminal", agent = "Agent", voice = "Voice"
+        var id: String { rawValue }
+        var symbol: String {
+            switch self {
+            case .terminal: return "terminal"
+            case .agent: return "sparkles"
+            case .voice: return "waveform"
+            }
+        }
+    }
+
+    @ObservedObject var session: AskSession
+    @State private var selection: Page? = .terminal
 
     var body: some View {
-        Form {
-            Section {
+        NavigationSplitView {
+            List(Page.allCases, selection: $selection) { page in
+                Label(page.rawValue, systemImage: page.symbol).tag(page)
+            }
+            .navigationSplitViewColumnWidth(min: 150, ideal: 170)
+        } detail: {
+            switch selection ?? .terminal {
+            case .terminal: TerminalSettingsView()
+            case .agent: AgentSettingsView(session: session)
+            case .voice: VoiceSettingsView(session: session)
+            }
+        }
+        .frame(minWidth: 660, minHeight: 460)
+        .onReceive(NotificationCenter.default.publisher(for: SoraSettingsOpener.pageNotification)) { note in
+            if let page = note.object as? Page { selection = page }
+        }
+    }
+}
+
+private struct SettingsPage<Content: View>: View {
+    let title: String
+    @ViewBuilder var content: Content
+    var body: some View {
+        Form { content }
+            .formStyle(.grouped)
+            .navigationTitle(title)
+    }
+}
+
+private struct TerminalSettingsView: View {
+    @State private var fontSize = TerminalPreferences.fontSize
+    var body: some View {
+        SettingsPage(title: "Terminal") {
+            Section("Text") {
                 HStack {
-                    Text("Font Size")
-                    Spacer()
-                    Text("\(Int(fontSize)) pt")
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
+                    Text("Font size")
+                    Slider(value: $fontSize,
+                           in: TerminalPreferences.minimumFontSize...TerminalPreferences.maximumFontSize,
+                           step: 1)
+                    Text("\(Int(fontSize)) pt").monospacedDigit().foregroundStyle(.secondary)
                 }
-                Slider(
-                    value: $fontSize,
-                    in: TerminalPreferences.minimumFontSize...TerminalPreferences.maximumFontSize,
-                    step: 1
-                ) {
-                    Text("Font Size")
-                } minimumValueLabel: {
-                    Text("\(Int(TerminalPreferences.minimumFontSize))")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                } maximumValueLabel: {
-                    Text("\(Int(TerminalPreferences.maximumFontSize))")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .onChange(of: fontSize) { newValue in
-                    TerminalPreferences.fontSize = newValue
-                }
-                Button("Reset to Default (\(Int(TerminalPreferences.defaultFontSize)) pt)") {
+                .onChange(of: fontSize) { TerminalPreferences.fontSize = $0 }
+                Button("Restore Default") {
                     fontSize = TerminalPreferences.defaultFontSize
                     TerminalPreferences.fontSize = TerminalPreferences.defaultFontSize
                 }
-            } header: {
-                Text("Terminal")
-            } footer: {
-                Text("Applies to the Ghostty grid and Agent body text. Chrome labels stay at 11–13 pt.")
             }
         }
-        .formStyle(.grouped)
-        .frame(width: 420, height: 180)
         .onAppear { fontSize = TerminalPreferences.fontSize }
+    }
+}
+
+private struct AgentSettingsView: View {
+    @ObservedObject var session: AskSession
+    @StateObject private var codexLogin = CodexLogin()
+    @State private var keyDraft = ""
+
+    var body: some View {
+        SettingsPage(title: "Agent") {
+            Section {
+                Toggle("Enable Agent", isOn: $session.enabled)
+            } footer: {
+                Text("Terminal, completion, and command history continue to work when Agent is off.")
+            }
+            Section("Provider") {
+                Picker("Service", selection: Binding(
+                    get: { session.selectedProvider },
+                    set: { session.selectProvider($0) }
+                )) {
+                    ForEach(session.availableProviders) { Text($0.name).tag($0) }
+                }
+                TextField(session.selectedProvider == .codex ? "Model (blank uses Codex default)" : "Model",
+                          text: $session.model)
+                    .disabled(session.isSending)
+                Text(session.selectedProvider.disclosure).foregroundStyle(.secondary)
+            }
+            Section("Credentials") {
+                if session.selectedProvider == .codex {
+                    Text("Uses the installed Codex CLI and your Codex or ChatGPT sign-in. Sora does not copy login tokens.")
+                        .foregroundStyle(.secondary)
+                    HStack {
+                        Button("Check Sign-In") { codexLogin.connect(signIn: false) }
+                        Button("Sign In with ChatGPT") { codexLogin.connect(signIn: true) }
+                        if codexLogin.isBusy { Button("Cancel") { codexLogin.cancel() } }
+                    }
+                    Text(codexLogin.status).foregroundStyle(.secondary)
+                } else {
+                    Text("Usage is billed separately by \(session.selectedProvider.name). Keys stay in macOS Keychain.")
+                        .foregroundStyle(.secondary)
+                    SecureField("API key", text: $keyDraft)
+                    HStack {
+                        Button("Save Key") {
+                            let value = keyDraft
+                            Task { if await session.saveKey(value), keyDraft == value { keyDraft = "" } }
+                        }
+                        .disabled(keyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || session.isUpdatingKey)
+                        Button("Remove Key") { Task { await session.removeKey(); keyDraft = "" } }
+                            .disabled(session.isUpdatingKey)
+                    }
+                }
+                if session.isUpdatingKey { ProgressView().controlSize(.small) }
+                if let message = session.setupMessage { Text(message).foregroundStyle(.secondary) }
+                if let error = session.errorMessage { Text(error).foregroundStyle(SoraTheme.danger) }
+            }
+            Section("Command permissions") {
+                AgentPermissionModePicker(mode: $session.permissionMode)
+            }
+        }
+        .onChange(of: session.selectedProvider) { _ in keyDraft = ""; codexLogin.cancel() }
+        .onDisappear { codexLogin.cancel(); keyDraft = "" }
+    }
+}
+
+private struct VoiceSettingsView: View {
+    @ObservedObject var session: AskSession
+    var body: some View {
+        SettingsPage(title: "Voice") {
+            Section("Dictation") {
+                LabeledContent("Availability", value: "Terminal and Agent")
+                Text("Use the microphone beside an input field. Sora inserts editable text and never submits it automatically.")
+                    .foregroundStyle(.secondary)
+            }
+            Section("Realtime conversation") {
+                Picker("Voice model", selection: $session.realtimeVoiceModel) {
+                    ForEach(RealtimeVoiceModel.supported, id: \.self) { model in
+                        Text(model == RealtimeVoiceModel.recommended ? "\(model) — Recommended" : model)
+                            .tag(model)
+                    }
+                }
+                LabeledContent("Availability") {
+                    Label(
+                        session.realtimeVoiceAvailability.isAvailable ? "Ready" : "Unavailable",
+                        systemImage: session.realtimeVoiceAvailability.isAvailable
+                            ? "checkmark.circle.fill" : "exclamationmark.circle"
+                    )
+                    .foregroundStyle(session.realtimeVoiceAvailability.isAvailable ? .green : .secondary)
+                }
+                Text(session.realtimeVoiceAvailability.reason
+                     ?? "Start a live spoken conversation from the waveform button in Agent. Voice uses the OpenAI API key saved in Agent Settings.")
+                    .foregroundStyle(.secondary)
+                Text("Voice conversations can discuss terminal work, but cannot run commands. Send a typed Agent request to use Sora’s normal command review and approval flow.")
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+enum SoraSettingsOpener {
+    static let pageNotification = Notification.Name("dev.sora.app.settings.page")
+
+    static func open(page: SoraSettingsView.Page? = nil) {
+        let settingsMenu = NSApp.mainMenu?.items
+            .compactMap(\.submenu)
+            .first(where: { menu in
+                menu.items.contains(where: { item in
+                    item.keyEquivalent == "," && item.keyEquivalentModifierMask.contains(.command)
+                })
+            })
+        if let settingsMenu, let settingsIndex = settingsMenu.items.firstIndex(where: { item in
+            item.keyEquivalent == "," && item.keyEquivalentModifierMask.contains(.command)
+        }) {
+            settingsMenu.performActionForItem(at: settingsIndex)
+        } else {
+            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        }
+        guard let page else { return }
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: pageNotification, object: page)
+        }
     }
 }

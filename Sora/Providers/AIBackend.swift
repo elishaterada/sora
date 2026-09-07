@@ -33,6 +33,71 @@ enum AIBackendID: String, CaseIterable, Identifiable, Codable, Sendable {
     }
 }
 
+enum RealtimeVoiceModel {
+    static let recommended = "gpt-realtime-2.1"
+    static let supported = [
+        "gpt-realtime-2.1",
+        "gpt-realtime-2.1-mini",
+        "gpt-realtime-2",
+        "gpt-realtime-1.5"
+    ]
+
+    static func isSupported(_ model: String) -> Bool {
+        let value = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        return supported.contains(value)
+            || supported.contains(where: { value.hasPrefix($0 + "-") })
+    }
+}
+
+enum RealtimeVoiceWireCodec {
+    static func outboundMessage(for event: [String: Any]) throws -> URLSessionWebSocketTask.Message {
+        let data = try JSONSerialization.data(withJSONObject: event)
+        guard let text = String(data: data, encoding: .utf8) else {
+            throw RealtimeVoiceError.connectionFailed
+        }
+        return .string(text)
+    }
+}
+
+enum RealtimeVoiceTiming {
+    static let pcmSampleRate = 24_000
+    static let pcmBytesPerFrame = MemoryLayout<Int16>.size
+
+    static func truncationMilliseconds(
+        playedMilliseconds: Int,
+        receivedPCMByteCount: Int
+    ) -> Int? {
+        guard playedMilliseconds >= 0, receivedPCMByteCount >= pcmBytesPerFrame else { return nil }
+        let receivedFrames = receivedPCMByteCount / pcmBytesPerFrame
+        let receivedMilliseconds = receivedFrames * 1_000 / pcmSampleRate
+        guard receivedMilliseconds > 0 else { return nil }
+
+        // Stay just inside the received audio boundary. Realtime rejects a
+        // truncate timestamp that is even slightly beyond the item's audio.
+        let safeReceivedMilliseconds = receivedMilliseconds - 1
+        return min(playedMilliseconds, safeReceivedMilliseconds)
+    }
+
+    static func shouldInterruptPlayback(isSpeaking: Bool, scheduledAudioBuffers: Int) -> Bool {
+        isSpeaking || scheduledAudioBuffers > 0
+    }
+}
+
+enum RealtimeVoiceAvailability: Equatable {
+    case available
+    case unavailable(String)
+
+    var isAvailable: Bool {
+        if case .available = self { return true }
+        return false
+    }
+
+    var reason: String? {
+        if case .unavailable(let reason) = self { return reason }
+        return nil
+    }
+}
+
 struct AIBackend {
     let id: AIBackendID
     let provider: any AIProvider
@@ -57,5 +122,26 @@ struct AIBackend {
                              credentials: KeychainAICredentialStore(account: id.rawValue),
                              conversations: FileAIConversationStore(url: folder.appendingPathComponent(filename)))
         }
+    }
+}
+
+/// Startup health uses delivered PCM, since an audio engine can run with a
+/// faulted voice-processing unit. Ordinary microphone silence is not an error.
+struct RealtimeCaptureHealth {
+    enum Action: Equatable {
+        case healthy, retryWithoutVoiceProcessing, captureFailed
+    }
+
+    private var receivedBuffer = false
+    private var receivedSignal = false
+
+    mutating func record(hasSignal: Bool) {
+        receivedBuffer = true
+        receivedSignal = receivedSignal || hasSignal
+    }
+
+    func action(usesVoiceProcessing: Bool) -> Action {
+        if usesVoiceProcessing && !receivedSignal { return .retryWithoutVoiceProcessing }
+        return receivedBuffer ? .healthy : .captureFailed
     }
 }

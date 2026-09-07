@@ -45,7 +45,7 @@ struct SoraApp: App {
         .defaultSize(width: 520, height: 360)
 
         Settings {
-            SoraSettingsView()
+            SoraSettingsView(session: ask)
         }
     }
 }

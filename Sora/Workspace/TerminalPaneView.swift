@@ -16,6 +16,8 @@ final class TerminalPaneView: NSView {
     private var isPaneActive = false
     private weak var ask: AskSession?
     private var askObservation: AnyCancellable?
+    private let voiceInput = VoiceInputController()
+    private var dictationObservation: AnyCancellable?
     let tabID: UUID
     /// Publishes the agent thread title for sidebar / chrome labeling.
     var onActivityTitleChange: ((UUID, String?) -> Void)?
@@ -68,6 +70,29 @@ final class TerminalPaneView: NSView {
         stickyBar.onAcceptPrediction = { [weak surface] in
             surface?.acceptStickyPrediction()
         }
+        stickyBar.onToggleDictation = { [weak self] in
+            guard let self else { return }
+            if self.voiceInput.isListening {
+                self.voiceInput.stop()
+            } else {
+                self.voiceInput.toggle()
+            }
+        }
+        voiceInput.onFinished = { [weak surface] transcript in
+            surface?.insertDictatedText(transcript)
+        }
+        dictationObservation = voiceInput.objectWillChange
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                DispatchQueue.main.async { [weak self] in
+                    guard let self else { return }
+                    self.stickyBar.updateDictation(
+                        listening: self.voiceInput.isListening,
+                        transcript: self.voiceInput.transcript,
+                        error: self.voiceInput.errorMessage
+                    )
+                }
+            }
         surface.onContinueAgent = { [weak self] in
             self?.resumeAgentIfAvailable() ?? false
         }
