@@ -1,6 +1,34 @@
 import XCTest
 
 final class WorkspaceModelTests: XCTestCase {
+    func testRenameReorderAndReopenKeepIdentity() {
+        let model = WorkspaceModel(snapshot: .empty)
+        let first = model.selectedID
+        let second = model.addTab(workingDirectory: URL(fileURLWithPath: "/tmp"))
+        model.rename(second, name: "  Build logs  ")
+        model.move(second, by: -1)
+        XCTAssertEqual(model.tabs.first?.id, second)
+        XCTAssertEqual(model.selected.displayTitle, "Build logs")
+        let restored = WorkspaceModel(snapshot: model.snapshot())
+        XCTAssertEqual(restored.selected.displayTitle, "Build logs")
+        XCTAssertTrue(model.closeTab(id: second))
+        XCTAssertEqual(model.selectedID, first)
+        XCTAssertTrue(model.canReopenTab)
+        model.reopenTab()
+        XCTAssertEqual(model.selectedID, second)
+        XCTAssertEqual(model.selected.displayTitle, "Build logs")
+        model.rename(second, name: "")
+        XCTAssertEqual(model.selected.displayTitle, "tmp")
+    }
+
+    func testMovingTabClampsAtEdgesWithoutChangingSelection() {
+        let model = WorkspaceModel(snapshot: .empty)
+        let first = model.selectedID
+        model.move(first, by: -100)
+        XCTAssertEqual(model.selectedID, first)
+        XCTAssertEqual(model.tabs.count, 1)
+    }
+
     func testInitCreatesOneTabFromEmptySnapshot() {
         let model = WorkspaceModel(snapshot: .empty)
         XCTAssertEqual(model.tabs.count, 1)

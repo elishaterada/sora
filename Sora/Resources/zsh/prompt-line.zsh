@@ -30,3 +30,22 @@ _sora_report_line_install() {
     add-zle-hook-widget line-pre-redraw _sora_report_line 2>/dev/null
   fi
 }
+
+# Read as data directly into ZLE, never as input to the command parser.
+_sora_restore_draft() {
+  emulate -L zsh
+  if [[ -n "$_SORA_RESTORE_DRAFT" && -r "$_SORA_RESTORE_DRAFT" && -z "$BUFFER" ]]; then
+    IFS= read -r -d $'\0' BUFFER < "$_SORA_RESTORE_DRAFT"
+    CURSOR=${#BUFFER}
+  fi
+  unset _SORA_RESTORE_DRAFT
+}
+
+_sora_install_draft_restore() {
+  emulate -L zsh
+  autoload -Uz add-zle-hook-widget
+  add-zle-hook-widget line-init _sora_restore_draft
+  precmd_functions=(${precmd_functions:#_sora_install_draft_restore})
+}
+typeset -ag precmd_functions
+precmd_functions+=(_sora_install_draft_restore)

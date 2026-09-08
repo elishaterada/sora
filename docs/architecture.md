@@ -307,3 +307,46 @@ loading remained interactive afterward. Initial bulk layout remains slow and log
 still contain AttributeGraph cycle warnings; this is not a clean responsiveness pass.
 Further work should isolate those warnings and bulk-load latency. All 198 existing
 tests pass, but those unit tests do not certify UI responsiveness.
+
+## Terminal history restoration
+
+Workspace snapshots retain stable tab IDs. Ghostty scrollback with SGR text styling is
+checkpointed every ten seconds and on normal workspace shutdown, capped at
+2 MB per tab, in private Application Support/Sora/TerminalHistory files.
+The zsh bootstrap prints that text once before starting the new prompt; it never
+evaluates archived text. Colors and text styling are restored; running processes are not. Ghostty’s VT export is captured without modifying the clipboard, and non-SGR terminal escape sequences are removed before saving. Older plain-text archives remain readable. A crash
+may lose output since the last checkpoint. Older versions did not save output
+and cannot supply previously lost history.
+
+## Everyday terminal controls
+
+- Cmd-F opens native output search. Ghostty owns matching, highlighting, and
+  match navigation, including restored output. Return/Shift-Return navigate.
+- Cmd-T creates a tab. Tabs can be renamed and moved up/down from their context
+  menus. Cmd-Shift-T reopens up to ten recently closed tabs in the current window.
+  Names and ordering persist; reopening creates a new shell with archived output.
+- Cmd-D creates a two-pane side-by-side view with a draggable divider. Clicking
+  either pane selects its terminal. Cmd-Shift-D returns to one pane without
+  closing the other session. The pair and divider position persist across relaunch. Arbitrary nested splits are not implemented.
+- Tab/window close and application quit ask before terminating a running child
+  process. Background command completions appear as sidebar status text.
+- Shell input is the default destination for Return. Automatic natural-language
+  routing is opt-in under Terminal Settings; explicit /agent remains available.
+- Drafts are saved alongside terminal history (100 KB per tab, private files).
+  The first ZLE line-init hook reads them directly into BUFFER without evaluation.
+  This hook is independent of which syntax highlighter the user has installed.
+
+Cmd-N opens an independent terminal window. Each window has a stable UUID and
+its own tabs, selection, split pair, divider position, and frame in the window
+catalog. Existing single-window snapshots migrate with their tab IDs intact.
+Closing a window removes its restoration record; quitting preserves all open
+windows. Invalid catalog data is backed up before migration recovery. Agent
+sessions remain app-scoped; only the key window binds the active Agent tab to
+avoid competing background windows repeatedly changing shared state.
+Named terminal profiles remain deferred.
+Bell notifications and operating-system notifications are not included in this
+slice; completion badges provide an in-app signal without notification permission.
+
+Prompt cues derive their vertical placement from the native text field baseline.
+The chevron uses the input font cap height, and the caret uses its ascender and
+descender, keeping placeholders, suggestions, and wrapped input aligned.

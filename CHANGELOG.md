@@ -4,6 +4,27 @@ Human-readable highlights for each Sora release live here. Add the newest
 version before creating its `vX.Y.Z` tag; the release workflow requires a
 matching section and publishes it to GitHub.
 
+## 0.1.8 — 2026-09-07
+
+### What’s new
+
+- Restore terminal output, colors, and unfinished input after relaunching.
+- Open independent windows with Command-N and restore their tabs and split layouts.
+- Search terminal output, rename and reorder tabs, reopen closed tabs, and work in two side-by-side panes.
+- See background command completion in the sidebar and receive a warning before closing a running task.
+- Send commands to the shell by default, with optional automatic Agent routing in Settings.
+
+### Fixes
+
+- Show a useful explanation when Agent cannot recover a malformed response.
+- Align the prompt chevron, caret, and placeholder with consistent sizing.
+- Prevent multiple windows from competing over the active Agent conversation.
+
+### Known limitations
+
+- Relaunch restores saved output, not running processes. A crash can lose the latest ten seconds of output.
+- Agent state is shared across windows. Large Agent histories can still load slowly.
+
 ## 0.1.7 — 2026-09-07
 
 ### What’s new

@@ -6,10 +6,21 @@ import GhosttyKit
 /// SwiftUI `StateObject` throwaway inits do not spawn shells.
 final class WorkspaceController: ObservableObject {
     let runtime: GhosttyRuntime
+    let windowID: UUID
+    private let restoredFrame: String?
+    private var hasRestoredFrame = false
+    private var isClosed = false
+    private var startedPersistence = false
     private let model: WorkspaceModel
     private var surfaces: [UUID: GhosttySurfaceView] = [:]
+    private var historyTimer: Timer?
+    private var terminationObserver: NSObjectProtocol?
     private let persist: (WorkspaceSnapshot) -> Void
 
+    var splitFraction: CGFloat = 0.5
+    @Published private(set) var splitPair: [UUID] = []
+    @Published private(set) var attention: [UUID: String] = [:]
+    var canReopenTab: Bool { model.canReopenTab }
     @Published private(set) var tabs: [WorkspaceModel.Tab]
     @Published private(set) var selectedID: UUID
 
@@ -20,16 +31,37 @@ final class WorkspaceController: ObservableObject {
     init(
         runtime: GhosttyRuntime,
         snapshot: WorkspaceSnapshot,
-        persist: @escaping (WorkspaceSnapshot) -> Void = { WorkspaceRestore.save($0) }
+        windowID: UUID = UUID(),
+        persist: ((WorkspaceSnapshot) -> Void)? = nil
     ) {
         self.runtime = runtime
-        self.persist = persist
+        self.windowID = windowID
+        self.restoredFrame = snapshot.windowFrame
+        self.persist = persist ?? { [weak runtime] snapshot in runtime?.windowStore.save(snapshot, for: windowID) }
         self.model = WorkspaceModel(snapshot: snapshot)
         self.tabs = model.tabs
         self.selectedID = model.selectedID
+        if let fraction = snapshot.splitFraction, fraction.isFinite { splitFraction = min(0.8, max(0.2, fraction)) }
+        if let pair = snapshot.splitIDs, pair.count == 2, pair[0] != pair[1], pair.allSatisfy({ id in model.tabs.contains { $0.id == id } }) {
+            self.splitPair = pair
+        }
+    }
+
+    func startPersistence() {
+        guard !startedPersistence else { return }
+        startedPersistence = true
+        self.historyTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
+            self?.refreshWorkingDirectories()
+        }
+        self.terminationObserver = NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.refreshWorkingDirectories()
+        }
+        persist(snapshotForSave())
     }
 
     deinit {
+        historyTimer?.invalidate()
+        if let terminationObserver { NotificationCenter.default.removeObserver(terminationObserver) }
         for view in surfaces.values {
             view.delegate = nil
             view.closeSession()
@@ -44,10 +76,31 @@ final class WorkspaceController: ObservableObject {
             preconditionFailure("unknown tab \(id)")
         }
         let view = GhosttySurfaceView(runtime: runtime, workingDirectory: tab.workingDirectory)
+        view.historyArchiveURL = TerminalHistoryArchive.url(for: id)
+        view.onFocus = { [weak self] in
+            guard let self, self.selectedID != id else { return }
+            self.select(id)
+        }
+        view.onCommandFinished = { [weak self] code in
+            guard let self, id != self.selectedID || !NSApp.isActive else { return }
+            self.attention[id] = code == 0 ? "Finished" : "Exit \(code)"
+        }
+        view.onBell = { [weak self] in self?.attention[id] = "Attention" }
         view.delegate = self
         surfaces[id] = view
         return view
     }
+
+    func splitTerminal() {
+        guard splitPair.isEmpty else { return }
+        let previous = selectedID
+        let next = model.addTab(workingDirectory: surfaces[previous]?.currentWorkingDirectory() ?? model.selected.workingDirectory)
+        splitPair = [previous, next]
+        publishAndPersist()
+    }
+    func endSplit() { splitPair = []; publishAndPersist() }
+
+    func findOutput() { surfaces[selectedID]?.showFind() }
 
     func addTabInheritingCWD() {
         let cwd = surfaces[selectedID]?.currentWorkingDirectory()
@@ -60,9 +113,42 @@ final class WorkspaceController: ObservableObject {
         closeTab(id: selectedID)
     }
 
+    func confirmClose(ids: [UUID]) -> Bool {
+        guard ids.contains(where: { surfaces[$0]?.hasRunningTask == true }) else { return true }
+        let alert = NSAlert()
+        alert.messageText = "Close running terminal tasks?"
+        alert.informativeText = "Closing these sessions will stop their running processes. Output history will be saved."
+        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: "Close Sessions")
+        return alert.runModal() == .alertSecondButtonReturn
+    }
+
+    func renameTab(_ id: UUID) {
+        guard let tab = tabs.first(where: { $0.id == id }) else { return }
+        let alert = NSAlert()
+        alert.messageText = "Rename Tab"
+        alert.informativeText = "Leave the name empty to use the automatic title."
+        let input = NSTextField(string: tab.customName ?? "")
+        input.frame = NSRect(x: 0, y: 0, width: 280, height: 24)
+        alert.accessoryView = input
+        alert.addButton(withTitle: "Save")
+        alert.addButton(withTitle: "Cancel")
+        alert.window.initialFirstResponder = input
+        if alert.runModal() == .alertFirstButtonReturn { model.rename(id, name: input.stringValue); publishAndPersist() }
+    }
+    func moveTab(_ id: UUID, by offset: Int) { model.move(id, by: offset); publishAndPersist() }
+    func reopenTab() { model.reopenTab(); publishAndPersist() }
+
     func closeTab(id: UUID) {
+        if tabs.count == 1 {
+            NSApp.keyWindow?.performClose(nil)
+            return
+        }
+        guard confirmClose(ids: [id]) else { return }
+        saveHistories()
+        if splitPair.contains(id) { splitPair = [] }
         guard model.closeTab(id: id) else {
-            persist(model.snapshot())
+            persist(snapshotForSave())
             NSApp.keyWindow?.performClose(nil)
             return
         }
@@ -71,6 +157,8 @@ final class WorkspaceController: ObservableObject {
     }
 
     func select(_ id: UUID) {
+        if !splitPair.isEmpty && !splitPair.contains(id) { splitPair = [] }
+        attention[id] = nil
         model.select(id)
         publish()
     }
@@ -101,14 +189,30 @@ final class WorkspaceController: ObservableObject {
         return attached.filter { !live.contains($0) }
     }
 
+    private func saveHistories() {
+        for (id, view) in surfaces {
+            do {
+                let draftURL = TerminalHistoryArchive.url(for: id).appendingPathExtension("draft")
+                try FileManager.default.createDirectory(at: draftURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try Data(view.draftText.utf8.prefix(100_000)).write(to: draftURL, options: .atomic)
+                try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: draftURL.path)
+            } catch { NSLog("Could not save terminal draft: %@", error.localizedDescription) }
+            guard let text = view.historyText(), !text.isEmpty else { continue }
+            do { try TerminalHistoryArchive.save(text, for: id) }
+            catch { NSLog("Could not save terminal history: %@", error.localizedDescription) }
+        }
+    }
+
     func refreshWorkingDirectories() {
+        guard !isClosed else { return }
+        saveHistories()
         for tab in model.tabs {
             if let url = surfaces[tab.id]?.currentWorkingDirectory() {
                 model.updateWorkingDirectory(url, id: tab.id)
             }
         }
         tabs = model.tabs
-        persist(model.snapshot())
+        persist(snapshotForSave())
     }
 
     /// Push Settings font size into every live Ghostty surface.
@@ -118,14 +222,43 @@ final class WorkspaceController: ObservableObject {
         }
     }
 
+    func restoreFrameIfNeeded(_ window: NSWindow) {
+        guard !hasRestoredFrame else { return }
+        hasRestoredFrame = true
+        guard let restoredFrame else { return }
+        let frame = NSRectFromString(restoredFrame)
+        guard frame.width >= 640, frame.height >= 400,
+              frame.origin.x.isFinite, frame.origin.y.isFinite, frame.width.isFinite, frame.height.isFinite,
+              NSScreen.screens.contains(where: { $0.visibleFrame.intersects(frame) }) else { return }
+        window.setFrame(frame, display: true)
+    }
+
+    func windowWillClose() {
+        refreshWorkingDirectories()
+        isClosed = true
+        historyTimer?.invalidate()
+        runtime.windowStore.close(windowID)
+    }
+
+    private func snapshotForSave() -> WorkspaceSnapshot {
+        var snapshot = model.snapshot()
+        snapshot.splitIDs = splitPair.isEmpty ? nil : splitPair
+        snapshot.splitFraction = Double(splitFraction)
+        snapshot.windowFrame = surfaces.values.compactMap { $0.window }.first.map { NSStringFromRect($0.frame) } ?? restoredFrame
+        return snapshot
+    }
+
     private func publishAndPersist() {
+        guard !isClosed else { return }
         publish()
-        persist(model.snapshot())
+        persist(snapshotForSave())
     }
 
     private func publish() {
         tabs = model.tabs
         selectedID = model.selectedID
+        attention[selectedID] = nil
+        if !splitPair.isEmpty && !splitPair.contains(selectedID) { splitPair = [] }
         let title = model.selected.displayTitle
         runtime.applyTitle(title)
         surfaces[selectedID]?.window?.title = title
@@ -167,12 +300,16 @@ extension WorkspaceController: GhosttySurfaceDelegate {
         switch mode {
         case GHOSTTY_ACTION_CLOSE_TAB_MODE_OTHER:
             let removed = model.tabs.map(\.id).filter { $0 != id }
+            guard confirmClose(ids: removed) else { return }
+            saveHistories()
             model.closeOtherTabs(keeping: id)
             removed.forEach(retireSurface(id:))
             publishAndPersist()
         case GHOSTTY_ACTION_CLOSE_TAB_MODE_RIGHT:
             guard let index = model.tabs.firstIndex(where: { $0.id == id }) else { return }
             let removed = Array(model.tabs.suffix(from: index + 1).map(\.id))
+            guard confirmClose(ids: removed) else { return }
+            saveHistories()
             model.closeTabsToTheRight(of: id)
             removed.forEach(retireSurface(id:))
             publishAndPersist()

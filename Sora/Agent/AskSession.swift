@@ -456,7 +456,7 @@ final class AskSession: ObservableObject {
                     try Task.checkCancellation()
                     guard self?.generation == token else { return }
                     var currentRequest = request
-                    for attempt in 0...2 {
+                    for attempt in 0...3 {
                         var completed = false
                         for try await event in provider.events(for: currentRequest, credential: key) {
                             try Task.checkCancellation()
@@ -474,12 +474,14 @@ final class AskSession: ObservableObject {
                               let index = self.messages.firstIndex(where: { $0.id == response.id }) else { return }
                         let text = self.messages[index].text
                         guard !text.isEmpty else { throw AIError.responseFailed }
-                        guard AgentEnvelope.needsRepair(text), attempt < 2 else { break }
+                        guard AgentEnvelope.needsRepair(text), attempt < 3 else { break }
                         // Nothing is executed during repair. Include the rejected answer
                         // and concrete feedback so the model can correct it, not guess again.
                         var repairedContext = request.messages
                         let usedBytes = try repairedContext.reduce(0, { $0 + (try $1.contentForProvider()).utf8.count })
-                        let feedback = AgentEnvelope.repairFeedback(for: text, attempt: attempt + 1)
+                        let feedback = attempt == 2
+                            ? AgentEnvelope.explanationFallback + "\n" + AgentEnvelope.validationReasons(for: text).joined(separator: "\n")
+                            : AgentEnvelope.repairFeedback(for: text, attempt: attempt + 1)
                         let remaining = max(0, 100_000 - usedBytes - feedback.utf8.count - 100)
                         let excerpt = String(decoding: Array(text.utf8.prefix(min(12_000, remaining))), as: UTF8.self)
                         if !excerpt.isEmpty {
@@ -644,9 +646,9 @@ final class AskSession: ObservableObject {
                         ?? AgentWebpageProposalParser.proseBeforeEnvelope(in: text)
                         ?? AgentEnvelope.proseBeforeEnvelope(in: text, opening: AgentProgramProposal.openingTag)
                         ?? ""
-                    messages[index].text = prose
+                    messages[index].text = [prose, "Sora rejected the assistant’s action: " + AgentEnvelope.validationReasons(for: text).joined(separator: " ")].filter { !$0.isEmpty }.joined(separator: "\n\n")
                     messages[index].status = .failed
-                    envelopeError = "The assistant could not produce a valid action after two automatic retries. Nothing was run. Try rephrasing your request."
+                    envelopeError = "The assistant’s action format was invalid after two repair attempts and a final explanation request. No action was run. See the validation details above."
                 }
             }
         }

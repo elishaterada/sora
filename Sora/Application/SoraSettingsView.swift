@@ -48,9 +48,14 @@ private struct SettingsPage<Content: View>: View {
 }
 
 private struct TerminalSettingsView: View {
+    @AppStorage("terminal.automaticAgentRouting") private var automaticAgentRouting = false
     @State private var fontSize = TerminalPreferences.fontSize
     var body: some View {
         SettingsPage(title: "Terminal") {
+            Section("Input") {
+                Toggle("Automatically send natural-language input to Agent", isOn: $automaticAgentRouting)
+                Text("When off, Return runs shell input. Use /agent or ⌘⇧A to ask Agent.").font(.caption).foregroundStyle(.secondary)
+            }
             Section("Text") {
                 HStack {
                     Text("Font size")

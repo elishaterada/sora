@@ -22,6 +22,14 @@ enum AgentEnvelope {
     """
 
     static func repairFeedback(for text: String, attempt: Int) -> String {
+        var reasons = validationReasons(for: text)
+        if attempt > 1 {
+            reasons.append("Repair failed again. Change approach: propose one short prerequisite or inspection command instead of regenerating the same complex action. Keep working toward the user's goal. If genuinely blocked, explain the specific blocker in plain text without action tags.")
+        }
+        return repairInstruction + "\n\nValidation feedback:\n" + reasons.joined(separator: "\n")
+    }
+
+    static func validationReasons(for text: String) -> [String] {
         var reasons: [String] = []
         let tags = ["COMMAND", "WEBPAGE", "PROGRAM"]
         if text.components(separatedBy: "<SORA_").count > 2 {
@@ -46,11 +54,16 @@ enum AgentEnvelope {
         if reasons.isEmpty {
             reasons.append("Invalid JSON, unsupported action tag, or invalid required fields. Use exactly the documented schema and limits; do not introduce a new action type.")
         }
-        if attempt > 1 {
-            reasons.append("Repair failed again. Change approach: propose one short prerequisite or inspection command instead of regenerating the same complex action. Keep working toward the user's goal. If genuinely blocked, explain the specific blocker in plain text without action tags.")
-        }
-        return repairInstruction + "\n\nValidation feedback:\n" + reasons.joined(separator: "\n")
+        return reasons
     }
+
+    static let explanationFallback = """
+    Action repair has failed twice. No action was executed. Do not emit any SORA
+    tags or propose an executable action in this response. Explain in plain
+    language that Sora rejected the action format, describe the validation
+    problem below, and give a concrete next step for the original task. Do not
+    claim the task succeeded or ask the user to rephrase an already clear goal.
+    """
 
     static func needsRepair(_ text: String) -> Bool {
         guard text.contains("<SORA_") || text.contains("</SORA_") else { return false }

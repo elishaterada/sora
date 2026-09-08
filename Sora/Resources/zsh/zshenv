@@ -1,3 +1,11 @@
+# Restore display text once. Never evaluate it or pass it to the shell parser.
+if [[ -o interactive && -n "${SORA_RESTORE_HISTORY}" && -r "${SORA_RESTORE_HISTORY}" ]]; then
+  /bin/cat -- "$SORA_RESTORE_HISTORY"
+  builtin print -r -- $'\n── Previous session ended · New shell ──'
+fi
+typeset -g _SORA_RESTORE_DRAFT="${SORA_RESTORE_HISTORY}.draft"
+unset SORA_RESTORE_HISTORY
+
 # Sora interactive bootstrap. ZDOTDIR points here so this file runs first.
 # Source Ghostty's integration (do not copy it), then replace the stock macOS
 # prompt with an empty one so only the blinking bar cursor marks input.

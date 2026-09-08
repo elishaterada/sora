@@ -2,6 +2,7 @@ import SwiftUI
 
 @main
 struct SoraApp: App {
+    @NSApplicationDelegateAdaptor(TerminalAppDelegate.self) private var appDelegate
     @StateObject private var runtime: GhosttyRuntime
     @StateObject private var ask = AskSession(backends: AIBackend.live())
     private let updates = UpdateController()
@@ -21,11 +22,11 @@ struct SoraApp: App {
     }
 
     var body: some Scene {
-        WindowGroup {
-            ContentView(runtime: runtime, ask: ask)
+        WindowGroup("Sora", id: "terminal", for: UUID.self) { $windowID in
+            ContentView(runtime: runtime, ask: ask, windowID: windowID ?? runtime.initialWindowID)
                 .task { updates.checkAtLaunch() }
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in ask.stop() }
-        }
+        } defaultValue: { runtime.initialWindowID }
         .defaultSize(width: 980, height: 620)
         .windowResizability(.contentMinSize)
         .commands {
@@ -83,5 +84,27 @@ private struct AskCommands: Commands {
                 .keyboardShortcut("a", modifiers: [.command, .shift])
                 .disabled(inlineAskAction == nil)
         }
+    }
+}
+
+
+private final class TerminalAppDelegate: NSObject, NSApplicationDelegate {
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        func busy(_ view: NSView) -> Bool {
+            if let terminal = view as? GhosttySurfaceView, terminal.hasRunningTask { return true }
+            return view.subviews.contains(where: busy)
+        }
+        guard sender.windows.contains(where: { $0.contentView.map(busy) ?? false }) else {
+            NotificationCenter.default.post(name: WorkspaceWindowStore.terminationApproved, object: nil)
+            return .terminateNow
+        }
+        let alert = NSAlert()
+        alert.messageText = "Quit with running terminal tasks?"
+        alert.informativeText = "Quitting will stop their processes. Your output history will be saved."
+        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: "Quit Sora")
+        guard alert.runModal() == .alertSecondButtonReturn else { return .terminateCancel }
+        NotificationCenter.default.post(name: WorkspaceWindowStore.terminationApproved, object: nil)
+        return .terminateNow
     }
 }

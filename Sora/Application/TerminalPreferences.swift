@@ -2,6 +2,10 @@ import Foundation
 
 /// User preferences that affect terminal and agent chrome.
 enum TerminalPreferences {
+    static var automaticAgentRouting: Bool {
+        get { UserDefaults.standard.bool(forKey: "terminal.automaticAgentRouting") }
+        set { UserDefaults.standard.set(newValue, forKey: "terminal.automaticAgentRouting") }
+    }
     static let fontSizeKey = "terminal.fontSize"
     static let defaultFontSize: CGFloat = 18
     static let minimumFontSize: CGFloat = 12

@@ -404,3 +404,17 @@ and creating a backup for existing catalogs on load. A corrupt or missing catalo
 is surfaced as an error instead of being replaced with an empty catalog. Use
 **Restore catalog backup** to recover. Restoration preserves the replaced catalog
 as a separate file. These are local backups; they do not protect against disk loss.
+
+### Exhausted action repair
+
+After two rejected action repairs, Agent requests a plain-language explanation
+instead of ending with an empty answer. If that response also contains an
+invalid action, the transcript preserves validation reasons across restarts.
+Rejected action payloads are not stored as diagnostics. The original PDF
+request's precise payload could not be recovered from the older empty transcript.
+
+### Explicit terminal routing by default
+
+Return now stays in the shell unless input begins with /agent. Users can enable
+automatic natural-language routing in Terminal Settings. The displayed route
+and submission logic share the same preference; Cmd-Return still forces shell.

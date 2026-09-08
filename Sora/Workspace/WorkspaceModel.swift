@@ -5,6 +5,7 @@ final class WorkspaceModel {
     struct Tab: Identifiable, Equatable {
         let id: UUID
         /// Shell OSC / Ghostty title (often the last command).
+        var customName: String? = nil
         var title: String
         /// Agent thread label from the first user question; wins over shell title.
         var activityTitle: String?
@@ -16,6 +17,7 @@ final class WorkspaceModel {
 
         /// Prefer agent task → recent shell title → folder name.
         var displayTitle: String {
+            if let customName, !customName.isEmpty { return customName }
             if let activityTitle, !activityTitle.isEmpty {
                 return activityTitle
             }
@@ -41,6 +43,8 @@ final class WorkspaceModel {
     static let gotoNext: Int32 = -2
     static let gotoLast: Int32 = -3
 
+    private var closedTabs: [Tab] = []
+    var canReopenTab: Bool { !closedTabs.isEmpty }
     private(set) var tabs: [Tab]
     private(set) var selectedID: UUID
 
@@ -53,11 +57,11 @@ final class WorkspaceModel {
     }
 
     init(snapshot: WorkspaceSnapshot) {
-        tabs = snapshot.directories.map { path in
+        tabs = snapshot.directories.enumerated().map { index, path in
             let url = path.isEmpty ? nil : URL(fileURLWithPath: path)
-            return Tab(id: UUID(), title: "Tab", activityTitle: nil, workingDirectory: url)
+            return Tab(id: snapshot.sessionIDs.flatMap { index < $0.count ? $0[index] : nil } ?? UUID(), customName: snapshot.tabNames.flatMap { index < $0.count ? $0[index] : nil }, title: "Tab", activityTitle: nil, workingDirectory: url)
         }
-        selectedID = tabs[snapshot.selectedIndex].id
+        selectedID = tabs[min(max(0, snapshot.selectedIndex), tabs.count - 1)].id
     }
 
     @discardableResult
@@ -79,11 +83,31 @@ final class WorkspaceModel {
         guard tabs.count > 1 else { return false }
         guard let index = tabs.firstIndex(where: { $0.id == id }) else { return true }
         let wasSelected = tabs[index].id == selectedID
+        closedTabs.append(tabs[index])
+        if closedTabs.count > 10 { closedTabs.removeFirst() }
         tabs.remove(at: index)
         if wasSelected {
             selectedID = tabs[min(index, tabs.count - 1)].id
         }
         return true
+    }
+
+    func rename(_ id: UUID, name: String) {
+        guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
+        tabs[index].customName = String(name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(80))
+    }
+
+    func move(_ id: UUID, by offset: Int) {
+        guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
+        let destination = min(tabs.count - 1, max(0, index + offset))
+        let tab = tabs.remove(at: index)
+        tabs.insert(tab, at: destination)
+    }
+
+    func reopenTab() {
+        guard let tab = closedTabs.popLast() else { return }
+        tabs.insert(tab, at: selectedIndex + 1)
+        selectedID = tab.id
     }
 
     func select(_ id: UUID) {
@@ -159,7 +183,9 @@ final class WorkspaceModel {
     func snapshot() -> WorkspaceSnapshot {
         WorkspaceSnapshot(
             directories: tabs.map { $0.workingDirectory?.path ?? "" },
-            selectedIndex: selectedIndex
+            selectedIndex: selectedIndex,
+            sessionIDs: tabs.map(\.id),
+            tabNames: tabs.map { $0.customName ?? "" }
         )
     }
 }
