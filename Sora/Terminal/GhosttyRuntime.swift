@@ -28,6 +28,7 @@ final class GhosttyRuntime: ObservableObject {
     @Published private(set) var windowTitle = "Sora"
 
     weak var activeSurface: GhosttySurfaceView?
+    let notifications = TerminalNotificationController()
     let history: CommandHistoryStore
 
     private(set) var app: ghostty_app_t!
@@ -233,6 +234,22 @@ final class GhosttyRuntime: ObservableObject {
                 DispatchQueue.main.async {
                     view?.applyTitle(title)
                 }
+            }
+            return true
+        case GHOSTTY_ACTION_DESKTOP_NOTIFICATION:
+            // Copy C strings before the callback returns and Ghostty releases them.
+            let payload = action.action.desktop_notification
+            let title = payload.title.map { String(cString: $0) } ?? ""
+            let body = payload.body.map { String(cString: $0) } ?? ""
+            DispatchQueue.main.async { [weak view] in
+                guard let view else { return }
+                view.runtime.notifications.post(title: title, body: body, from: view)
+            }
+            return true
+        case GHOSTTY_ACTION_RING_BELL:
+            DispatchQueue.main.async { [weak view] in
+                guard let view else { return }
+                view.runtime.notifications.post(title: "Terminal needs attention", body: view.lastShellTitle, from: view)
             }
             return true
         case GHOSTTY_ACTION_START_SEARCH:

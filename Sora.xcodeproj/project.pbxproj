@@ -7,11 +7,15 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+ NT0000000000000000000001 = {isa = PBXBuildFile; fileRef = NT0000000000000000000002; };
 		UP0000000000000000000001 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = UP0000000000000000000005 /* Sparkle */; };
 		UP0000000000000000000006 /* UpdateController.swift in Sources */ = {isa = PBXBuildFile; fileRef = UP0000000000000000000008 /* UpdateController.swift */; };
 		UP0000000000000000000007 /* UpdateCheckPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = UP0000000000000000000009 /* UpdateCheckPolicy.swift */; };
+		NT0000000000000000000003 /* TerminalNotificationPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = NT0000000000000000000004 /* TerminalNotificationPolicy.swift */; };
 		UP000000000000000000000A /* UpdateCheckPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = UP0000000000000000000009 /* UpdateCheckPolicy.swift */; };
+		NT0000000000000000000005 /* TerminalNotificationPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = NT0000000000000000000004 /* TerminalNotificationPolicy.swift */; };
 		UP000000000000000000000B /* UpdateCheckPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = UP000000000000000000000C /* UpdateCheckPolicyTests.swift */; };
+		NT0000000000000000000006 /* TerminalNotificationPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = NT0000000000000000000007 /* TerminalNotificationPolicyTests.swift */; };
         FA0000000000000000000001 = {isa = PBXBuildFile; fileRef = FA0000000000000000000000; };
         FA0000000000000000000002 = {isa = PBXBuildFile; fileRef = FA0000000000000000000000; };
         FB0000000000000000000001 = {isa = PBXBuildFile; fileRef = FB0000000000000000000000 /* AgentResumeStrip.swift */; };
@@ -168,9 +172,12 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+ NT0000000000000000000002 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalNotificationController.swift; sourceTree = "<group>"; };
 		UP0000000000000000000008 /* UpdateController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateController.swift; sourceTree = "<group>"; };
 		UP0000000000000000000009 /* UpdateCheckPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateCheckPolicy.swift; sourceTree = "<group>"; };
+		NT0000000000000000000004 /* TerminalNotificationPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../Terminal/TerminalNotificationPolicy.swift; sourceTree = "<group>"; };
 		UP000000000000000000000C /* UpdateCheckPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateCheckPolicyTests.swift; sourceTree = "<group>"; };
+		NT0000000000000000000007 /* TerminalNotificationPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalNotificationPolicyTests.swift; sourceTree = "<group>"; };
 		UP000000000000000000000D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
         FA0000000000000000000000 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentCommandRunner.swift; sourceTree = "<group>"; };
         FB0000000000000000000000 /* AgentResumeStrip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentResumeStrip.swift; sourceTree = "<group>"; };
@@ -368,6 +375,7 @@
 				AA0000000000000000000101 /* SoraApp.swift */,
 				UP0000000000000000000008 /* UpdateController.swift */,
 				UP0000000000000000000009 /* UpdateCheckPolicy.swift */,
+				NT0000000000000000000004 /* TerminalNotificationPolicy.swift */,
 				AA0000000000000000000102 /* ContentView.swift */,
 				AA0000000000000000000105 /* SoraTheme.swift */,
 				AA00000000000000000001D1 /* TerminalPreferences.swift */,
@@ -394,6 +402,7 @@
 			isa = PBXGroup;
 			children = (
 				AA0000000000000000000103 /* GhosttyRuntime.swift */,
+ NT0000000000000000000002,
 				AA0000000000000000000104 /* GhosttySurfaceView.swift */,
 				AA0000000000000000000106 /* GhosttyInput.swift */,
 				AA0000000000000000000116 /* GhosttyInputKit.swift */,
@@ -470,6 +479,7 @@
 			isa = PBXGroup;
 			children = (
 				UP000000000000000000000C /* UpdateCheckPolicyTests.swift */,
+				NT0000000000000000000007 /* TerminalNotificationPolicyTests.swift */,
 				CC000000000000000000006A /* AITests.swift */,
 				MD0000000000000000000021 /* CommandBlocksTests.swift */,
 				MD0000000000000000000011 /* AgentMarkdownTests.swift */,
@@ -606,6 +616,7 @@
 			files = (
 				UP0000000000000000000006 /* UpdateController.swift in Sources */,
 				UP0000000000000000000007 /* UpdateCheckPolicy.swift in Sources */,
+				NT0000000000000000000003 /* TerminalNotificationPolicy.swift in Sources */,
 				DD00000000000000000000C8 /* AIBackend.swift in Sources */,
 				DD00000000000000000000C9 /* HTTPAIProvider.swift in Sources */,
 				FA0150000000000000000001 /* ProviderAPIError.swift in Sources */,
@@ -639,6 +650,7 @@
 				AA00000000000000000000A1 /* HushLogin.swift in Sources */,
 				AA00000000000000000000A2 /* SoraZshBootstrap.swift in Sources */,
 				AA0000000000000000000003 /* GhosttyRuntime.swift in Sources */,
+ NT0000000000000000000001,
 				AA0000000000000000000004 /* GhosttySurfaceView.swift in Sources */,
 				AA0000000000000000000006 /* GhosttyInput.swift in Sources */,
 				AA0000000000000000000016 /* GhosttyInputKit.swift in Sources */,
@@ -678,7 +690,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				UP000000000000000000000A /* UpdateCheckPolicy.swift in Sources */,
+				NT0000000000000000000005 /* TerminalNotificationPolicy.swift in Sources */,
 				UP000000000000000000000B /* UpdateCheckPolicyTests.swift in Sources */,
+				NT0000000000000000000006 /* TerminalNotificationPolicyTests.swift in Sources */,
 				DD000000000000000000012C /* AIBackend.swift in Sources */,
 				DD000000000000000000012D /* HTTPAIProvider.swift in Sources */,
 				FA0150000000000000000002 /* ProviderAPIError.swift in Sources */,

@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UserNotifications
 
 struct SoraSettingsView: View {
     enum Page: String, CaseIterable, Identifiable {
@@ -56,6 +57,7 @@ private struct TerminalSettingsView: View {
                 Toggle("Automatically send natural-language input to Agent", isOn: $automaticAgentRouting)
                 Text("When off, Return runs shell input. Use /agent or ⌘⇧A to ask Agent.").font(.caption).foregroundStyle(.secondary)
             }
+            TerminalNotificationSettingsSection()
             Section("Text") {
                 HStack {
                     Text("Font size")
@@ -72,6 +74,66 @@ private struct TerminalSettingsView: View {
             }
         }
         .onAppear { fontSize = TerminalPreferences.fontSize }
+    }
+}
+
+private struct TerminalNotificationSettingsSection: View {
+    @AppStorage(TerminalPreferences.notificationsEnabledKey) private var enabled = true
+    @State private var status = "Checking…"
+    @State private var canRequestPermission = false
+    @State private var requesting = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        Section("Notifications") {
+            Toggle("Notify when background terminals need attention", isOn: $enabled)
+            Text("CLI agents and other terminal programs can request alerts. The focused terminal stays quiet. Tab attention badges remain available when alerts are off.")
+                .font(.caption).foregroundStyle(.secondary)
+            LabeledContent("macOS permission", value: status)
+            HStack {
+                if canRequestPermission {
+                    Button("Allow Notifications…") {
+                        requesting = true
+                        errorMessage = nil
+                        Task { @MainActor in
+                            do {
+                                _ = try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound])
+                            } catch {
+                                errorMessage = error.localizedDescription
+                            }
+                            requesting = false
+                            await refreshStatus()
+                        }
+                    }
+                    .disabled(!enabled || requesting)
+                }
+                Button("Open Notification Settings") {
+                    if let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension"),
+                       !NSWorkspace.shared.open(url) {
+                        errorMessage = "Open System Settings → Notifications → Sora to change notification permissions."
+                    }
+                }
+            }
+            if let errorMessage { Text(errorMessage).foregroundStyle(SoraTheme.danger) }
+        }
+        .task { await refreshStatus() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            Task { await refreshStatus() }
+        }
+    }
+
+    @MainActor private func refreshStatus() async {
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        canRequestPermission = settings.authorizationStatus == .notDetermined
+        switch settings.authorizationStatus {
+        case .notDetermined: status = "Not requested"
+        case .denied: status = "Denied — enable in System Settings"
+        case .authorized:
+            status = settings.alertSetting == .enabled ? "Allowed" : "Allowed — banners are off"
+        case .provisional: status = "Quiet delivery only"
+        case .ephemeral: status = "Temporarily allowed"
+        @unknown default: status = "Unknown"
+        }
     }
 }
 

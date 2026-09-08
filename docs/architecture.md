@@ -353,8 +353,19 @@ Agent conversation snapshots are stored under AgentWindows/<window UUID> to
 avoid cross-window overwrites. Tab conversations are still only restored within
 the current app run; these snapshots are not yet a persistent conversation browser.
 Named terminal profiles remain deferred.
-Bell notifications and operating-system notifications are not included in this
-slice; completion badges provide an in-app signal without notification permission.
+Terminal OSC 9 / OSC 777 desktop requests and BEL signals now feed native macOS
+notifications through `TerminalNotificationController`, independently of Agent.
+Signals also set the existing tab attention badge. The focused terminal stays
+quiet; background tabs/windows can notify even while Sora is active. Delivery is
+limited to once per surface per five seconds. Permission is requested on the
+first eligible signal, with failures logged and denied permission leaving badges
+available. Clicking a notification selects its live originating tab/window;
+closed sessions are not restored. No terminal output is scraped for notifications.
+macOS notification settings control banners and sounds. Terminal Settings adds a
+persisted, default-on alert toggle, live macOS permission status refreshed on
+activation, an explicit permission request, and a System Settings shortcut.
+Disabling alerts prevents authorization prompts and native delivery while
+retaining tab badges; queued authorization callbacks recheck the preference.
 
 Prompt cues derive their vertical placement from the native text field baseline.
 The chevron uses the input font cap height, and the caret uses its ascender and

@@ -41,6 +41,8 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     private var promptIntent: PromptIntent?
     var onFocus: (() -> Void)?
     var onCommandFinished: ((Int16) -> Void)?
+    let notificationID = UUID()
+    var onNotificationActivate: (() -> Void)?
     var onBell: (() -> Void)?
     var draftText: String { isShellPromptReady ? promptLineForSubmission() : "" }
     var onAgentPrompt: ((String) -> Void)?
