@@ -4,6 +4,29 @@ Human-readable highlights for each Sora release live here. Add the newest
 version before creating its `vX.Y.Z` tag; the release workflow requires a
 matching section and publishes it to GitHub.
 
+## 0.1.7 — 2026-09-07
+
+### What’s new
+
+- Save reusable Agent workflows as local programs and run them again without
+  using AI tokens.
+- Find saved programs with @mentions, pass new URLs or other inputs, and
+  choose a working folder for each run.
+- Keep saved programs in a persistent catalog with backup recovery.
+
+### Fixes
+
+- Give Agent more specific feedback when an action is malformed so automatic
+  retries can correct the problem.
+- Reduce rendering work in long Agent conversations and inactive panes.
+  Replies display plain text while streaming and format when complete.
+
+### Known limitations
+
+- Large conversation histories can still load slowly. Automatic scrolling
+  is currently disabled; scroll down to see new replies.
+- Saved programs currently stop after 60 seconds.
+
 ## 0.1.6 — 2026-09-07
 
 ### Fixes
