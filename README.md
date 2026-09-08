@@ -64,6 +64,28 @@ xattr -cr /Applications/Sora.app
 Version 0.1.3 and newer can install subsequent signed updates from inside the
 app. The first Sparkle-capable version must be installed manually.
 
+## Terminal notifications
+
+Background terminal sessions can send native macOS alerts using OSC 9, OSC 777,
+or a terminal bell (BEL), including CLI agents that emit these signals. Sora
+asks for notification permission on the first background alert. Allow it to see
+banners and hear sounds. **Sora Settings → Terminal → Notifications** lets you
+turn alerts off, check permission, and open macOS notification settings. Tab
+attention badges remain available with alerts off. You can change permission in **System Settings → Notifications
+→ Sora**. Clicking an alert returns to its originating tab while that tab is open.
+The focused terminal stays quiet, and repeated alerts are limited to one per tab
+per five seconds. This works with Sora's optional Agent disabled.
+
+To check delivery, run this in Sora and switch to another tab before it finishes:
+
+```sh
+sleep 3; printf '\033]9;Agent finished its work\007'
+```
+
+A CLI must have its own notifications enabled and emit a supported signal;
+Sora does not infer completion by reading its output. Terminal bells carry no
+completion text, so their alerts say “Terminal needs attention.”
+
 ## Using Agent
 
 Agent is optional and disabled until you configure it.

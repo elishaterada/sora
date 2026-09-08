@@ -6,6 +6,11 @@ enum TerminalPreferences {
         get { UserDefaults.standard.bool(forKey: "terminal.automaticAgentRouting") }
         set { UserDefaults.standard.set(newValue, forKey: "terminal.automaticAgentRouting") }
     }
+    static let notificationsEnabledKey = "terminal.notificationsEnabled"
+    static var notificationsEnabled: Bool {
+        UserDefaults.standard.object(forKey: notificationsEnabledKey) as? Bool ?? true
+    }
+
     static let fontSizeKey = "terminal.fontSize"
     static let defaultFontSize: CGFloat = 18
     static let minimumFontSize: CGFloat = 12

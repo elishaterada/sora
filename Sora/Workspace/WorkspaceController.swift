@@ -88,6 +88,12 @@ final class WorkspaceController: ObservableObject {
             guard let self, id != self.selectedID || !NSApp.isActive else { return }
             self.attention[id] = code == 0 ? "Finished" : "Exit \(code)"
         }
+        view.onNotificationActivate = { [weak self] in
+            guard let self else { return }
+            let window = self.surfaces.values.compactMap { $0.window }.first
+            self.select(id)
+            window?.makeKeyAndOrderFront(nil)
+        }
         view.onBell = { [weak self] in self?.attention[id] = "Attention" }
         view.delegate = self
         surfaces[id] = view
