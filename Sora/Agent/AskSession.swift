@@ -4,6 +4,83 @@ import Foundation
 @MainActor
 final class AskSession: ObservableObject {
     @Published var draft = ""
+    @Published private(set) var programs: [AgentProgram] = []
+    @Published private(set) var programError: String?
+    private var programStore: AgentProgramStore
+
+    func reloadPrograms(store: AgentProgramStore? = nil) {
+        if let store { programStore = store }
+        do { programs = try programStore.load(); programError = nil }
+        catch { programError = error.localizedDescription }
+    }
+
+    func restoreProgramsBackup() {
+        guard !isSending, !isRunningCommand else { return }
+        do { programs = try programStore.restoreBackup(); programError = nil }
+        catch { programError = "Backup could not be restored: " + error.localizedDescription }
+    }
+
+    func removeProgram(_ id: UUID) {
+        guard !isSending, !isRunningCommand, programError == nil else { return }
+        do {
+            let updated = programs.filter { $0.id != id }
+            try programStore.save(updated)
+            programs = updated
+        } catch { programError = error.localizedDescription }
+    }
+
+    func saveProgram(messageID: UUID) {
+        guard !isSending, !isRunningCommand, programError == nil,
+              let index = messages.firstIndex(where: { $0.id == messageID }),
+              let proposal = messages[index].programProposal, proposal.status == .pending,
+              proposal.action == .save, let name = proposal.name, let summary = proposal.summary,
+              let script = proposal.script, let directory = messages[index].commandDirectory,
+              AgentProgram.valid(name: name, summary: summary, script: script) else { return }
+        do {
+            let program = AgentProgram(name: name, summary: summary, script: script, directory: directory)
+            let updated = programs + [program]
+            try programStore.save(updated)
+            programs = updated
+            messages[index].programProposal?.status = .approved
+            messages[index].text += "\n\nSaved to Programs: " + name
+            persist()
+        } catch { errorMessage = "Program could not be saved: " + error.localizedDescription }
+    }
+
+    func dismissProgram(messageID: UUID) {
+        guard let index = messages.firstIndex(where: { $0.id == messageID }),
+              messages[index].programProposal?.status == .pending else { return }
+        messages[index].programProposal?.status = .dismissed
+        persist()
+    }
+
+    func requestReusableProgram() {
+        guard !isSending, !isRunningCommand else { return }
+        draft = "Turn the successful workflow we refined in this conversation into a reusable program. Preserve the final requirements and successful steps, explain prerequisites and side effects, and offer it for saving to Programs."
+        send()
+    }
+
+    /// Explicit user action. Runs locally and never starts an AI follow-up.
+    func runProgram(_ id: UUID, arguments: [String] = [], workingDirectory: String? = nil, proposalMessageID: UUID? = nil) {
+        guard !isSending, !isRunningCommand, programError == nil,
+              var program = programs.first(where: { $0.id == id }) else { return }
+        if let workingDirectory { program.directory = workingDirectory }
+        do {
+            let command = try programStore.command(for: program, arguments: arguments)
+            let message = AIMessage(role: .assistant, text: "Run program: " + program.name,
+                commandProposal: AgentCommandProposal(summary: program.summary, command: command),
+                commandDirectory: program.directory)
+            if let proposalMessageID,
+               let index = messages.firstIndex(where: { $0.id == proposalMessageID }) {
+                guard messages[index].programProposal?.status == .pending else { return }
+                messages[index].programProposal?.status = .approved
+            }
+            messages.append(message)
+            commandCount = 0
+            runCommand(messageID: message.id, continueWithAgent: false)
+        } catch { errorMessage = "Program could not run: " + error.localizedDescription }
+    }
+
     @Published private(set) var webpage: WebpageAttachment?
     @Published private(set) var selectedProvider: AIBackendID
     @Published var model: String {
@@ -140,17 +217,20 @@ final class AskSession: ObservableObject {
 
     convenience init(provider: any AIProvider, credentials: any AICredentialStore,
                      conversations: any AIConversationStore, defaults: UserDefaults = .standard,
+                     programStore: AgentProgramStore = .standard,
                      webpageFetcher: any WebpageFetching = WebpageFetcher()) {
         self.init(backends: [AIBackend(id: .openai, provider: provider, credentials: credentials,
-                                     conversations: conversations)], defaults: defaults,
+                                     conversations: conversations)], defaults: defaults, programStore: programStore,
                   webpageFetcher: webpageFetcher)
     }
 
     init(backends: [AIBackend], defaults: UserDefaults = .standard,
+         programStore: AgentProgramStore = .standard,
          webpageFetcher: any WebpageFetching = WebpageFetcher()) {
         precondition(!backends.isEmpty)
         self.backends = Dictionary(uniqueKeysWithValues: backends.map { ($0.id, $0) })
         self.defaults = defaults
+        self.programStore = programStore
         self.webpageFetcher = webpageFetcher
         let saved = AIBackendID(rawValue: defaults.string(forKey: "ai.provider") ?? "openai")
         let selected = backends.first(where: { $0.id == saved })?.id ?? backends[0].id
@@ -161,6 +241,7 @@ final class AskSession: ObservableObject {
         self.model = defaults.string(forKey: "ai.model.\(selected.rawValue)") ?? legacy ?? selected.defaultModel
         self.realtimeVoiceModel = defaults.string(forKey: "ai.voice.realtimeModel")
             ?? RealtimeVoiceModel.recommended
+        reloadPrograms()
     }
 
     func selectProvider(_ id: AIBackendID) {
@@ -307,6 +388,9 @@ final class AskSession: ObservableObject {
     }
 
     private func send(continuation: String?) {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--sora-transcript-stress-test") { return }
+        #endif
         load()
         guard !isSending, !isRunningCommand, !isUpdatingKey else { return }
         guard enabled else { errorMessage = AIError.disabled.localizedDescription; return }
@@ -326,6 +410,17 @@ final class AskSession: ObservableObject {
             }
             let user = AIMessage(role: .user, text: question, webpage: continuation == nil ? webpage : nil, isAgentContinuation: continuation != nil)
             context.append(user)
+            let mentioned = ProgramMention.resolve(question, programs: programs)
+            if !mentioned.isEmpty, programError == nil {
+                let references = mentioned.map { ["id": $0.id.uuidString, "name": $0.name] }
+                let data = try JSONSerialization.data(withJSONObject: references, options: [.sortedKeys])
+                context[context.count - 1].text += "\n\nExplicit program mentions resolved by Sora (reference data): " + String(decoding: data, as: UTF8.self)
+            }
+            if !programs.isEmpty, programError == nil {
+                let catalog = programs.map { ["id": $0.id.uuidString, "name": $0.name, "summary": $0.summary, "directory": $0.directory] }
+                let data = try JSONSerialization.data(withJSONObject: catalog, options: [.sortedKeys])
+                context[context.count - 1].text += "\n\nSaved Programs catalog (reference data):\n" + String(decoding: data, as: UTF8.self)
+            }
             guard try context.reduce(0, { $0 + (try $1.contentForProvider()).utf8.count }) <= 100_000 else {
                 throw AIError.contextTooLarge
             }
@@ -380,10 +475,17 @@ final class AskSession: ObservableObject {
                         let text = self.messages[index].text
                         guard !text.isEmpty else { throw AIError.responseFailed }
                         guard AgentEnvelope.needsRepair(text), attempt < 2 else { break }
-                        // Retry generation only: no command/fetch has been proposed
-                        // or executed. Reuse the original context, not failed turns.
+                        // Nothing is executed during repair. Include the rejected answer
+                        // and concrete feedback so the model can correct it, not guess again.
                         var repairedContext = request.messages
-                        repairedContext.append(AIMessage(role: .user, text: AgentEnvelope.repairInstruction))
+                        let usedBytes = try repairedContext.reduce(0, { $0 + (try $1.contentForProvider()).utf8.count })
+                        let feedback = AgentEnvelope.repairFeedback(for: text, attempt: attempt + 1)
+                        let remaining = max(0, 100_000 - usedBytes - feedback.utf8.count - 100)
+                        let excerpt = String(decoding: Array(text.utf8.prefix(min(12_000, remaining))), as: UTF8.self)
+                        if !excerpt.isEmpty {
+                            repairedContext.append(AIMessage(role: .assistant, text: excerpt))
+                        }
+                        repairedContext.append(AIMessage(role: .user, text: feedback))
                         guard try repairedContext.reduce(0, { $0 + (try $1.contentForProvider()).utf8.count }) <= 100_000 else {
                             throw AIError.contextTooLarge
                         }
@@ -401,6 +503,39 @@ final class AskSession: ObservableObject {
             }
         } catch { errorMessage = error.localizedDescription }
     }
+
+    #if DEBUG
+    private var stressTestStarted = false
+
+    /// Opt-in UI stress fixture. Uses no provider, credentials, or persistence.
+    func startTranscriptStressTest() {
+        guard ProcessInfo.processInfo.arguments.contains("--sora-transcript-stress-test"), !isSending, !stressTestStarted else { return }
+        stressTestStarted = true
+        messages = (0..<150).flatMap { index in
+            [AIMessage(role: .user, text: "Stress request \(index): inspect this output"),
+             AIMessage(role: .assistant,
+                text: "## Result \(index)\n" + String(repeating: "- A streaming layout test with **formatted text** and `code`.\n", count: 12),
+                commandResult: AgentCommandResult(command: "fixture", directory: "/tmp",
+                    output: String(repeating: "sample output line with enough text to wrap when resized\n", count: 100),
+                    exitCode: 0, interrupted: false, truncated: false))]
+        }
+        messages.append(AIMessage(role: .user, text: "Stress test: streaming response"))
+        messages.append(AIMessage(role: .assistant, text: "## Streaming stress test\n", status: .streaming))
+        isSending = true
+        task = Task { [weak self] in
+            for index in 0..<240 {
+                do { try await Task.sleep(nanoseconds: 50_000_000) } catch { return }
+                guard let self, let last = self.messages.indices.last else { return }
+                self.messages[last].text += "- Chunk \(index): **formatted** content with `inline code` and wrapping text.\n"
+            }
+            guard let self, let last = self.messages.indices.last else { return }
+            self.messages[last].status = .complete
+            self.isSending = false
+            self.task = nil
+            print("SORA_TRANSCRIPT_STRESS_COMPLETE: 302 messages, 240 streaming updates; no provider or persistence")
+        }
+    }
+    #endif
 
     func stop() {
         // Kill the process group immediately, but keep isRunningCommand set until
@@ -495,11 +630,19 @@ final class AskSession: ObservableObject {
                 } else if let match = AgentWebpageProposalParser.match(text) {
                     messages[index].text = match.prose.isEmpty ? match.proposal.summary : match.prose
                     messages[index].webpageProposal = match.proposal
+                } else if let match = AgentProgramProposal.match(text) {
+                    if match.proposal.action == .run && !programs.contains(where: { $0.id == match.proposal.id }) {
+                        messages[index].text = "That saved program is no longer in the catalog. Open Programs to choose an available program."
+                    } else {
+                        messages[index].text = match.prose.isEmpty ? (match.proposal.summary ?? "Use a saved program") : match.prose
+                        messages[index].programProposal = match.proposal
+                    }
                 } else if AgentEnvelope.needsRepair(text) {
                     // Never leave Sora's wire format in the transcript. Say what
                     // happened instead of silently dropping the request.
                     let prose = AgentCommandProposalParser.proseBeforeEnvelope(in: text)
                         ?? AgentWebpageProposalParser.proseBeforeEnvelope(in: text)
+                        ?? AgentEnvelope.proseBeforeEnvelope(in: text, opening: AgentProgramProposal.openingTag)
                         ?? ""
                     messages[index].text = prose
                     messages[index].status = .failed
@@ -564,7 +707,7 @@ final class AskSession: ObservableObject {
                 }
                 self.finishAgentAction(token: token)
                 guard self.errorMessage == nil, !stoppedByUser else { return }
-                self.send(continuation: "Review the webpage snapshot, continue the original task if needed, and summarize findings with a useful next step when done.")
+                self.send(continuation: "Review the webpage snapshot against the user’s requested goal. If it is not achieved, propose the next concrete action now: inspect relevant links or use a shell command to inspect source/assets when a text snapshot is insufficient. Do not stop at summarizing the snapshot or offer to continue later. Only report completion when supported by results, or explain a specific blocker.")
             } catch {
                 guard let self, self.commandGeneration == token else { return }
                 let stoppedByUser = self.commandStopRequested || error is CancellationError
@@ -590,8 +733,8 @@ final class AskSession: ObservableObject {
         persist()
     }
 
-    func runCommand(messageID: UUID) {
-        guard enabled, !isSending, !isRunningCommand,
+    func runCommand(messageID: UUID, continueWithAgent: Bool = true) {
+        guard (enabled || !continueWithAgent), !isSending, !isRunningCommand,
               let message = messages.first(where: { $0.id == messageID }),
               let path = message.commandDirectory ?? agentDirectory?.path else { return }
         let directory = URL(fileURLWithPath: path)
@@ -624,7 +767,7 @@ final class AskSession: ObservableObject {
                 }
                 if result.interrupted {
                     self.errorMessage = "Command stopped after reaching its time limit. Send a follow-up to continue."
-                } else {
+                } else if continueWithAgent {
                     self.send(continuation: "Review the command result, continue the original task if needed, and summarize findings with a useful next step when done.")
                 }
             } catch {
@@ -670,6 +813,9 @@ final class AskSession: ObservableObject {
     }
 
     private func persist() {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--sora-transcript-stress-test") { return }
+        #endif
         stashCurrentTranscript()
         do { try conversations.save(messages) }
         catch { errorMessage = "The conversation could not be saved: \(error.localizedDescription)" }

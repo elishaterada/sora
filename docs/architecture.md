@@ -248,3 +248,62 @@ Shell-mirror updates render input immediately, independently of deferred complet
 Divider padding depends on whether the prompt is actual visible live input, not merely the last prompt in the viewport. Historical commands retain their spacing when the live prompt scrolls off-screen.
 
 Provider failures are classified from bounded structured HTTP error bodies (up to 64 KiB) and streaming error events. User messages identify the provider, distinguish exhausted credits from temporary throttling, explain input/output token limits, authentication/access/model failures, and service/network failures, and suggest an action. HTTP status is retained; raw provider bodies and credentials are not displayed. Numeric Retry-After values are honored in the suggested wait. These messages do not automatically retry requests or spend additional API credit.
+
+### Reusable program catalog
+
+`AgentProgramStore` owns an atomic local JSON catalog. `AskSession` owns save/run
+approval and integrates a provider-neutral `SORA_PROGRAM` envelope alongside
+commands and webpages. Strict JSON parsing and a bounded script/name/description
+schema keep multiline scripts separate from the single-line command envelope.
+Unknown IDs never execute. Only metadata enters later provider requests; script
+source stays local unless it is part of the current generation conversation.
+Catalog runs skip the provider continuation and use the existing bounded command
+runner. Generated script files are regenerated from catalog source at each run,
+with private file permissions. This deliberately delivers reusable local scripts
+before adding parameter forms or a separate job scheduler.
+
+
+Program replay accepts a bounded array of literal arguments. Each argument is
+individually shell-quoted by the store, and the same path handles catalog input
+and agent-proposed inputs. The editor uses one argument per line, without shell
+parsing or evaluation. Optional proposal arguments preserve compatibility with
+previously saved conversations and programs.
+
+Action repair now includes the rejected assistant response plus concrete validation
+feedback, rather than repeating the same generic user prompt. The excerpt is capped
+at 12 KB and fits inside the existing request context budget. Only the latest failed
+attempt is included, so successive repairs cannot grow the transcript indefinitely.
+Second-attempt guidance changes strategy while the two-retry execution guard remains.
+
+### Agent transcript hang mitigation
+
+The September 7 hang report sampled the main thread consuming CPU in SwiftUI
+AttributeGraph / LazySubviewPlacements for the entire sample after a 647-second
+hang. This identifies layout churn, not a blocked API or process wait; the exact
+trigger cannot be recovered from that sample alone. Agent now uses an eager stack
+with the newest 40 messages initially mounted and an explicit Show earlier messages
+control. Full conversation data remains retained. Streaming scroll updates remain
+coalesced but no longer animate while row heights change, removing overlapping
+scroll/layout animations from this path.
+
+### Long-transcript stress fixture (Debug only)
+
+Launch the Debug executable with `--sora-transcript-stress-test`, then open Agent.
+It creates 302 synthetic messages with 100-line output disclosures and emits 240
+updates at a nominal 50 ms interval. Provider sends and transcript persistence are
+disabled in this mode. Check completion, expand command output, and use Show earlier
+messages. Quit and launch normally afterward. Completion prints
+`SORA_TRANSCRIPT_STRESS_COMPLETE` (stdout can remain buffered until quit).
+
+The live test exposed expensive Markdown/path parsing, redundant native pane/title
+updates, and hidden Agent hosts observing the shared session. Hidden panes now host
+EmptyView, the overlay disables intrinsic sizing, and unchanged titles/frames do not
+republish. Completed Markdown uses one attributed Text instead of one view per block;
+streaming stays plain until complete. Automatic transcript scrolling is currently
+removed. Code fences retain text styling but no separate background container.
+
+The revised 302-message run completed all updates and output expansion/older-message
+loading remained interactive afterward. Initial bulk layout remains slow and logs
+still contain AttributeGraph cycle warnings; this is not a clean responsiveness pass.
+Further work should isolate those warnings and bulk-load latency. All 198 existing
+tests pass, but those unit tests do not certify UI responsiveness.

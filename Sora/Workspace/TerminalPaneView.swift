@@ -10,10 +10,11 @@ import SwiftUI
 final class TerminalPaneView: NSView {
     let surface: GhosttySurfaceView
     let stickyBar = StickyPromptBar()
-    private var agentHost: NSHostingView<AskView>!
+    private var agentHost: NSHostingView<AnyView>!
     private var resumeHost: NSHostingView<AgentResumeStripView>!
     private(set) var isShowingAgent = false
     private var isPaneActive = false
+    private var publishedTitle: String?
     private weak var ask: AskSession?
     private var askObservation: AnyCancellable?
     private let voiceInput = VoiceInputController()
@@ -47,16 +48,10 @@ final class TerminalPaneView: NSView {
         resumeHost.isHidden = true
         addSubview(resumeHost)
 
-        agentHost = NSHostingView(rootView: AskView(
-            session: ask,
-            inline: true,
-            onClose: { [weak self] in self?.hideAgent() },
-            onRunCommand: { [weak ask] messageID in
-                guard let ask else { return }
-                ask.configureAgent(directory: surface.currentWorkingDirectory() ?? surface.initialWorkingDirectory)
-                ask.runCommand(messageID: messageID)
-            }
-        ))
+        agentHost = NSHostingView(rootView: AnyView(EmptyView()))
+        // AppKit owns this overlay frame; SwiftUI must not feed intrinsic size
+        // constraints back into the containing terminal layout.
+        agentHost.sizingOptions = []
         agentHost.isHidden = true
         agentHost.alphaValue = 0
         addSubview(agentHost)
@@ -125,13 +120,31 @@ final class TerminalPaneView: NSView {
         fatalError("init(coder:) is not supported")
     }
 
+    private func mountAgentContent() {
+        guard let ask else { return }
+        agentHost.rootView = AnyView(AskView(
+            session: ask, inline: true,
+            onClose: { [weak self] in self?.hideAgent() },
+            onRunCommand: { [weak self, weak ask] messageID in
+                guard let self, let ask else { return }
+                ask.configureAgent(directory: self.surface.currentWorkingDirectory() ?? self.surface.initialWorkingDirectory)
+                ask.runCommand(messageID: messageID)
+            }
+        ))
+    }
+
     func setActive(_ active: Bool) {
+        let changed = isPaneActive != active
         isPaneActive = active
         isHidden = !active
         if active {
             ask?.bindTab(tabID)
             refreshResumeStrip()
             publishActivityTitleIfActive()
+        }
+        if changed {
+            if active && isShowingAgent { mountAgentContent() }
+            else { agentHost.rootView = AnyView(EmptyView()) }
         }
         // Keep the surface "active" for metrics even while the overlay is up;
         // input focus still moves to Ask.
@@ -141,6 +154,7 @@ final class TerminalPaneView: NSView {
     func showAgent() {
         ask?.bindTab(tabID)
         ask?.configureAgent(directory: surface.currentWorkingDirectory() ?? surface.initialWorkingDirectory)
+        if !isShowingAgent { mountAgentContent() }
         isShowingAgent = true
         agentHost.isHidden = false
         stickyBar.isHidden = true
@@ -175,7 +189,8 @@ final class TerminalPaneView: NSView {
             agentHost.animator().alphaValue = 0
             surface.animator().alphaValue = 1
         } completionHandler: { [weak self] in
-            guard let self else { return }
+            guard let self, !self.isShowingAgent else { return }
+            self.agentHost.rootView = AnyView(EmptyView())
             self.agentHost.isHidden = true
             self.agentHost.alphaValue = 0
             self.window?.makeFirstResponder(self.surface)
@@ -191,14 +206,16 @@ final class TerminalPaneView: NSView {
 
     private func publishActivityTitleIfActive() {
         guard isPaneActive else { return }
-        onActivityTitleChange?(tabID, ask?.resumeSummary?.title)
+        let title = ask?.resumeSummary?.title
+        guard title != publishedTitle else { return }
+        publishedTitle = title
+        onActivityTitleChange?(tabID, title)
     }
 
     private func refreshResumeStrip() {
         guard isPaneActive, !isShowingAgent else {
             resumeHost.isHidden = true
             stickyBar.updateAgentResumeHint(false)
-            needsLayout = true
             return
         }
         ask?.bindTab(tabID)
@@ -240,6 +257,6 @@ final class TerminalPaneView: NSView {
                 width: bounds.width,
                 height: max(0, bounds.height - barH - resumeSlot)
             )
-        agentHost.frame = bounds
+        if agentHost.frame != bounds { agentHost.frame = bounds }
     }
 }

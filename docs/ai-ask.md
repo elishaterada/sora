@@ -339,3 +339,68 @@ invalid response, and pass through the existing validation and permission flow.
 Stop/provider changes cancel recovery. Exhausted repairs mark the turn failed
 and exclude it from subsequent provider context. Transport failures are not
 automatically replayed by this mechanism.
+
+## Reusable Programs
+
+Agent can offer a final, successful workflow as a reusable zsh program. Use
+**Save Workflow as Program…** in the conversation menu, ask Agent to save it, or
+accept an agent-generated offer. Review the source and working directory, then
+choose **Save to Programs**. Saving never executes the script, even in Full access.
+
+The **Programs** button opens the local catalog with search, source review,
+removal, an **Arguments** field, and **Run Program**. Enter one literal argument
+per line (for example, a YouTube URL). Spaces stay inside the argument; do not add
+shell quotes. Agent run proposals also expose these inputs for review and editing. This run is fully local: it does not request an AI
+response before or after execution, and remains available when AI is disabled.
+Natural-language requests send only catalog names, descriptions, IDs and working
+directories to the selected provider, allowing it to suggest reuse. They still
+cost a request; using the catalog directly avoids that request entirely.
+
+Programs run noninteractively with `/bin/zsh -f` in their original working directory,
+with the same output capture, cancellation, and 60-second limit as agent commands.
+Run approval is always explicit. Review side effects and prerequisites. Scripts
+must not contain credentials; use environment variables for secrets. This first
+slice has no named parameter schema, scheduling, background jobs, or automatic migration
+when a directory moves. Programs receive these values as positional arguments (`$1`, `$2`, and so on).
+Existing saved scripts work without being recreated. The agent includes requested
+URLs and other inputs in its run proposal.
+
+The catalog is local to this Mac and shared across tabs and providers. It stores
+up to 50 programs in `~/Library/Application Support/Sora/Programs/catalog.json`;
+program source is limited to 24 KB. Only selected script source, metadata and the
+working directory are saved, not the conversation. A private `.sh` snapshot is
+regenerated from the reviewed source when run. Removing an entry removes it from
+the catalog; an already generated script file is not deleted.
+
+### Mention a program
+
+Type `@` in Agent's composer to search saved programs. Click a match or press
+Return to select the first match, then add your URL or instructions and send.
+For example: `Run @yt-dlp-mp4-mp3-vtt with https://www.youtube.com/watch?v=…`.
+Sora resolves the handle to the exact catalog ID before sending. Agent still
+shows the proposed run and arguments for approval. Mentioning a program to ask
+about it does not automatically execute it. This uses an AI request to interpret
+your instructions; the Programs catalog remains the zero-token route.
+
+### Automatic action repair
+
+When a generated action fails validation, Sora makes at most two repair requests.
+Each receives a bounded excerpt of the rejected response and validation feedback
+(multiple actions, missing closing tags, oversized commands, multiline commands,
+or invalid fields). The second repair explicitly switches to a simpler next step.
+No rejected action is executed; repaired actions still use normal approval rules.
+Repair attempts use API tokens and can still fail. Cancellation stops the loop.
+
+### Program durability and working folders
+
+Programs live in Application Support, independently of app builds, terminal tabs,
+conversations, and their working folders. Removing the original working folder
+never removes a saved program. Use **Choose Working Folder…** in a run proposal
+or the catalog to choose an existing folder for that run; the choice is displayed
+before approval and never silently redirects file writes.
+
+Sora keeps `catalog.backup.json`, retaining the previous valid catalog on writes
+and creating a backup for existing catalogs on load. A corrupt or missing catalog
+is surfaced as an error instead of being replaced with an empty catalog. Use
+**Restore catalog backup** to recover. Restoration preserves the replaced catalog
+as a separate file. These are local backups; they do not protect against disk loss.
