@@ -97,6 +97,9 @@ struct WorkspaceTabBar: View {
                         .font(SoraTheme.chromeBody)
                         .foregroundStyle(SoraTheme.text)
                         .lineLimit(1)
+                    if let status = workspace.attention[tab.id] {
+                        Text(status).font(SoraTheme.chromeCaption).foregroundStyle(SoraTheme.accent)
+                    }
                     if showBranch, let branch {
                         Text(branch)
                             .font(SoraTheme.chromeCaption)
@@ -116,6 +119,12 @@ struct WorkspaceTabBar: View {
         }
         .buttonStyle(SoraChromeButtonStyle(fill: .clear, cornerRadius: SoraTheme.radiusSmall))
         .contextMenu {
+            Button("Rename Tab…") { workspace.renameTab(tab.id) }
+            Button("Move Up") { workspace.moveTab(tab.id, by: -1) }
+                .disabled(workspace.tabs.first?.id == tab.id)
+            Button("Move Down") { workspace.moveTab(tab.id, by: 1) }
+                .disabled(workspace.tabs.last?.id == tab.id)
+            Divider()
             if workspace.tabs.count > 1 {
                 Button("Close Tab", role: .destructive) {
                     workspace.closeTab(id: tab.id)

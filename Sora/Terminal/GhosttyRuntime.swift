@@ -32,7 +32,10 @@ final class GhosttyRuntime: ObservableObject {
 
     private(set) var app: ghostty_app_t!
     private let config: ghostty_config_t
-    private var launchSnapshot: WorkspaceSnapshot
+    let windowStore: WorkspaceWindowStore
+    let initialWindowID: UUID
+    private var hasOpenedRestoredWindows = false
+    private var terminationObserver: NSObjectProtocol?
 
     init(history: CommandHistoryStore) throws {
         self.history = history
@@ -76,7 +79,12 @@ final class GhosttyRuntime: ObservableObject {
             }
         }
         self.config = config
-        self.launchSnapshot = WorkspaceRestore.load()
+        let store = WorkspaceWindowStore()
+        self.windowStore = store
+        self.initialWindowID = store.windows[0].id
+        self.terminationObserver = NotificationCenter.default.addObserver(forName: WorkspaceWindowStore.terminationApproved, object: nil, queue: .main) { [weak store] _ in
+            store?.isTerminating = true
+        }
 
         var runtime = ghostty_runtime_config_s()
         runtime.userdata = Unmanaged.passUnretained(self).toOpaque()
@@ -125,6 +133,7 @@ final class GhosttyRuntime: ObservableObject {
     }
 
     deinit {
+        if let terminationObserver { NotificationCenter.default.removeObserver(terminationObserver) }
         if let app {
             ghostty_app_free(app)
         }
@@ -168,12 +177,10 @@ final class GhosttyRuntime: ObservableObject {
         ghostty_app_set_focus(app, focused)
     }
 
-    func peekRestoreSnapshot() -> WorkspaceSnapshot {
-        launchSnapshot
-    }
-
-    func markRestoreConsumed() {
-        launchSnapshot = .empty
+    func remainingRestoredWindowIDs(excluding id: UUID) -> [UUID] {
+        guard !hasOpenedRestoredWindows else { return [] }
+        hasOpenedRestoredWindows = true
+        return windowStore.windows.map(\.id).filter { $0 != id }
     }
 
     func applyTitle(_ title: String) {
@@ -227,6 +234,13 @@ final class GhosttyRuntime: ObservableObject {
                     view?.applyTitle(title)
                 }
             }
+            return true
+        case GHOSTTY_ACTION_START_SEARCH:
+            DispatchQueue.main.async { view?.showFind() }
+            return true
+        case GHOSTTY_ACTION_SEARCH_TOTAL:
+            let total = action.action.search_total.total
+            DispatchQueue.main.async { view?.updateFindCount(total) }
             return true
         case GHOSTTY_ACTION_PWD:
             if let cPwd = action.action.pwd.pwd {
@@ -380,7 +394,8 @@ final class GhosttyRuntime: ObservableObject {
         content: UnsafePointer<ghostty_clipboard_content_s>?,
         len: Int
     ) {
-        _ = userdata
+        if let text = GhosttyClipboard.firstPlainText(content: content, count: len),
+           surfaceView(from: userdata)?.captureHistoryExport(text) == true { return }
         let pasteboard = GhosttyClipboard.pasteboard(for: location)
         if let text = GhosttyClipboard.firstPlainText(content: content, count: len) {
             GhosttyClipboard.writePlainText(text, to: pasteboard)

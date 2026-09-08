@@ -42,6 +42,14 @@ final class OpenAIProviderTests: XCTestCase {
         XCTAssertTrue(AgentEnvelope.repairFeedback(for: text + text, attempt: 1).contains("Multiple actions"))
     }
 
+    func testRejectedActionDiagnosticsRemainSeparateFromRepairInstructions() {
+        let reasons = AgentEnvelope.validationReasons(for: "<SORA_COMMAND>{")
+        XCTAssertEqual(reasons, ["Missing closing tag: </SORA_COMMAND>"])
+        XCTAssertFalse(reasons.joined().contains("Answer the original"))
+        XCTAssertTrue(AgentEnvelope.explanationFallback.contains("No action was executed"))
+        XCTAssertTrue(AgentEnvelope.explanationFallback.contains("Do not emit any SORA"))
+    }
+
     func testMixedActionEnvelopesRequireRepair() {
         let command = #"<SORA_COMMAND>{"summary":"List files.","command":"ls"}</SORA_COMMAND>"#
         let webpage = #"<SORA_WEBPAGE>{"summary":"Read docs.","url":"https://example.com"}</SORA_WEBPAGE>"#
@@ -952,25 +960,26 @@ final class AskSessionTests: XCTestCase {
         session.enabled = true
         session.draft = "Find a page"
         session.send()
-        for count in 1...3 {
+        for count in 1...4 {
             await waitFor { provider.requests.count == count }
             if count == 3 {
                 XCTAssertTrue(provider.requests.last?.messages.last?.text.contains("Change approach") == true)
                 XCTAssertEqual(provider.requests.last?.messages.dropLast().last?.text, "<SORA_WEBPAGE>{broken}</SORA_WEBPAGE>")
             }
+            if count == 4 { XCTAssertTrue(provider.requests.last?.messages.last?.text.contains("Do not emit any SORA") == true) }
             provider.emit(.text("<SORA_WEBPAGE>{broken}</SORA_WEBPAGE>"))
             provider.emit(.completed)
             provider.finish()
         }
         await waitFor { !session.isSending }
-        XCTAssertEqual(provider.requests.count, 3)
+        XCTAssertEqual(provider.requests.count, 4)
         XCTAssertEqual(session.messages.last?.status, .failed)
         XCTAssertNil(session.messages.last?.webpageProposal)
         XCTAssertFalse(session.messages.last?.text.contains("SORA_") ?? true)
-        XCTAssertTrue(session.errorMessage?.contains("two automatic retries") == true)
+        XCTAssertTrue(session.errorMessage?.contains("two repair attempts") == true)
         session.draft = "Explain pwd"
         session.send()
-        await waitFor { provider.requests.count == 4 }
+        await waitFor { provider.requests.count == 5 }
         XCTAssertEqual(provider.requests.last?.messages.map(\.text), ["Explain pwd"])
         session.stop()
     }

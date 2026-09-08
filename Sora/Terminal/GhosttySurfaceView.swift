@@ -39,6 +39,10 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     private var shellEditLine: String?
     private var shellCursorOffset = 0
     private var promptIntent: PromptIntent?
+    var onFocus: (() -> Void)?
+    var onCommandFinished: ((Int16) -> Void)?
+    var onBell: (() -> Void)?
+    var draftText: String { isShellPromptReady ? promptLineForSubmission() : "" }
     var onAgentPrompt: ((String) -> Void)?
     var onContinueAgent: (() -> Bool)?
 
@@ -111,6 +115,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
 
     override func becomeFirstResponder() -> Bool {
         let became = super.becomeFirstResponder()
+        if became { onFocus?() }
         if became, let surface {
             ghostty_surface_set_focus(surface, true)
             runtime.setFocus(true)
@@ -160,7 +165,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
             let submission = PromptIntentClassifier.submission(
                 for: line,
                 forceShell: forceShell,
-                allowImplicitAgent: promptReady,
+                allowImplicitAgent: promptReady && TerminalPreferences.automaticAgentRouting,
                 shellCommandKnown: shellRecognizesCommand && line == shellEditLine
             )
             switch submission {
@@ -243,9 +248,10 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
            event.modifierFlags.intersection([.command, .shift, .option, .control]) == [.command, .shift] {
             return false
         }
-        // File → New Tab (Cmd+N) must reach WorkspaceCommands, not the PTY.
-        if chars.lowercased() == "n",
-           event.modifierFlags.intersection([.command, .shift, .option, .control]) == [.command] {
+        // Native workspace shortcuts must reach the menu before Ghostty.
+        if ["n", "t", "d", "f", "w"].contains(chars.lowercased()),
+           event.modifierFlags.contains(.command),
+           !event.modifierFlags.contains(.control), !event.modifierFlags.contains(.option) {
             return false
         }
         if chars.lowercased() == "y",
@@ -429,6 +435,60 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
 
     // MARK: - Lifecycle
 
+    private var findPanel: TerminalFindPanel?
+    func showFind() {
+        if findPanel == nil { findPanel = TerminalFindPanel(surface: self) }
+        findPanel?.show()
+    }
+    func updateFindCount(_ count: Int) { findPanel?.setCount(count) }
+    func searchOutput(_ query: String) { performBinding("search:" + query) }
+    func navigateFind(previous: Bool) { performBinding("navigate_search:" + (previous ? "previous" : "next")) }
+    func endFind() { performBinding("end_search") }
+    var hasRunningTask: Bool {
+        guard let surface else { return false }
+        return ghostty_surface_needs_confirm_quit(surface)
+    }
+    var historyArchiveURL: URL?
+
+    private var isExportingHistory = false
+    private var exportedHistory: String?
+
+    /// Ghostty returns an export filename through its clipboard callback.
+    /// Capture it synchronously without modifying the user's clipboard.
+    func captureHistoryExport(_ path: String) -> Bool {
+        guard isExportingHistory else { return false }
+        let url = URL(fileURLWithPath: path)
+        do {
+            exportedHistory = try String(contentsOf: url, encoding: .utf8)
+            try FileManager.default.removeItem(at: url)
+        } catch { NSLog("Could not read terminal color history: %@", error.localizedDescription) }
+        return true
+    }
+
+    func historyText() -> String? {
+        guard let surface else { return nil }
+        isExportingHistory = true
+        exportedHistory = nil
+        let action = "write_screen_file:copy,vt"
+        let accepted = ghostty_surface_binding_action(surface, action, UInt(action.utf8.count))
+        isExportingHistory = false
+        if accepted, let exportedHistory { return exportedHistory }
+        return plainHistoryText()
+    }
+
+    private func plainHistoryText() -> String? {
+        guard let surface else { return nil }
+        let selection = ghostty_selection_s(
+            top_left: ghostty_point_s(tag: GHOSTTY_POINT_SCREEN, coord: GHOSTTY_POINT_COORD_TOP_LEFT, x: 0, y: 0),
+            bottom_right: ghostty_point_s(tag: GHOSTTY_POINT_SCREEN, coord: GHOSTTY_POINT_COORD_BOTTOM_RIGHT, x: 0, y: 0),
+            rectangle: false)
+        var text = ghostty_text_s()
+        guard ghostty_surface_read_text(surface, selection, &text) else { return nil }
+        defer { ghostty_surface_free_text(surface, &text) }
+        guard let pointer = text.text else { return nil }
+        return String(decoding: UnsafeBufferPointer(start: UnsafeRawPointer(pointer).assumingMemoryBound(to: UInt8.self), count: Int(text.text_len)), as: UTF8.self)
+    }
+
     private func createSurfaceIfNeeded() {
         guard !hasCreatedSurface, window != nil else { return }
         hasCreatedSurface = true
@@ -448,10 +508,12 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         let zdotdir = SoraZshBootstrap.defaultDirectory().path
         let created: ghostty_surface_t? = "ZDOTDIR".withCString { keyPtr in
             zdotdir.withCString { valuePtr in
-                var env = ghostty_env_var_s(key: keyPtr, value: valuePtr)
-                return withUnsafeMutablePointer(to: &env) { envPtr in
-                    config.env_vars = envPtr
-                    config.env_var_count = 1
+                "SORA_RESTORE_HISTORY".withCString { historyKey in
+                    (historyArchiveURL?.path ?? "").withCString { historyValue in
+                var env = [ghostty_env_var_s(key: keyPtr, value: valuePtr), ghostty_env_var_s(key: historyKey, value: historyValue)]
+                return env.withUnsafeMutableBufferPointer { envPtr in
+                    config.env_vars = envPtr.baseAddress
+                    config.env_var_count = 2
                     if let initialWorkingDirectory {
                         return initialWorkingDirectory.path.withCString { pointer in
                             config.working_directory = pointer
@@ -460,6 +522,8 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
                     }
                     config.working_directory = nil
                     return ghostty_surface_new(runtime.app, &config)
+                }
+                    }
                 }
             }
         }
@@ -480,9 +544,9 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         ghostty_surface_set_occlusion(created, true)
     }
 
-    func setActive(_ active: Bool) {
-        isHidden = !active
-        setOccluded(!active)
+    func setActive(_ active: Bool, visible: Bool? = nil) {
+        isHidden = !(visible ?? active)
+        setOccluded(!(visible ?? active))
         if active {
             runtime.activeSurface = self
             updateSurfaceMetrics()
@@ -570,6 +634,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     }
 
     func recordCommandFinished(exitCode: Int16, durationNanos: UInt64) {
+        onCommandFinished?(exitCode)
         isShellPromptReady = true
         shellEditLine = ""
         let cwd = lastWorkingDirectory ?? currentWorkingDirectory() ?? initialWorkingDirectory
@@ -786,10 +851,18 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     }
 
     /// Recomputes only the shell/agent route label for the current line.
+    private func displayIntent(for line: String) -> PromptIntent {
+        switch PromptIntentClassifier.submission(for: line, allowImplicitAgent: TerminalPreferences.automaticAgentRouting,
+                                                shellCommandKnown: shellRecognizesCommand && line == shellEditLine) {
+        case .shell: return .shell
+        case .agent: return .agent
+        }
+    }
+
     private func refreshPromptRoute() {
         let line = promptLineForSubmission()
         promptIntent = isShellPromptReady && !line.isEmpty
-            ? PromptIntentClassifier.intent(for: line, shellCommandKnown: shellRecognizesCommand && line == shellEditLine)
+            ? displayIntent(for: line)
             : nil
         stickyBar?.updateRoute(promptIntent)
     }
@@ -804,7 +877,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         // Show the route from whatever line Return would actually submit.
         let routableLine = promptLineForSubmission()
         let route = isShellPromptReady && !routableLine.isEmpty
-            ? PromptIntentClassifier.intent(for: routableLine, shellCommandKnown: shellRecognizesCommand && routableLine == shellEditLine)
+            ? displayIntent(for: routableLine)
             : nil
         promptIntent = route
         refreshStickyBar()
@@ -1014,5 +1087,59 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
             max(TerminalPreferences.minimumFontSize, points.rounded())
         )
         performBinding("set_font_size:\(clamped)")
+    }
+}
+
+
+/// Native floating find bar; Ghostty owns matching, highlighting and scrolling.
+private final class TerminalFindPanel: NSObject, NSSearchFieldDelegate, NSWindowDelegate {
+    private weak var surface: GhosttySurfaceView?
+    private let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 470, height: 76),
+                                styleMask: [.titled, .closable, .utilityWindow], backing: .buffered, defer: false)
+    private let field = NSSearchField(frame: NSRect(x: 12, y: 38, width: 330, height: 24))
+    private let count = NSTextField(labelWithString: "Type to search output")
+    init(surface: GhosttySurfaceView) {
+        self.surface = surface
+        super.init()
+        panel.title = "Find in Terminal Output"
+        panel.isReleasedWhenClosed = false
+        panel.delegate = self
+        field.placeholderString = "Find in output"
+        field.delegate = self
+        panel.contentView?.addSubview(field)
+        count.frame = NSRect(x: 12, y: 10, width: 320, height: 20)
+        panel.contentView?.addSubview(count)
+        let previous = NSButton(title: "↑", target: self, action: #selector(previousMatch))
+        previous.setAccessibilityLabel("Previous match")
+        previous.frame = NSRect(x: 350, y: 35, width: 48, height: 28)
+        let next = NSButton(title: "↓", target: self, action: #selector(nextMatch))
+        next.setAccessibilityLabel("Next match")
+        next.frame = NSRect(x: 404, y: 35, width: 48, height: 28)
+        panel.contentView?.addSubview(previous)
+        panel.contentView?.addSubview(next)
+    }
+    func show() {
+        if let window = surface?.window {
+            panel.setFrameTopLeftPoint(NSPoint(x: window.frame.maxX - 490, y: window.frame.maxY - 80))
+        }
+        panel.makeKeyAndOrderFront(nil)
+        panel.makeFirstResponder(field)
+    }
+    func setCount(_ total: Int) { count.stringValue = total < 0 ? "Searching…" : "\(total) matches" }
+    func controlTextDidChange(_ obj: Notification) { surface?.searchOutput(field.stringValue) }
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+        if selector == #selector(NSResponder.insertNewline(_:)) {
+            surface?.navigateFind(previous: NSApp.currentEvent?.modifierFlags.contains(.shift) == true)
+            return true
+        }
+        if selector == #selector(NSResponder.cancelOperation(_:)) { panel.close(); return true }
+        return false
+    }
+    @objc private func previousMatch() { surface?.navigateFind(previous: true) }
+    @objc private func nextMatch() { surface?.navigateFind(previous: false) }
+    func windowWillClose(_ notification: Notification) {
+        surface?.endFind()
+        surface?.window?.makeKeyAndOrderFront(nil)
+        if let surface { surface.window?.makeFirstResponder(surface) }
     }
 }

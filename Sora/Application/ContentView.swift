@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 
 struct ContentView: View {
+    @Environment(\.openWindow) private var openWindow
     @ObservedObject var runtime: GhosttyRuntime
     @ObservedObject var ask: AskSession
     @StateObject private var workspace: WorkspaceController
@@ -10,13 +11,14 @@ struct ContentView: View {
     @State private var trafficLightWidth: CGFloat = 78
     @State private var agentTrigger = 0
 
-    init(runtime: GhosttyRuntime, ask: AskSession) {
+    init(runtime: GhosttyRuntime, ask: AskSession, windowID: UUID) {
         self.runtime = runtime
         self.ask = ask
         _workspace = StateObject(
             wrappedValue: WorkspaceController(
                 runtime: runtime,
-                snapshot: runtime.peekRestoreSnapshot()
+                snapshot: runtime.windowStore.snapshot(for: windowID),
+                windowID: windowID
             )
         )
     }
@@ -72,7 +74,10 @@ struct ContentView: View {
         .focusedSceneValue(\.sidebarVisible, $sidebarVisible)
         .focusedSceneValue(\.inlineAskAction, InlineAskAction { agentTrigger += 1 })
         .onAppear {
-            runtime.markRestoreConsumed()
+            workspace.startPersistence()
+            for id in runtime.remainingRestoredWindowIDs(excluding: workspace.windowID) {
+                openWindow(id: "terminal", value: id)
+            }
             runtime.setFocus(NSApp.isActive)
         }
         .onDisappear {

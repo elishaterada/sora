@@ -189,7 +189,6 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
         pathButton.frame = NSRect(x: inset, y: contextY, width: pathWidth, height: chipHeight)
         let branchWidth = branchButton.isHidden ? 0 : min(max(branchButton.intrinsicContentSize.width, 40), max(40, bounds.width - pathWidth - 128))
         branchButton.frame = NSRect(x: pathButton.frame.maxX + 8, y: contextY, width: branchWidth, height: chipHeight)
-        inputSymbol.frame = NSRect(x: inset, y: bounds.height - 68, width: 12, height: 16)
         let font = lineLabel.font ?? SoraTheme.terminalFont
         let width = max(1, bounds.width - inset * 2 - 24 - 8)
         let wrapped = StickyPromptBarModel.wrap(displayText, cursorOffset: caretScalarOffset, width: width) {
@@ -236,7 +235,16 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
         let textWidth = lines.map { ($0 as NSString).size(withAttributes: [.font: font]).width }.max() ?? 0
         let offset = max(0, cursorX - inputClip.bounds.width + 8)
         lineLabel.frame = NSRect(x: -offset, y: 0, width: max(inputClip.bounds.width, textWidth + 8), height: inputClip.bounds.height)
-        caret.frame = NSRect(x: cursorX - offset, y: inputClip.bounds.height - CGFloat(wrapped.cursorRow + 1 - firstLine) * 24 + 3, width: 1.5, height: 19)
+        // Anchor all cues to the text field's actual baseline, including its cell
+        // inset. Fixed offsets drift from the placeholder and wrapped input.
+        let firstBaseline = lineLabel.frame.maxY - lineLabel.firstBaselineOffsetFromTop
+        let cursorBaseline = firstBaseline - CGFloat(wrapped.cursorRow - firstLine) * 24
+        caret.frame = NSRect(x: cursorX - offset, y: cursorBaseline + font.descender,
+                             width: 1.5, height: font.ascender - font.descender)
+        let symbolHeight = font.capHeight
+        inputSymbol.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: font.pointSize, weight: .medium)
+        inputSymbol.frame = NSRect(x: inset, y: inputClip.frame.minY + firstBaseline,
+                                   width: 12, height: symbolHeight)
         caret.isHidden = !caretVisible || window?.isKeyWindow != true
         hintLabel.frame = NSRect(x: inset, y: 12, width: max(0, bounds.width - 160), height: 16)
         hintLabel.alignment = .left

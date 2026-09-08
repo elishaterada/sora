@@ -133,12 +133,12 @@ final class TerminalPaneView: NSView {
         ))
     }
 
-    func setActive(_ active: Bool) {
+    func setActive(_ active: Bool, visible: Bool? = nil) {
         let changed = isPaneActive != active
         isPaneActive = active
-        isHidden = !active
+        isHidden = !(visible ?? active)
         if active {
-            ask?.bindTab(tabID)
+            if window?.isKeyWindow == true { ask?.bindTab(tabID) }
             refreshResumeStrip()
             publishActivityTitleIfActive()
         }
@@ -148,7 +148,7 @@ final class TerminalPaneView: NSView {
         }
         // Keep the surface "active" for metrics even while the overlay is up;
         // input focus still moves to Ask.
-        surface.setActive(active && !isShowingAgent)
+        surface.setActive(active && !isShowingAgent, visible: (visible ?? active) && !isShowingAgent)
     }
 
     func showAgent() {
@@ -213,7 +213,7 @@ final class TerminalPaneView: NSView {
     }
 
     private func refreshResumeStrip() {
-        guard isPaneActive, !isShowingAgent else {
+        guard isPaneActive, !isShowingAgent, window?.isKeyWindow == true else {
             resumeHost.isHidden = true
             stickyBar.updateAgentResumeHint(false)
             return
