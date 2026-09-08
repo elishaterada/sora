@@ -17,6 +17,9 @@ final class WorkspaceController: ObservableObject {
     private var terminationObserver: NSObjectProtocol?
     private let persist: (WorkspaceSnapshot) -> Void
 
+    var onWindowClose: (() -> Void)?
+    var agentIsBusy: (([UUID]) -> Bool)?
+
     var splitFraction: CGFloat = 0.5
     @Published private(set) var splitPair: [UUID] = []
     @Published private(set) var attention: [UUID: String] = [:]
@@ -114,10 +117,10 @@ final class WorkspaceController: ObservableObject {
     }
 
     func confirmClose(ids: [UUID]) -> Bool {
-        guard ids.contains(where: { surfaces[$0]?.hasRunningTask == true }) else { return true }
+        guard ids.contains(where: { surfaces[$0]?.hasRunningTask == true }) || agentIsBusy?(ids) == true else { return true }
         let alert = NSAlert()
-        alert.messageText = "Close running terminal tasks?"
-        alert.informativeText = "Closing these sessions will stop their running processes. Output history will be saved."
+        alert.messageText = "Close running tasks?"
+        alert.informativeText = "Closing these sessions will stop their terminal commands and Agent requests. Output history will be saved."
         alert.addButton(withTitle: "Cancel")
         alert.addButton(withTitle: "Close Sessions")
         return alert.runModal() == .alertSecondButtonReturn
@@ -234,6 +237,7 @@ final class WorkspaceController: ObservableObject {
     }
 
     func windowWillClose() {
+        onWindowClose?()
         refreshWorkingDirectories()
         isClosed = true
         historyTimer?.invalidate()

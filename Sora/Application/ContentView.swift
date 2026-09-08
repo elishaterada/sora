@@ -4,16 +4,16 @@ import SwiftUI
 struct ContentView: View {
     @Environment(\.openWindow) private var openWindow
     @ObservedObject var runtime: GhosttyRuntime
-    @ObservedObject var ask: AskSession
+    @StateObject private var ask: AskSession
     @StateObject private var workspace: WorkspaceController
     @State private var sidebarVisible = true
     @State private var titlebarHeight: CGFloat = 52
     @State private var trafficLightWidth: CGFloat = 78
     @State private var agentTrigger = 0
 
-    init(runtime: GhosttyRuntime, ask: AskSession, windowID: UUID) {
+    init(runtime: GhosttyRuntime, windowID: UUID) {
         self.runtime = runtime
-        self.ask = ask
+        _ask = StateObject(wrappedValue: AskSession(backends: AIBackend.live(windowID: windowID)))
         _workspace = StateObject(
             wrappedValue: WorkspaceController(
                 runtime: runtime,
@@ -80,6 +80,7 @@ struct ContentView: View {
             }
             runtime.setFocus(NSApp.isActive)
         }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in ask.stop() }
         .onDisappear {
             workspace.refreshWorkingDirectories()
         }

@@ -16,6 +16,7 @@ final class TerminalPaneView: NSView {
     private var isPaneActive = false
     private var publishedTitle: String?
     private weak var ask: AskSession?
+    var hasRunningAgent: Bool { ask?.isSending == true || ask?.isRunningCommand == true }
     private var askObservation: AnyCancellable?
     private let voiceInput = VoiceInputController()
     private var dictationObservation: AnyCancellable?
@@ -138,7 +139,7 @@ final class TerminalPaneView: NSView {
         isPaneActive = active
         isHidden = !(visible ?? active)
         if active {
-            if window?.isKeyWindow == true { ask?.bindTab(tabID) }
+            ask?.bindTab(tabID)
             refreshResumeStrip()
             publishActivityTitleIfActive()
         }
@@ -213,7 +214,7 @@ final class TerminalPaneView: NSView {
     }
 
     private func refreshResumeStrip() {
-        guard isPaneActive, !isShowingAgent, window?.isKeyWindow == true else {
+        guard isPaneActive, !isShowingAgent else {
             resumeHost.isHidden = true
             stickyBar.updateAgentResumeHint(false)
             return

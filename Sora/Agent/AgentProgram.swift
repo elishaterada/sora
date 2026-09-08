@@ -60,6 +60,7 @@ struct AgentProgramProposal: Codable, Equatable, Sendable {
 /// One atomic catalog is the source of truth; executable snapshots are regenerated
 /// from its reviewed contents at run time. No provider history or credentials are stored.
 struct AgentProgramStore {
+    static let didChange = Notification.Name("sora.programCatalogChanged")
     let directory: URL
     static var standard: Self {
         Self(directory: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -107,6 +108,7 @@ struct AgentProgramStore {
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: backup.path)
         try data.write(to: catalog, options: .atomic)
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: catalog.path)
+        NotificationCenter.default.post(name: Self.didChange, object: directory)
     }
 
     func restoreBackup() throws -> [AgentProgram] {
@@ -118,6 +120,7 @@ struct AgentProgramStore {
         }
         try data.write(to: catalog, options: .atomic)
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: catalog.path)
+        NotificationCenter.default.post(name: Self.didChange, object: directory)
         return programs
     }
 

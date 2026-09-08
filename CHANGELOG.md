@@ -4,6 +4,24 @@ Human-readable highlights for each Sora release live here. Add the newest
 version before creating its `vX.Y.Z` tag; the release workflow requires a
 matching section and publishes it to GitHub.
 
+## 0.1.9 — 2026-09-08
+
+### What’s new
+
+- Work with Agent independently in separate windows. Drafts, replies, and running requests stay with their window; stopping or closing one does not interrupt another.
+- Close and quit warnings now include active Agent requests.
+
+### Fixes
+
+- Keep Agent settings and saved programs synchronized across windows.
+- Preserve other windows’ program changes when editing the shared catalog.
+- Prevent repeated “Previous session ended” banners from accumulating in restored terminal history.
+
+### Known limitations
+
+- Agent conversations do not yet restore after relaunch. Switching tabs within one window still stops that window’s active Agent request.
+- Large Agent histories can still load slowly.
+
 ## 0.1.8 — 2026-09-07
 
 ### What’s new
