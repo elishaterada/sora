@@ -74,11 +74,31 @@ enum TerminalHistoryArchive {
         return result + "\u{1b}[0m"
     }
 
+    /// The launch banner is UI chrome, not command output. Replaying it would
+    /// archive another copy on every quit, including sessions with no commands.
+    static func removingRestoreBanners(_ text: String) -> String {
+        let marker = "── Previous session ended · New shell ──"
+        var lines: [String] = []
+        for line in text.components(separatedBy: "\n") {
+            let plain = line.replacingOccurrences(of: "\u{1b}\\[[0-9;:]*m", with: "", options: .regularExpression)
+            if plain.trimmingCharacters(in: .whitespacesAndNewlines) == marker {
+                // Retain SGR changes on the banner so subsequent output keeps
+                // its appearance, but remove the launch-only spacer and text.
+                if lines.last?.trimmingCharacters(in: .whitespaces).isEmpty == true { lines.removeLast() }
+                let controls = line.replacingOccurrences(of: marker, with: "").trimmingCharacters(in: .whitespacesAndNewlines)
+                if !controls.isEmpty { lines.append(controls) }
+            } else {
+                lines.append(line)
+            }
+        }
+        return lines.joined(separator: "\n")
+    }
+
     static func save(_ text: String, for id: UUID) throws {
         let url = url(for: id)
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true,
                                                attributes: [.posixPermissions: 0o700])
-        let safe = sanitized(text)
+        let safe = removingRestoreBanners(sanitized(text))
         let data = Data(safe.utf8.suffix(2_000_000))
         try data.write(to: url, options: .atomic)
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)

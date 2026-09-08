@@ -418,3 +418,20 @@ request's precise payload could not be recovered from the older empty transcript
 Return now stays in the shell unless input begins with /agent. Users can enable
 automatic natural-language routing in Terminal Settings. The displayed route
 and submission logic share the same preference; Cmd-Return still forces shell.
+
+## Independent Agent windows
+
+Each terminal window owns an AskSession. Drafts, attached pages, responses,
+command runners and cancellation are independent across windows. Changing tabs
+within a window still switches its active Agent conversation and stops its active
+request; this slice does not add concurrent Agent tasks within one window.
+Global settings, Keychain credentials and the Programs catalog remain shared.
+Closing a window stops its own Agent work; other windows continue. Closing or
+quitting with an active Agent request now displays the running-task warning.
+Conversation snapshot files are isolated by window UUID; automatic Agent
+conversation restoration across app launches is not yet implemented.
+
+Verification: 214 tests cover independent concurrent streams, stop isolation,
+shared preference updates, catalog refresh and stale-catalog edits. Native UI
+checks verified separate composer drafts and preservation of the first draft
+when closing the second window. No live API requests were needed for these checks.

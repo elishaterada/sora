@@ -396,6 +396,69 @@ final class AskSessionTests: XCTestCase {
         AskSession(provider: provider, credentials: key, conversations: store, defaults: defaults, programStore: AgentProgramStore(directory: FileManager.default.temporaryDirectory.appendingPathComponent(suite)))
     }
 
+    func testWindowSessionsStreamAndStopIndependently() async {
+        let aProvider = ControlledProvider(), bProvider = ControlledProvider()
+        let a = makeSession(aProvider), b = makeSession(bProvider)
+        a.enabled = true
+        b.enabled = true
+        a.bindTab(UUID()); b.bindTab(UUID())
+        a.draft = "Window A"; b.draft = "Window B"
+        a.send(); b.send()
+        await waitFor { aProvider.requests.count == 1 && bProvider.requests.count == 1 }
+        aProvider.emit(.text("A reply")); bProvider.emit(.text("B reply"))
+        await waitFor { b.messages.last?.text == "B reply" }
+        a.stop()
+        a.bindTab(UUID())
+        XCTAssertTrue(b.isSending)
+        XCTAssertEqual(b.messages.first?.text, "Window B")
+        bProvider.emit(.text(" continues")); bProvider.emit(.completed); bProvider.finish()
+        await waitFor { !b.isSending }
+        XCTAssertEqual(b.messages.last?.text, "B reply continues")
+        XCTAssertTrue(a.messages.isEmpty)
+        b.draft = "Private draft"
+        XCTAssertTrue(a.draft.isEmpty)
+        XCTAssertEqual(b.draft, "Private draft")
+    }
+
+    func testSharedPreferencesReachOtherWindowsWithoutSharingDrafts() async {
+        let a = makeSession(), b = makeSession()
+        b.draft = "Keep this draft"
+        a.enabled = true
+        a.model = "custom-model"
+        a.permissionMode = .fullAccess
+        await waitFor { b.enabled && b.model == "custom-model" && b.permissionMode == .fullAccess }
+        XCTAssertEqual(b.draft, "Keep this draft")
+        a.enabled = false
+        await waitFor { !b.enabled }
+    }
+
+    func testProgramChangesRefreshWindowsAndStaleRemovalPreservesNewEntries() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = AgentProgramStore(directory: root)
+        let a = makeSession(), b = makeSession()
+        a.reloadPrograms(store: store); b.reloadPrograms(store: store)
+        let first = AgentProgram(name: "First", summary: "Print", script: "echo one", directory: "/tmp")
+        let second = AgentProgram(name: "Second", summary: "Print", script: "echo two", directory: "/tmp")
+        try store.save([first])
+        await waitFor { a.programs.count == 1 && b.programs.count == 1 }
+        try store.save([first, second])
+        // Act before asynchronous catalog notifications have refreshed A.
+        a.removeProgram(first.id)
+        XCTAssertEqual(try store.load(), [second])
+        await waitFor { b.programs == [second] }
+    }
+
+    func testLiveWindowConversationStoresHaveSeparatePaths() throws {
+        let a = AIBackend.live(windowID: UUID()), b = AIBackend.live(windowID: UUID())
+        for (left, right) in zip(a, b) {
+            let l = try XCTUnwrap(left.conversations as? FileAIConversationStore)
+            let r = try XCTUnwrap(right.conversations as? FileAIConversationStore)
+            XCTAssertNotEqual(l.url, r.url)
+            XCTAssertTrue(l.url.path.contains("/AgentWindows/"))
+        }
+    }
+
     func testProgramsSaveAfterReviewPersistAndRunWithoutProvider() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("sora-program-test-" + UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }

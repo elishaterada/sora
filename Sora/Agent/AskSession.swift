@@ -7,6 +7,24 @@ final class AskSession: ObservableObject {
     @Published private(set) var programs: [AgentProgram] = []
     @Published private(set) var programError: String?
     private var programStore: AgentProgramStore
+    private var sharedObservations = Set<AnyCancellable>()
+
+    /// Preferences are app-wide; drafts, responses and cancellation belong to
+    /// this window. Compare first so applying a notification cannot echo forever.
+    func refreshSharedPreferences() {
+        let storedEnabled = defaults.bool(forKey: "ai.enabled")
+        if enabled != storedEnabled { enabled = storedEnabled }
+        if let id = AIBackendID(rawValue: defaults.string(forKey: "ai.provider") ?? "openai"),
+           id != selectedProvider { selectProvider(id) }
+        let storedModel = defaults.string(forKey: "ai.model.\(selectedProvider.rawValue)")
+            ?? (selectedProvider == .openai ? defaults.string(forKey: "ai.model") : nil) ?? selectedProvider.defaultModel
+        if model != storedModel { model = storedModel }
+        let voiceModel = defaults.string(forKey: "ai.voice.realtimeModel") ?? RealtimeVoiceModel.recommended
+        if realtimeVoiceModel != voiceModel { realtimeVoiceModel = voiceModel }
+        let mode = AgentPermissionMode.stored(in: defaults)
+        if permissionMode != mode { permissionMode = mode }
+    }
+
 
     func reloadPrograms(store: AgentProgramStore? = nil) {
         if let store { programStore = store }
@@ -23,7 +41,7 @@ final class AskSession: ObservableObject {
     func removeProgram(_ id: UUID) {
         guard !isSending, !isRunningCommand, programError == nil else { return }
         do {
-            let updated = programs.filter { $0.id != id }
+            let updated = try programStore.load().filter { $0.id != id }
             try programStore.save(updated)
             programs = updated
         } catch { programError = error.localizedDescription }
@@ -38,7 +56,7 @@ final class AskSession: ObservableObject {
               AgentProgram.valid(name: name, summary: summary, script: script) else { return }
         do {
             let program = AgentProgram(name: name, summary: summary, script: script, directory: directory)
-            let updated = programs + [program]
+            let updated = try programStore.load() + [program]
             try programStore.save(updated)
             programs = updated
             messages[index].programProposal?.status = .approved
@@ -62,6 +80,7 @@ final class AskSession: ObservableObject {
 
     /// Explicit user action. Runs locally and never starts an AI follow-up.
     func runProgram(_ id: UUID, arguments: [String] = [], workingDirectory: String? = nil, proposalMessageID: UUID? = nil) {
+        reloadPrograms()
         guard !isSending, !isRunningCommand, programError == nil,
               var program = programs.first(where: { $0.id == id }) else { return }
         if let workingDirectory { program.directory = workingDirectory }
@@ -242,6 +261,17 @@ final class AskSession: ObservableObject {
         self.realtimeVoiceModel = defaults.string(forKey: "ai.voice.realtimeModel")
             ?? RealtimeVoiceModel.recommended
         reloadPrograms()
+        NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification, object: defaults)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.refreshSharedPreferences() }
+            .store(in: &sharedObservations)
+        NotificationCenter.default.publisher(for: AgentProgramStore.didChange)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] note in
+                guard let self, note.object as? URL == self.programStore.directory else { return }
+                self.reloadPrograms()
+            }
+            .store(in: &sharedObservations)
     }
 
     func selectProvider(_ id: AIBackendID) {

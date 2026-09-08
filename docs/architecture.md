@@ -340,9 +340,18 @@ Cmd-N opens an independent terminal window. Each window has a stable UUID and
 its own tabs, selection, split pair, divider position, and frame in the window
 catalog. Existing single-window snapshots migrate with their tab IDs intact.
 Closing a window removes its restoration record; quitting preserves all open
-windows. Invalid catalog data is backed up before migration recovery. Agent
-sessions remain app-scoped; only the key window binds the active Agent tab to
-avoid competing background windows repeatedly changing shared state.
+windows. Invalid catalog data is backed up before migration recovery. Each window owns its Agent session, including drafts, provider requests, command
+execution and cancellation. Switching windows does not bind or stop another
+window’s session. Closing a window explicitly stops only its Agent work. Close
+and quit warnings include Agent requests as well as terminal processes.
+Settings and Keychain credentials remain shared. Sessions observe preference
+changes and apply only changed values; disabling Agent stops all sessions.
+Provider changes intentionally stop the affected sessions. Program catalog
+notifications refresh all windows, and each edit reads the current catalog before
+writing so stale in-memory lists cannot discard another window’s changes.
+Agent conversation snapshots are stored under AgentWindows/<window UUID> to
+avoid cross-window overwrites. Tab conversations are still only restored within
+the current app run; these snapshots are not yet a persistent conversation browser.
 Named terminal profiles remain deferred.
 Bell notifications and operating-system notifications are not included in this
 slice; completion badges provide an in-app signal without notification permission.
@@ -350,3 +359,8 @@ slice; completion badges provide an in-app signal without notification permissio
 Prompt cues derive their vertical placement from the native text field baseline.
 The chevron uses the input font cap height, and the caret uses its ascender and
 descender, keeping placeholders, suggestions, and wrapped input aligned.
+
+History checkpoints omit the standalone restore banner and its launch spacer.
+Only the fresh shell prints a session boundary; previously accumulated banners
+are cleaned on the next checkpoint and disappear on the following relaunch.
+SGR styling and other output are retained.

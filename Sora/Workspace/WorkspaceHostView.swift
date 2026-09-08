@@ -54,6 +54,11 @@ final class WorkspaceHostView: NSView {
 
     func sync(workspace: WorkspaceController, ask: AskSession, agentTrigger: Int) {
         self.workspace = workspace
+        workspace.onWindowClose = { [weak ask] in ask?.stop() }
+        workspace.agentIsBusy = { [weak ask] ids in
+            guard let ask, let id = ask.activeTabID, ids.contains(id) else { return false }
+            return ask.isSending || ask.isRunningCommand
+        }
         splitView.onFractionChange = { [weak workspace] fraction in workspace?.splitFraction = fraction }
         closeDelegate?.workspace = workspace
         if let window { workspace.restoreFrameIfNeeded(window) }
@@ -98,7 +103,7 @@ final class WorkspaceHostView: NSView {
             }
         }
         splitView.isHidden = splitIDs.isEmpty
-        if window?.isKeyWindow == true { ask.bindTab(workspace.selectedID) }
+        ask.bindTab(workspace.selectedID)
         layoutPanes()
         for id in splitIDs where id != workspace.selectedID {
             panes[id]?.setActive(false, visible: true)

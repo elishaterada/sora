@@ -53,6 +53,18 @@ final class WorkspaceSnapshotTests: XCTestCase {
         XCTAssertEqual(String(decoding: data, as: UTF8.self), text)
     }
 
+    func testRestoreBannersDoNotAccumulate() {
+        let marker = "── Previous session ended · New shell ──"
+        let output = "command\nresult\n"
+        let once = TerminalHistoryArchive.removingRestoreBanners(output + "\n" + marker + "\n")
+        XCTAssertEqual(once, output)
+        XCTAssertEqual(TerminalHistoryArchive.removingRestoreBanners(once + "\n" + marker + "\n"), output)
+        XCTAssertEqual(TerminalHistoryArchive.removingRestoreBanners("\n" + marker + "\n\n" + marker + "\n"), "")
+        XCTAssertEqual(TerminalHistoryArchive.removingRestoreBanners("echo " + marker), "echo " + marker)
+        let styled = "\u{1b}[0m" + marker + "\u{1b}[32m\nresult"
+        XCTAssertEqual(TerminalHistoryArchive.removingRestoreBanners(styled), "\u{1b}[0m\u{1b}[32m\nresult")
+    }
+
     func testEmptySnapshotAlwaysHasOneDirectory() {
         let snapshot = WorkspaceSnapshot(directories: [], selectedIndex: 4)
         XCTAssertEqual(snapshot.directories, [""])

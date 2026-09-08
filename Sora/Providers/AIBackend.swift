@@ -104,7 +104,7 @@ struct AIBackend {
     let credentials: any AICredentialStore
     let conversations: any AIConversationStore
 
-    static func live() -> [AIBackend] {
+    static func live(windowID: UUID? = nil) -> [AIBackend] {
         AIBackendID.allCases.map { id in
             let provider: any AIProvider
             switch id {
@@ -114,9 +114,12 @@ struct AIBackend {
             case .gateway: provider = HTTPAIProvider(kind: .gateway)
             case .grok: provider = HTTPAIProvider(kind: .grok)
             }
-            let folder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            var folder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
                 .appendingPathComponent("Sora")
-            // Preserve the existing OpenAI conversation at its original path.
+            if let windowID {
+                folder.appendPathComponent("AgentWindows/" + windowID.uuidString, isDirectory: true)
+            }
+            // Legacy files remain untouched; windows never overwrite each other.
             let filename = id == .openai ? "ask.json" : "ask-\(id.rawValue).json"
             return AIBackend(id: id, provider: provider,
                              credentials: KeychainAICredentialStore(account: id.rawValue),
