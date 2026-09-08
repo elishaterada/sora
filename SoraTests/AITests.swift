@@ -32,6 +32,16 @@ final class OpenAIProviderTests: XCTestCase {
         XCTAssertFalse(error.localizedDescription.contains("secret-key-value"))
     }
 
+    func testRepairFeedbackExplainsConcreteFailureAndChangesSecondAttempt() throws {
+        let payload = ["summary": "Create a PDF", "command": "python3 <<'PY'\nprint('pdf')\nPY"]
+        let text = "<SORA_COMMAND>" + String(decoding: try JSONEncoder().encode(payload), as: UTF8.self) + "</SORA_COMMAND>"
+        XCTAssertTrue(AgentEnvelope.needsRepair(text))
+        XCTAssertTrue(AgentEnvelope.repairFeedback(for: text, attempt: 1).contains("newline or tab"))
+        XCTAssertTrue(AgentEnvelope.repairFeedback(for: text, attempt: 2).contains("Change approach"))
+        XCTAssertTrue(AgentEnvelope.repairFeedback(for: "<SORA_COMMAND>{", attempt: 1).contains("Missing closing tag"))
+        XCTAssertTrue(AgentEnvelope.repairFeedback(for: text + text, attempt: 1).contains("Multiple actions"))
+    }
+
     func testMixedActionEnvelopesRequireRepair() {
         let command = #"<SORA_COMMAND>{"summary":"List files.","command":"ls"}</SORA_COMMAND>"#
         let webpage = #"<SORA_WEBPAGE>{"summary":"Read docs.","url":"https://example.com"}</SORA_WEBPAGE>"#
@@ -375,7 +385,74 @@ final class AskSessionTests: XCTestCase {
 
     private func makeSession(_ provider: ControlledProvider = ControlledProvider(),
                              key: MemoryKey = MemoryKey(), store: MemoryConversation = MemoryConversation()) -> AskSession {
-        AskSession(provider: provider, credentials: key, conversations: store, defaults: defaults)
+        AskSession(provider: provider, credentials: key, conversations: store, defaults: defaults, programStore: AgentProgramStore(directory: FileManager.default.temporaryDirectory.appendingPathComponent(suite)))
+    }
+
+    func testProgramsSaveAfterReviewPersistAndRunWithoutProvider() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("sora-program-test-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = AgentProgramStore(directory: root)
+        let provider = ControlledProvider()
+        let session = makeSession(provider)
+        session.reloadPrograms(store: store)
+        session.enabled = true
+        session.permissionMode = .fullAccess
+        session.configureAgent(directory: FileManager.default.temporaryDirectory)
+        session.draft = "Save the workflow"
+        session.send()
+        await waitFor { provider.requests.count == 1 }
+        let payload = ["action": "save", "name": "Report", "summary": "Print a local report", "script": "set -e\nprintf 'reused-program\\n'\n"]
+        let json = String(decoding: try JSONEncoder().encode(payload), as: UTF8.self)
+        provider.emit(.text("<SORA_PROGRAM>" + json + "</SORA_PROGRAM>"))
+        provider.emit(.completed)
+        provider.finish()
+        await waitFor { !session.isSending }
+        XCTAssertTrue(session.programs.isEmpty, "Even Full access must not automatically save or run a program")
+        let message = try XCTUnwrap(session.messages.last)
+        XCTAssertEqual(message.programProposal?.status, .pending)
+        session.saveProgram(messageID: message.id)
+        let program = try XCTUnwrap(session.programs.first)
+        XCTAssertEqual(try store.load(), [program])
+        session.saveProgram(messageID: message.id)
+        XCTAssertEqual(session.programs.count, 1)
+
+        let reopened = makeSession(provider)
+        reopened.reloadPrograms(store: store)
+        XCTAssertEqual(reopened.programs, [program])
+        reopened.enabled = false
+        reopened.runProgram(program.id)
+        await waitFor { !reopened.isRunningCommand }
+        XCTAssertEqual(reopened.messages.last?.commandResult?.exitCode, 0)
+        XCTAssertTrue(reopened.messages.last?.commandResult?.output.contains("reused-program") == true)
+        XCTAssertEqual(provider.requests.count, 1, "Replay must not call the provider, including after execution")
+        reopened.removeProgram(program.id)
+        XCTAssertTrue(try store.load().isEmpty)
+    }
+
+    func testProgramCatalogIsCompactAndUnknownProgramDoesNotRun() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = AgentProgramStore(directory: root)
+        let program = AgentProgram(name: "Report", summary: "List files", script: "print UNIQUE_SCRIPT_BODY", directory: "/tmp")
+        try store.save([program])
+        let provider = ControlledProvider()
+        let session = makeSession(provider)
+        session.reloadPrograms(store: store)
+        session.enabled = true
+        session.draft = "Run @report with this input"
+        session.send()
+        await waitFor { provider.requests.count == 1 }
+        let text = try XCTUnwrap(provider.requests.last?.messages.last?.text)
+        XCTAssertTrue(text.contains(program.id.uuidString))
+        XCTAssertFalse(text.contains("UNIQUE_SCRIPT_BODY"))
+        XCTAssertTrue(text.contains("Explicit program mentions resolved by Sora"))
+        provider.emit(.text("<SORA_PROGRAM>{\"action\":\"run\",\"id\":\"" + UUID().uuidString + "\"}</SORA_PROGRAM>"))
+        provider.emit(.completed)
+        provider.finish()
+        await waitFor { !session.isSending }
+        XCTAssertNil(session.messages.last?.programProposal)
+        XCTAssertFalse(session.isRunningCommand)
+        XCTAssertTrue(session.messages.last?.text.contains("no longer") == true)
     }
 
     func testRealtimeVoiceAvailabilityAndTranscriptLifecycle() {
@@ -704,7 +781,7 @@ final class AskSessionTests: XCTestCase {
             provider: provider,
             credentials: MemoryKey(),
             conversations: MemoryConversation(),
-            defaults: defaults,
+            defaults: defaults, programStore: AgentProgramStore(directory: FileManager.default.temporaryDirectory.appendingPathComponent(suite)),
             webpageFetcher: FixedWebpageFetcher(page: page)
         )
         session.enabled = true
@@ -729,7 +806,7 @@ final class AskSessionTests: XCTestCase {
         let key = DelayedKey()
         let provider = ControlledProvider()
         let session = AskSession(provider: provider, credentials: key,
-                                 conversations: MemoryConversation(), defaults: defaults)
+                                 conversations: MemoryConversation(), defaults: defaults, programStore: AgentProgramStore(directory: FileManager.default.temporaryDirectory.appendingPathComponent(suite)))
         session.enabled = true
         session.draft = "Help me find large files"
         session.send()
@@ -767,7 +844,7 @@ final class AskSessionTests: XCTestCase {
         let firstStore = MemoryConversation(), secondStore = MemoryConversation()
         let backends = [AIBackend(id: .openai, provider: first, credentials: firstKey, conversations: firstStore),
                         AIBackend(id: .anthropic, provider: second, credentials: secondKey, conversations: secondStore)]
-        let session = AskSession(backends: backends, defaults: defaults)
+        let session = AskSession(backends: backends, defaults: defaults, programStore: AgentProgramStore(directory: FileManager.default.temporaryDirectory.appendingPathComponent(suite)))
         session.enabled = true
         session.model = "openai-model"
         session.draft = "private OpenAI question"
@@ -805,7 +882,7 @@ final class AskSessionTests: XCTestCase {
     func testCodexAllowsDefaultModelAndDoesNotRequireAPIKey() async {
         let provider = ControlledProvider()
         let session = AskSession(backends: [AIBackend(id: .codex, provider: provider,
-            credentials: MemoryKey(nil), conversations: MemoryConversation())], defaults: defaults)
+            credentials: MemoryKey(nil), conversations: MemoryConversation())], defaults: defaults, programStore: AgentProgramStore(directory: FileManager.default.temporaryDirectory.appendingPathComponent(suite)))
         session.enabled = true
         session.draft = "Codex question"
         XCTAssertEqual(session.model, "")
@@ -857,7 +934,8 @@ final class AskSessionTests: XCTestCase {
         await waitFor { provider.requests.count == 2 }
         XCTAssertTrue(session.isSending)
         XCTAssertNil(session.messages.last?.commandProposal)
-        XCTAssertEqual(provider.requests.last?.messages.last?.text, AgentEnvelope.repairInstruction)
+        XCTAssertTrue(provider.requests.last?.messages.last?.text.contains("Validation feedback:") == true)
+        XCTAssertEqual(provider.requests.last?.messages.dropLast().last?.text, "<SORA_COMMAND>{broken}</SORA_COMMAND>")
         provider.emit(.text(#"<SORA_COMMAND>{"summary":"Create the folder.","command":"mkdir example"}</SORA_COMMAND>"#))
         provider.emit(.completed)
         provider.finish()
@@ -876,6 +954,10 @@ final class AskSessionTests: XCTestCase {
         session.send()
         for count in 1...3 {
             await waitFor { provider.requests.count == count }
+            if count == 3 {
+                XCTAssertTrue(provider.requests.last?.messages.last?.text.contains("Change approach") == true)
+                XCTAssertEqual(provider.requests.last?.messages.dropLast().last?.text, "<SORA_WEBPAGE>{broken}</SORA_WEBPAGE>")
+            }
             provider.emit(.text("<SORA_WEBPAGE>{broken}</SORA_WEBPAGE>"))
             provider.emit(.completed)
             provider.finish()
@@ -1150,4 +1232,107 @@ private final class DelayedKey: AICredentialStore {
 private struct FixedWebpageFetcher: WebpageFetching {
     let page: WebpageAttachment
     func fetch(_ address: String) async throws -> WebpageAttachment { page }
+}
+
+
+final class AgentProgramTests: XCTestCase {
+    func testProgramBackupRecoversCorruptionWithoutLosingOriginal() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = AgentProgramStore(directory: root)
+        let program = AgentProgram(name: "Saved", summary: "Report", script: "pwd", directory: "/missing-working-folder")
+        try store.save([program])
+        XCTAssertEqual(try store.load(), [program])
+        XCTAssertThrowsError(try store.command(for: program))
+        XCTAssertEqual(try store.load(), [program], "A missing working folder must never remove a program")
+        let catalog = root.appendingPathComponent("catalog.json")
+        try Data("damaged".utf8).write(to: catalog)
+        XCTAssertThrowsError(try store.load())
+        XCTAssertThrowsError(try store.save([]), "Do not replace damaged catalog or backup")
+        XCTAssertEqual(try store.restoreBackup(), [program])
+        XCTAssertEqual(try store.load(), [program])
+        XCTAssertTrue(try FileManager.default.contentsOfDirectory(atPath: root.path).contains { $0.hasPrefix("catalog-before-restore-") })
+        try FileManager.default.removeItem(at: catalog)
+        XCTAssertThrowsError(try store.load(), "Missing catalog must not silently appear empty when a backup exists")
+        XCTAssertEqual(try store.restoreBackup(), [program])
+    }
+
+    func testProgramMentionCompletionAndResolution() {
+        let program = AgentProgram(name: "YouTube captions", summary: "Captions", script: "print ok", directory: "/tmp")
+        XCTAssertEqual(ProgramMention.query(in: "Run @you"), "you")
+        XCTAssertEqual(ProgramMention.query(in: "@"), "")
+        XCTAssertNil(ProgramMention.query(in: "hello@example.com"))
+        XCTAssertNil(ProgramMention.query(in: "@youtube-captions "))
+        XCTAssertNil(ProgramMention.query(in: ""))
+        let inserted = ProgramMention.inserting(program, into: "Run @you", programs: [program])
+        XCTAssertEqual(inserted, "Run @youtube-captions ")
+        XCTAssertEqual(ProgramMention.resolve(inserted + "https://example.com", programs: [program]), [program])
+        XCTAssertTrue(ProgramMention.resolve("@youtube", programs: [program]).isEmpty)
+        let duplicate = AgentProgram(name: program.name, summary: "Other", script: "pwd", directory: "/tmp")
+        let programs = [program, duplicate]
+        XCTAssertNotEqual(ProgramMention.handle(program, in: programs), ProgramMention.handle(duplicate, in: programs))
+        XCTAssertEqual(ProgramMention.resolve("@" + ProgramMention.handle(duplicate, in: programs), programs: programs), [duplicate])
+    }
+
+    func testProgramArgumentsArriveLiterallyWithoutShellEvaluation() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = AgentProgramStore(directory: root)
+        let program = AgentProgram(name: "Arguments", summary: "Print inputs", script: "printf '%s\\n' \"$#\" \"$@\"", directory: "/tmp")
+        let arguments = ["https://www.youtube.com/watch?v=3bL6IpdgddQ&list=example", "a path with spaces", "it's literal", "$(printf INJECTED); `pwd`"]
+        let command = try store.command(for: program, arguments: arguments)
+        let result = try await AgentCommandRunner().run(command: command, directory: URL(fileURLWithPath: "/tmp"))
+        XCTAssertEqual(result.exitCode, 0)
+        XCTAssertEqual(result.output, (["4"] + arguments).joined(separator: "\n") + "\n")
+    }
+
+    func testProgramRunEnvelopeRetainsURLAndLegacyProposalStillDecodes() throws {
+        let id = UUID().uuidString
+        let text = "<SORA_PROGRAM>{\"action\":\"run\",\"id\":\"" + id + "\",\"arguments\":[\"https://www.youtube.com/watch?v=abc&list=def\"]}</SORA_PROGRAM>"
+        XCTAssertEqual(AgentProgramProposal.match(text)?.proposal.arguments, ["https://www.youtube.com/watch?v=abc&list=def"])
+        XCTAssertFalse(AgentEnvelope.needsRepair(text))
+        let old = Data(("{\"action\":\"run\",\"id\":\"" + id + "\",\"status\":\"pending\"}").utf8)
+        XCTAssertNil(try JSONDecoder().decode(AgentProgramProposal.self, from: old).arguments)
+        XCTAssertEqual(ProgramArguments.lines("one URL\na path with spaces"), ["one URL", "a path with spaces"])
+        XCTAssertFalse(ProgramArguments.isValid(["bad\0argument"]))
+        XCTAssertFalse(ProgramArguments.isValid(Array(repeating: "a", count: 33)))
+    }
+
+    func testStrictProgramEnvelopesAndMixedActions() throws {
+        let payload = ["action": "save", "name": "Report", "summary": "Print report", "script": "set -e\nprintf 'hello\\n'\n"]
+        let text = "<SORA_PROGRAM>" + String(decoding: try JSONEncoder().encode(payload), as: UTF8.self) + "</SORA_PROGRAM>"
+        XCTAssertEqual(AgentProgramProposal.match(text)?.proposal.script, payload["script"])
+        XCTAssertFalse(AgentEnvelope.needsRepair(text))
+        XCTAssertTrue(AgentEnvelope.needsRepair(text + text))
+        XCTAssertTrue(AgentEnvelope.needsRepair("<SORA_PROGRAM>{\"action\":\"run\",\"id\":\"../../bad\"}</SORA_PROGRAM>"))
+        XCTAssertFalse(AgentProgram.valid(name: "bad\nname", summary: "summary", script: "ls"))
+        XCTAssertFalse(AgentProgram.valid(name: "name", summary: "summary", script: String(repeating: "x", count: 24_001)))
+        XCTAssertFalse(AgentProgram.valid(name: "name", summary: "summary", script: "ls\0"))
+    }
+
+    func testCorruptCatalogIsNotOverwrittenByLoading() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let url = root.appendingPathComponent("catalog.json")
+        let data = Data("not json".utf8)
+        try data.write(to: url)
+        XCTAssertThrowsError(try AgentProgramStore(directory: root).load())
+        XCTAssertEqual(try Data(contentsOf: url), data)
+    }
+
+    func testScriptPathQuotesAndRegeneratesFromSavedSource() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("Sora's programs " + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = AgentProgramStore(directory: root)
+        let program = AgentProgram(name: "Report", summary: "Print", script: "print hello", directory: "/tmp")
+        let command = try store.command(for: program)
+        XCTAssertTrue(command.contains("'\\''"))
+        let file = root.appendingPathComponent(program.id.uuidString + ".sh")
+        try Data("print changed".utf8).write(to: file)
+        _ = try store.command(for: program)
+        XCTAssertEqual(try String(contentsOf: file, encoding: .utf8), program.script)
+        let attributes = try FileManager.default.attributesOfItem(atPath: file.path)
+        XCTAssertEqual(attributes[.posixPermissions] as? Int, 0o600)
+    }
 }

@@ -13,16 +13,50 @@ enum AgentEnvelope {
     Answer the original request again. Emit at most ONE action: either
     <SORA_COMMAND>{"summary":"Short single-line summary","command":"single-line zsh command"}</SORA_COMMAND>
     or <SORA_WEBPAGE>{"summary":"Short single-line summary","url":"https://example.com/path"}</SORA_WEBPAGE>.
+    or one valid <SORA_PROGRAM> save/run proposal as described in the system instructions.
     Use valid JSON: escape embedded double quotes and backslashes. Include the
     closing tag. Keep summary under 600 UTF-8 bytes and command under 4096 bytes.
-    Do not put literal or escaped newlines, tabs, or control characters in values.
+    Only program script values may contain JSON-escaped newlines and tabs.
+    Do not put control characters in other values.
     If no valid action is appropriate, give a plain-language answer without tags.
     """
+
+    static func repairFeedback(for text: String, attempt: Int) -> String {
+        var reasons: [String] = []
+        let tags = ["COMMAND", "WEBPAGE", "PROGRAM"]
+        if text.components(separatedBy: "<SORA_").count > 2 {
+            reasons.append("Multiple actions were returned. Return only the first necessary action, then wait for its result.")
+        }
+        for tag in tags where text.contains("<SORA_" + tag + ">") {
+            let closing = "</SORA_" + tag + ">"
+            if !text.contains(closing) { reasons.append("Missing closing tag: " + closing) }
+        }
+        if let span = span(in: text, opening: "<SORA_COMMAND>", closing: "</SORA_COMMAND>"),
+           let object = try? JSONSerialization.jsonObject(with: Data(span.json.utf8)) as? [String: Any] {
+            if let command = object["command"] as? String {
+                if command.utf8.count > 4096 { reasons.append("The command exceeds 4096 bytes. Split the task into smaller actions.") }
+                if command.contains("\n") || command.contains("\r") || command.contains("\t") {
+                    reasons.append("The command contains a newline or tab. Use a single-line command, e.g. python3 -c with JSON-escaped shell quotes, or split the work into smaller commands. Do not use a multiline heredoc.")
+                }
+            } else { reasons.append("The command field is missing or is not a string.") }
+            if let summary = object["summary"] as? String, summary.utf8.count > 600 {
+                reasons.append("The summary exceeds 600 bytes. Use a short sentence.")
+            }
+        }
+        if reasons.isEmpty {
+            reasons.append("Invalid JSON, unsupported action tag, or invalid required fields. Use exactly the documented schema and limits; do not introduce a new action type.")
+        }
+        if attempt > 1 {
+            reasons.append("Repair failed again. Change approach: propose one short prerequisite or inspection command instead of regenerating the same complex action. Keep working toward the user's goal. If genuinely blocked, explain the specific blocker in plain text without action tags.")
+        }
+        return repairInstruction + "\n\nValidation feedback:\n" + reasons.joined(separator: "\n")
+    }
 
     static func needsRepair(_ text: String) -> Bool {
         guard text.contains("<SORA_") || text.contains("</SORA_") else { return false }
         return AgentCommandProposalParser.match(text) == nil
             && AgentWebpageProposalParser.match(text) == nil
+            && AgentProgramProposal.match(text) == nil
     }
 
     struct Span: Equatable {

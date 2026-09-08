@@ -33,8 +33,10 @@
 		DD000000000000000000012C /* AIBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD0000000000000000000064 /* AIBackend.swift */; };
 		DD00000000000000000000C9 /* HTTPAIProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD0000000000000000000065 /* HTTPAIProvider.swift */; };
 		FA0150000000000000000001 /* ProviderAPIError.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0150000000000000000003 /* ProviderAPIError.swift */; };
+		FA0160000000000000000001 /* AgentProgram.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0160000000000000000003 /* AgentProgram.swift */; };
 		DD000000000000000000012D /* HTTPAIProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD0000000000000000000065 /* HTTPAIProvider.swift */; };
 		FA0150000000000000000002 /* ProviderAPIError.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0150000000000000000003 /* ProviderAPIError.swift */; };
+		FA0160000000000000000002 /* AgentProgram.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0160000000000000000003 /* AgentProgram.swift */; };
 		DD00000000000000000000CA /* CodexConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD0000000000000000000066 /* CodexConnection.swift */; };
 		DD000000000000000000012E /* CodexConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD0000000000000000000066 /* CodexConnection.swift */; };
 		DD00000000000000000000CB /* CodexProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD0000000000000000000067 /* CodexProvider.swift */; };
@@ -183,6 +185,7 @@
 		DD0000000000000000000064 /* AIBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIBackend.swift; sourceTree = "<group>"; };
 		DD0000000000000000000065 /* HTTPAIProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPAIProvider.swift; sourceTree = "<group>"; };
 		FA0150000000000000000003 /* ProviderAPIError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderAPIError.swift; sourceTree = "<group>"; };
+		FA0160000000000000000003 /* AgentProgram.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../Agent/AgentProgram.swift; sourceTree = "<group>"; };
 		DD0000000000000000000066 /* CodexConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexConnection.swift; sourceTree = "<group>"; };
 		DD0000000000000000000067 /* CodexProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexProvider.swift; sourceTree = "<group>"; };
 		DD0000000000000000000068 /* CodexLogin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexLogin.swift; sourceTree = "<group>"; };
@@ -298,6 +301,7 @@
 				DD0000000000000000000064 /* AIBackend.swift */,
 				DD0000000000000000000065 /* HTTPAIProvider.swift */,
 				FA0150000000000000000003 /* ProviderAPIError.swift */,
+				FA0160000000000000000003 /* AgentProgram.swift */,
 				DD0000000000000000000066 /* CodexConnection.swift */,
 				DD0000000000000000000067 /* CodexProvider.swift */,
 				DD0000000000000000000068 /* CodexLogin.swift */,
@@ -605,6 +609,7 @@
 				DD00000000000000000000C8 /* AIBackend.swift in Sources */,
 				DD00000000000000000000C9 /* HTTPAIProvider.swift in Sources */,
 				FA0150000000000000000001 /* ProviderAPIError.swift in Sources */,
+				FA0160000000000000000001 /* AgentProgram.swift in Sources */,
 				DD00000000000000000000CA /* CodexConnection.swift in Sources */,
 				DD00000000000000000000CB /* CodexProvider.swift in Sources */,
 				DD00000000000000000000CC /* CodexLogin.swift in Sources */,
@@ -677,6 +682,7 @@
 				DD000000000000000000012C /* AIBackend.swift in Sources */,
 				DD000000000000000000012D /* HTTPAIProvider.swift in Sources */,
 				FA0150000000000000000002 /* ProviderAPIError.swift in Sources */,
+				FA0160000000000000000002 /* AgentProgram.swift in Sources */,
 				DD000000000000000000012E /* CodexConnection.swift in Sources */,
 				DD000000000000000000012F /* CodexProvider.swift in Sources */,
 				DD0000000000000000000130 /* CodexLogin.swift in Sources */,

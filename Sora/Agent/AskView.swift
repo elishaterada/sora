@@ -8,11 +8,13 @@ struct AskView: View {
     var onRunCommand: ((UUID) -> Void)?
     @StateObject private var voiceInput = VoiceInputController()
     @StateObject private var realtimeVoice = RealtimeVoiceController()
+    @State private var transcriptLimit = 40
+    @State private var showsPrograms = false
+    @State private var programDirectories: [UUID: String] = [:]
+    @State private var programArguments: [UUID: String] = [:]
     @State private var dictationPrefix = ""
     @State private var realtimeStartError: String?
-    @State private var streamingScrollTask: Task<Void, Never>?
     @FocusState private var composerFocused: Bool
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var visibleMessages: [AIMessage] {
         session.messages.filter { $0.isAgentContinuation != true }
@@ -28,13 +30,19 @@ struct AskView: View {
             if realtimeVoice.isActive || realtimeVoice.errorMessage != nil || realtimeStartError != nil {
                 realtimeVoiceBar
             }
-            ScrollViewReader { proxy in
+            Group {
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 18) {
+                    // Avoid LazyVStack placement feedback during streaming and
+                    // disclosure expansion. Bound eager layout; retain full history.
+                    VStack(alignment: .leading, spacing: 18) {
+                        if visibleMessages.count > transcriptLimit {
+                            Button("Show earlier messages") { transcriptLimit += 40 }
+                                .buttonStyle(.borderless)
+                        }
                         if visibleMessages.isEmpty {
                             emptyState
                         }
-                        ForEach(visibleMessages) { message in
+                        ForEach(Array(visibleMessages.suffix(transcriptLimit))) { message in
                             messageView(message)
                         }
                         Color.clear.frame(height: 1).id("bottom")
@@ -44,14 +52,8 @@ struct AskView: View {
                     .frame(maxWidth: 760, alignment: .leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .onChange(of: session.messages.last?.text) { _ in
-                    scheduleStreamingScroll(using: proxy)
-                }
-                .onChange(of: session.messages.count) { _ in proxy.scrollTo("bottom", anchor: .bottom) }
-                .onDisappear {
-                    streamingScrollTask?.cancel()
-                    streamingScrollTask = nil
-                }
+
+
             }
 
             if let error = session.errorMessage {
@@ -69,10 +71,21 @@ struct AskView: View {
         .frame(minWidth: inline ? 0 : 540, minHeight: inline ? 0 : 560)
         .preferredColorScheme(.dark)
         .tint(SoraTheme.accent)
+        .sheet(isPresented: $showsPrograms) {
+            AgentProgramsView(session: session)
+        }
         .onAppear {
             session.load()
+            #if DEBUG
+            Task { @MainActor in
+                await Task.yield()
+                session.startTranscriptStressTest()
+            }
+            #endif
         }
+        .onChange(of: session.activeTabID) { _ in transcriptLimit = 40 }
         .onChange(of: session.selectedProvider) { _ in
+            transcriptLimit = 40
             voiceInput.stop()
             realtimeVoice.stop()
         }
@@ -88,28 +101,6 @@ struct AskView: View {
         .onChange(of: voiceInput.transcript) { transcript in
             guard !transcript.isEmpty else { return }
             session.draft = dictationPrefix + transcript
-        }
-    }
-
-    /// Coalesce token-sized changes into a steady visual cadence. This is a
-    /// throttle rather than a debounce, so a response that never pauses still
-    /// follows the newest content. The scroll target remains the live bottom.
-    private func scheduleStreamingScroll(using proxy: ScrollViewProxy) {
-        guard streamingScrollTask == nil else { return }
-        let shouldReduceMotion = reduceMotion
-
-        streamingScrollTask = Task { @MainActor in
-            defer { streamingScrollTask = nil }
-            try? await Task.sleep(nanoseconds: 75_000_000)
-            guard !Task.isCancelled else { return }
-
-            if shouldReduceMotion {
-                proxy.scrollTo("bottom", anchor: .bottom)
-            } else {
-                withAnimation(SoraTheme.motionStreamingScroll) {
-                    proxy.scrollTo("bottom", anchor: .bottom)
-                }
-            }
         }
     }
 
@@ -174,6 +165,13 @@ struct AskView: View {
 
                 Spacer(minLength: SoraTheme.space2)
 
+                Button("Programs", systemImage: "terminal") {
+                    session.reloadPrograms()
+                    showsPrograms = true
+                }
+                .buttonStyle(.borderless)
+                .help("Review and run saved programs without using AI tokens")
+
                 Button {
                     toggleRealtimeVoice()
                 } label: {
@@ -194,6 +192,8 @@ struct AskView: View {
                         .disabled(session.messages.isEmpty)
                 }
                 Menu {
+                    Button("Save Workflow as Program…") { session.requestReusableProgram() }
+                        .disabled(session.messages.isEmpty || !session.enabled || session.isSending || session.isRunningCommand)
                     Button("Agent Settings…") { SoraSettingsOpener.open() }
                     Button("Clear Conversation") { clearConversation() }
                         .disabled(session.messages.isEmpty)
@@ -299,9 +299,44 @@ struct AskView: View {
         .padding(.vertical, inline ? SoraTheme.space2 : 28)
     }
 
+    private var mentionMatches: [AgentProgram] {
+        guard let query = ProgramMention.query(in: session.draft) else { return [] }
+        return session.programs.filter {
+            query.isEmpty || ProgramMention.handle($0, in: session.programs).contains(query)
+                || $0.name.localizedCaseInsensitiveContains(query)
+        }
+    }
+
+    private func insertMention(_ program: AgentProgram) {
+        session.draft = ProgramMention.inserting(program, into: session.draft, programs: session.programs)
+        composerFocused = true
+    }
+
     private var composer: some View {
         VStack(alignment: .leading, spacing: SoraTheme.space2) {
-            TextField(inline ? "Ask a follow up…" : "Ask about a command or paste an error…",
+            if ProgramMention.query(in: session.draft) != nil {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Mention a program · Return selects the first match")
+                        .font(SoraTheme.agentCaption).foregroundStyle(.secondary)
+                    if mentionMatches.isEmpty {
+                        Text("No matching saved programs").font(SoraTheme.agentCaption)
+                    }
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 4) {
+                            ForEach(mentionMatches) { program in
+                                Button { insertMention(program) } label: {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("@" + ProgramMention.handle(program, in: session.programs))
+                                        Text(program.summary).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                                    }.frame(maxWidth: .infinity, alignment: .leading).padding(6)
+                                }.buttonStyle(.plain)
+                                .accessibilityLabel("Mention program " + program.name)
+                            }
+                        }
+                    }.frame(height: CGFloat(min(mentionMatches.count, 4)) * 52)
+                }
+            }
+            TextField(inline ? "Ask a follow up, or @mention a program…" : "Ask a question, or @mention a program…",
                       text: $session.draft, axis: inline ? .horizontal : .vertical)
                 .font(SoraTheme.agentBody)
                 .lineLimit(inline ? 1...3 : 2...5)
@@ -351,6 +386,7 @@ struct AskView: View {
     }
 
     private func submitComposer() {
+        if let first = mentionMatches.first { insertMention(first); return }
         guard session.canSend else { return }
         voiceInput.stop()
         realtimeVoice.stop()
@@ -415,6 +451,9 @@ struct AskView: View {
         if let prose = AgentWebpageProposalParser.proseBeforeEnvelope(in: text) {
             return (prose, "Preparing a webpage…")
         }
+        if let prose = AgentEnvelope.proseBeforeEnvelope(in: text, opening: AgentProgramProposal.openingTag) {
+            return (prose, "Preparing a reusable program…")
+        }
         return nil
     }
 
@@ -446,7 +485,7 @@ struct AskView: View {
                             text: pending.prose,
                             relativeTo: session.agentDirectory,
                             streaming: true
-                        )
+                        ).equatable()
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     InlineProgressLabel(title: pending.title)
@@ -455,9 +494,12 @@ struct AskView: View {
                         text: message.text,
                         relativeTo: session.agentDirectory,
                         streaming: message.status == .streaming
-                    )
+                    ).equatable()
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
+            }
+            if let proposal = message.programProposal {
+                programCard(proposal, message: message)
             }
             if let proposal = message.commandProposal {
                 commandCard(proposal, messageID: message.id)
@@ -499,6 +541,58 @@ struct AskView: View {
                     .font(SoraTheme.agentCaption).foregroundStyle(SoraTheme.muted)
             }
         }
+    }
+
+    private func programCard(_ proposal: AgentProgramProposal, message: AIMessage) -> some View {
+        let saved = session.programs.first { $0.id == proposal.id }
+        return VStack(alignment: .leading, spacing: 10) {
+            Text(proposal.action == .save ? "Save reusable program" : "Run saved program")
+                .font(SoraTheme.agentBodySemibold)
+            Text(proposal.name ?? saved?.name ?? "Program unavailable")
+            Text(proposal.summary ?? saved?.summary ?? "")
+                .font(SoraTheme.agentCaption).foregroundStyle(.secondary)
+            Text("Working directory: " + ((proposal.action == .run ? (programDirectories[message.id] ?? saved?.directory) : message.commandDirectory) ?? "Unavailable"))
+                .font(SoraTheme.agentCaption).textSelection(.enabled)
+            DisclosureGroup("Review zsh script") {
+                Text(proposal.script ?? saved?.script ?? "Program removed from catalog")
+                    .font(.system(.body, design: .monospaced)).textSelection(.enabled)
+            }
+            if proposal.status == .pending && proposal.action == .run {
+                ProgramDirectoryPicker(directory: Binding(
+                    get: { programDirectories[message.id] ?? saved?.directory ?? "" },
+                    set: { programDirectories[message.id] = $0 }
+                ))
+                ProgramArgumentsEditor(text: Binding(
+                    get: { programArguments[message.id] ?? (proposal.arguments ?? []).joined(separator: "\n") },
+                    set: { programArguments[message.id] = $0 }
+                ))
+            }
+            if proposal.status == .pending {
+                Text(proposal.action == .save ? "Save for later; this does not run the script. Review for secrets before saving."
+                     : "Runs locally with your file permissions. No AI tokens are used. Stops after 60 seconds.")
+                    .font(SoraTheme.agentCaption).foregroundStyle(.secondary)
+                HStack {
+                    Button("Dismiss") { session.dismissProgram(messageID: message.id) }
+                    if proposal.action == .save {
+                        Button("Save to Programs") { session.saveProgram(messageID: message.id) }
+                            .disabled(message.commandDirectory == nil || session.programError != nil)
+                    } else if let saved {
+                        Button("Run Program") {
+                            session.runProgram(saved.id,
+                                arguments: ProgramArguments.lines(programArguments[message.id] ?? (proposal.arguments ?? []).joined(separator: "\n")),
+                                workingDirectory: programDirectories[message.id],
+                                proposalMessageID: message.id)
+                        }
+                    }
+                }.disabled(session.isSending || session.isRunningCommand)
+            } else {
+                Text(proposal.status == .approved ? (proposal.action == .save ? "Saved to Programs" : "Run approved") : "Dismissed")
+                    .font(SoraTheme.agentCaption)
+            }
+            if let error = session.programError { Text(error).foregroundStyle(SoraTheme.danger) }
+        }
+        .padding(12)
+        .background(SoraTheme.accent.opacity(0.06))
     }
 
     private func webpageCard(_ proposal: AgentWebpageProposal, messageID: UUID) -> some View {
@@ -575,13 +669,21 @@ struct AskView: View {
     private func commandCard(_ proposal: AgentCommandProposal, messageID: UUID) -> some View {
         let pending = proposal.status == .pending
         let routine = AgentCommandPermission.allowsAutomatically(proposal.command)
+        let message = session.messages.first { $0.id == messageID }
+        let executionTitle: String = {
+            if let result = message?.commandResult {
+                if result.interrupted { return "Command stopped" }
+                return result.exitCode == 0 ? "Command finished" : "Command failed (exit \(result.exitCode))"
+            }
+            return message?.commandState == "failed" ? "Command failed" : "Running command"
+        }()
         let stroke = pending
             ? (routine ? SoraTheme.accent.opacity(0.65) : SoraTheme.warning.opacity(0.75))
             : SoraTheme.accent.opacity(0.45)
         return VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: SoraTheme.space2) {
                 Text(proposal.status == .pending ? "OK if I run this command and read the output?" :
-                     proposal.status == .approved ? "Running command" : "Command dismissed")
+                     proposal.status == .approved ? executionTitle : "Command dismissed")
                     .font(SoraTheme.agentBodySemibold)
                 Spacer(minLength: SoraTheme.space2)
                 if pending {
@@ -600,7 +702,7 @@ struct AskView: View {
                 } else if proposal.status == .approved {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(.green)
-                        .accessibilityLabel("Running command")
+                        .accessibilityLabel(executionTitle)
                 }
             }
             if pending {
@@ -741,5 +843,110 @@ struct AgentPermissionModePicker: View {
             }
         }
         .accessibilityElement(children: .contain)
+    }
+}
+
+
+private struct AgentProgramsView: View {
+    @ObservedObject var session: AskSession
+    @Environment(\.dismiss) private var dismiss
+    @State private var search = ""
+    @State private var selectedID: UUID?
+    @State private var arguments = ""
+    @State private var workingDirectory: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Text("Programs").font(.title2.bold())
+                Spacer()
+                Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
+            }
+            Text("Save a workflow once. Run it again without AI tokens.").foregroundStyle(.secondary)
+            TextField("Search programs", text: $search).textFieldStyle(.roundedBorder)
+            if let error = session.programError {
+                Text(error).foregroundStyle(SoraTheme.danger)
+                Button("Reload catalog") { session.reloadPrograms() }
+                Button("Restore catalog backup") { session.restoreProgramsBackup() }
+            }
+            if session.programs.isEmpty {
+                Text("No saved programs yet. After refining a task with Agent, choose Save Workflow as Program from the conversation menu, or ask Agent to save it.")
+                    .foregroundStyle(.secondary)
+                Spacer()
+            } else {
+                HStack(alignment: .top, spacing: 20) {
+                    List(selection: $selectedID) {
+                        ForEach(session.programs.filter { search.isEmpty || ($0.name + " " + $0.summary).localizedCaseInsensitiveContains(search) }) { program in
+                            Text(program.name).tag(program.id)
+                        }
+                    }.frame(width: 190)
+                    if let program = session.programs.first(where: { $0.id == selectedID }) {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text(program.name).font(.headline)
+                            Text(program.summary)
+                            ProgramDirectoryPicker(directory: Binding(
+                                get: { workingDirectory ?? program.directory },
+                                set: { workingDirectory = $0 }
+                            ))
+                            Text("zsh script · Your file permissions · 60-second limit").font(.caption).foregroundStyle(.secondary)
+                            ScrollView {
+                                Text(program.script).font(.system(.body, design: .monospaced))
+                                    .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            ProgramArgumentsEditor(text: $arguments)
+                            HStack {
+                                Button("Remove from Catalog") { session.removeProgram(program.id) }
+                                Spacer()
+                                Button("Run Program") {
+                                    session.runProgram(program.id, arguments: ProgramArguments.lines(arguments), workingDirectory: workingDirectory)
+                                    dismiss()
+                                }.buttonStyle(.borderedProminent)
+                            }.disabled(session.isSending || session.isRunningCommand || session.programError != nil)
+                        }
+                    } else {
+                        Text("Select a program to review its script and run it.").foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                }
+            }
+        }
+        .padding(24).frame(width: 760, height: 620)
+        .onChange(of: selectedID) { _ in arguments = ""; workingDirectory = nil }
+    }
+}
+
+
+private struct ProgramArgumentsEditor: View {
+    @Binding var text: String
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Arguments").font(.caption.bold())
+            TextField("Paste a URL or other input", text: $text, axis: .vertical)
+                .textFieldStyle(.roundedBorder)
+                .lineLimit(1...4)
+                .accessibilityLabel("Program arguments")
+            Text("One argument per line, in script order. Keep spaces as-is; no quotes needed.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+    }
+}
+
+
+private struct ProgramDirectoryPicker: View {
+    @Binding var directory: String
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Working folder: " + directory).font(.caption).textSelection(.enabled)
+            Button("Choose Working Folder…") {
+                let panel = NSOpenPanel()
+                panel.canChooseDirectories = true
+                panel.canChooseFiles = false
+                panel.allowsMultipleSelection = false
+                panel.prompt = "Use Folder"
+                if panel.runModal() == .OK, let url = panel.url { directory = url.path }
+            }
+            Text("Changes the folder for this run; the saved program stays in your catalog.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
     }
 }
