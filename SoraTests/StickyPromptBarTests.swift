@@ -28,6 +28,29 @@ final class StickyPromptBarTests: XCTestCase {
         XCTAssertEqual(boundary.cursorPrefix, "")
     }
 
+    func testLongPromptUsesBoundedTextMeasurementWork() {
+        let text = String(repeating: "abcdefghij", count: 1000)
+        var measuredCharacters = 0
+        let wrapped = StickyPromptBarModel.wrap(text, cursorOffset: text.count, width: 80) {
+            measuredCharacters += $0.count
+            return CGFloat($0.count)
+        }
+        XCTAssertEqual(wrapped.lines.joined(), text)
+        XCTAssertTrue(wrapped.lines.allSatisfy { $0.count <= 80 })
+        XCTAssertLessThan(measuredCharacters, text.count * 12)
+    }
+
+    func testEmptyLinesAndWideUnicodeKeepCursorPositions() {
+        let empty = StickyPromptBarModel.wrap("", cursorOffset: 0, width: 1) { CGFloat($0.count) }
+        XCTAssertEqual(empty.lines, [""])
+        let line = "a\n\n😀b\n"
+        let result = StickyPromptBarModel.wrap(line, cursorOffset: 4, width: 1) { CGFloat($0.count) }
+        XCTAssertEqual(result.lines, ["a", "", "😀", "b", ""])
+        XCTAssertEqual(result.starts, [0, 2, 3, 4, 6])
+        XCTAssertEqual(result.cursorRow, 3)
+        XCTAssertEqual(result.cursorPrefix, "")
+    }
+
     func testInputNeverAppendsSuggestionToShellText() {
         XCTAssertEqual(StickyPromptBarModel.inputText(buffer: "ls -lah", prediction: "ls"), "ls -lah")
         XCTAssertEqual(StickyPromptBarModel.inputText(buffer: "ls -lah", prediction: nil), "ls -lah")

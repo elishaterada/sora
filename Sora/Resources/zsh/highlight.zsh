@@ -12,11 +12,8 @@ _sora_is_space() {
 
 _sora_command_exists() {
   emulate -L zsh
-  local w=$1 kind
-  [[ -n $w ]] || return 1
-  kind=$(whence -w -- "$w")
-  kind=${kind##*: }
-  [[ $kind != none && -n $kind ]]
+  [[ -n $1 ]] || return 1
+  builtin whence -w -- "$1" >/dev/null 2>&1
 }
 
 _sora_highlight_apply() {
@@ -25,6 +22,8 @@ _sora_highlight_apply() {
   region_highlight=()
   local buf=$BUFFER
   local -i len=${#buf} i=1 cmdpos=1 start end
+  # Coloring is optional; never let a large paste stall ZLE's input/redraw loop.
+  (( len <= 1024 )) || return 0
   local ch word style quote
 
   while (( i <= len )); do

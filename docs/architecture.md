@@ -375,3 +375,18 @@ History checkpoints omit the standalone restore banner and its launch spacer.
 Only the fresh shell prints a session boundary; previously accumulated banners
 are cleaned on the next checkpoint and disappear on the following relaunch.
 SGR styling and other output are retained.
+
+
+### Input performance
+
+Completion lookup runs on a serial worker, retaining only the latest pending
+request and rejecting results after edits, directory changes, or command start.
+The worker only uses the FULLMUTEX history connection's query methods; UI-facing
+history publication stays on the main thread. Fullscreen input bypasses shell
+completion. The bundled zsh preexec hook sends a command-start sentinel so a late
+ZLE redraw cannot leave prompt routing active while a command runs. Prompt layout
+caches unchanged wrapping and bounds text-shaping calls. Optional zsh coloring
+stops above 1,024 characters to keep large buffers editable.
+
+See [input performance](input-performance.md) for measured baselines, stress
+tests, reproducible commands, and measurement limitations.

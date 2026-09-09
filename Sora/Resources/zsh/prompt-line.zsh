@@ -49,3 +49,11 @@ _sora_install_draft_restore() {
 }
 typeset -ag precmd_functions
 precmd_functions+=(_sora_install_draft_restore)
+
+# A final ZLE redraw can arrive after Return. Explicitly end prompt mode after
+# that redraw so fullscreen clients never inherit shell completion/routing.
+_sora_report_command_started() {
+  builtin printf '\e]2;%s\a' $'\u2400sora-command-started\u2400'
+}
+typeset -ag preexec_functions
+preexec_functions+=(_sora_report_command_started)

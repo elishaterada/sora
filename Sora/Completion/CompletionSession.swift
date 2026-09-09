@@ -14,6 +14,77 @@ final class CompletionSession {
     private(set) var suggestion: CompletionSuggestion?
     private(set) var lastSuccessfulCommand: String?
     private var predictionDismissed = false
+    private let worker: DispatchQueue
+    private var inFlight = false
+    private var latestRequest: Request?
+    private var completedKey: Key?
+
+    private struct Key: Equatable {
+        var line: String
+        var tracking: Bool
+        var previous: String?
+        var dismissed: Bool
+        var cwd: URL
+    }
+    private struct Request {
+        var key: Key
+        var history: CommandHistoryStore
+        var completion: () -> Void
+    }
+
+    init(worker: DispatchQueue = DispatchQueue(label: "dev.sora.completion", qos: .userInitiated)) {
+        self.worker = worker
+    }
+
+    private func key(cwd: URL) -> Key {
+        Key(line: buffer.text, tracking: buffer.isTracking, previous: lastSuccessfulCommand,
+            dismissed: predictionDismissed, cwd: cwd)
+    }
+
+    /// Only one lookup runs at a time. While it runs, retain only the newest
+    /// request; obsolete results can never replace the current suggestion.
+    func refreshAsync(cwd: URL, history: CommandHistoryStore, completion: @escaping () -> Void) {
+        let current = key(cwd: cwd)
+        guard current != completedKey else { return }
+        latestRequest = Request(key: current, history: history, completion: completion)
+        startLatestRequest()
+    }
+
+    private func startLatestRequest() {
+        guard !inFlight, let request = latestRequest else { return }
+        guard request.key.tracking else { latestRequest = nil; return }
+        inFlight = true
+        let snapshot = CompletionSession(worker: worker)
+        snapshot.buffer = buffer
+        snapshot.lastSuccessfulCommand = lastSuccessfulCommand
+        snapshot.predictionDismissed = predictionDismissed
+        worker.async { [weak self] in
+            // SQLite's connection is FULLMUTEX; these methods only read and do
+            // not touch the store's @Published recent list.
+            snapshot.refresh(cwd: request.key.cwd, history: request.history)
+            let result = snapshot.suggestion
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.inFlight = false
+                if self.latestRequest?.key == request.key,
+                   self.key(cwd: request.key.cwd) == request.key {
+                    self.suggestion = result
+                    self.completedKey = request.key
+                    self.latestRequest = nil
+                    request.completion()
+                } else if self.latestRequest?.key == request.key {
+                    self.latestRequest = nil
+                }
+                self.startLatestRequest()
+            }
+        }
+    }
+
+    private func invalidateLookup() {
+        completedKey = nil
+        latestRequest = nil
+        suggestion = nil
+    }
 
     func applyMouseFocus(isShellPromptReady: Bool) {
         if let event = PromptEvent.mouseFocusEvent(isShellPromptReady: isShellPromptReady, buffer: buffer) {
@@ -34,10 +105,11 @@ final class CompletionSession {
            let suggestion {
             buffer.apply(.insert(suggestion.insertSuffix))
             let suffix = suggestion.insertSuffix
-            self.suggestion = nil
+            invalidateLookup()
             return .accept(suffix)
         }
 
+        invalidateLookup()
         if let event = PromptEvent.from(keyCode: keyCode, characters: characters, modifiers: modifiers) {
             buffer.apply(event)
             if keyCode == PromptEvent.escape
@@ -54,6 +126,7 @@ final class CompletionSession {
     }
 
     func handlePaste(_ text: String) {
+        invalidateLookup()
         if text.contains(where: { $0 == "\n" || $0 == "\r" }) {
             buffer.apply(.reset)
             suggestion = nil
@@ -63,17 +136,20 @@ final class CompletionSession {
     }
 
     func stopTracking() {
+        invalidateLookup()
         buffer.apply(.stopTracking)
         suggestion = nil
         predictionDismissed = true
     }
 
     func reset() {
+        invalidateLookup()
         buffer.apply(.reset)
         suggestion = nil
     }
 
     func rememberSuccessfulCommand(_ command: String) {
+        invalidateLookup()
         lastSuccessfulCommand = command
         predictionDismissed = false
     }

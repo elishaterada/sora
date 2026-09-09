@@ -10,32 +10,44 @@ enum StickyPromptBarModel {
 
     static func wrap(_ text: String, cursorOffset: Int, width: CGFloat,
                      measure: (String) -> CGFloat) -> WrappedInput {
-        var lines = [""]
-        var starts = [0]
+        var lines: [String] = []
+        var starts: [Int] = []
         var consumed = 0
         var cursorRow = 0
         var cursorPrefix = ""
-        for character in text {
-            let value = String(character)
-            if character == "\n" {
-                lines.append("")
-                starts.append(consumed + value.unicodeScalars.count)
-            } else {
-                if !lines[lines.count - 1].isEmpty && measure(lines[lines.count - 1] + value) > max(1, width) {
-                    lines.append("")
-                    starts.append(consumed)
-                    if consumed == cursorOffset {
-                        cursorRow = lines.count - 1
-                        cursorPrefix = ""
+        let paragraphs = text.split(separator: "\n", omittingEmptySubsequences: false)
+        for (paragraphIndex, paragraph) in paragraphs.enumerated() {
+            let characters = Array(paragraph)
+            var start = 0
+            repeat {
+                // Find the longest fitting prefix with logarithmic text shaping
+                // calls, rather than reshaping every growing prefix per glyph.
+                var lower = min(start + 1, characters.count)
+                var upper = lower
+                while upper < characters.count,
+                      measure(String(characters[start..<upper])) <= max(1, width) {
+                    lower = upper
+                    upper = min(characters.count, start + max(1, (upper - start) * 2))
+                }
+                while lower < upper {
+                    let middle = lower + (upper - lower + 1) / 2
+                    if measure(String(characters[start..<middle])) <= max(1, width) {
+                        lower = middle
+                    } else {
+                        upper = middle - 1
                     }
                 }
-                lines[lines.count - 1] += value
-            }
-            consumed += value.unicodeScalars.count
-            if consumed <= cursorOffset {
-                cursorRow = lines.count - 1
-                cursorPrefix = lines.last ?? ""
-            }
+                let line = String(characters[start..<lower])
+                starts.append(consumed)
+                lines.append(line)
+                if consumed <= cursorOffset {
+                    cursorRow = lines.count - 1
+                    cursorPrefix = String(line.unicodeScalars.prefix(max(0, cursorOffset - consumed)))
+                }
+                consumed += line.unicodeScalars.count
+                start = lower
+            } while start < characters.count
+            if paragraphIndex < paragraphs.count - 1 { consumed += 1 }
         }
         return WrappedInput(lines: lines, starts: starts, cursorRow: cursorRow, cursorPrefix: cursorPrefix)
     }
