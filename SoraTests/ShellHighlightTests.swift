@@ -50,6 +50,10 @@ final class ShellHighlightTests: XCTestCase {
         XCTAssertEqual(output, "paste:none")
     }
 
+    func testLargePasteSkipsOptionalHighlighting() throws {
+        XCTAssertTrue(try highlight("echo " + String(repeating: "x", count: 2000)).isEmpty)
+    }
+
     private func highlight(_ buffer: String) throws -> [String] {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

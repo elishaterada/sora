@@ -4,6 +4,27 @@ Human-readable highlights for each Sora release live here. Add the newest
 version before creating its `vX.Y.Z` tag; the release workflow requires a
 matching section and publishes it to GitHub.
 
+## 0.1.10 — 2026-09-08
+
+### What’s new
+
+- Receive native macOS notifications when background terminal programs, including compatible CLI agents, request your attention. Click an alert to return to its tab.
+- Control terminal alerts and check macOS notification permission in Settings → Terminal → Notifications.
+
+### Fixes
+
+- Keep typing responsive while command suggestions search large folders or command histories.
+- Reduce the work needed to display long prompts and color shell input.
+- Stop shell suggestions from interfering with fullscreen programs such as Codex CLI and Vim.
+- Prevent delayed suggestions from replacing newer input or being accepted after you edit the command.
+
+### Known limitations
+
+- Notifications depend on the CLI emitting a supported signal and macOS allowing alerts.
+- Very long shell input skips optional syntax coloring to keep editing responsive.
+- Performance improvements were measured locally; responsiveness can still vary with shell plugins, displays, and other system activity.
+- Agent conversations do not yet restore after relaunch. Large Agent histories can still load slowly.
+
 ## 0.1.9 — 2026-09-08
 
 ### What’s new

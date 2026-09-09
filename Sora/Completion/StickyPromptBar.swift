@@ -16,6 +16,14 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
     var onAcceptPrediction: (() -> Void)?
     var onToggleDictation: (() -> Void)?
 
+    private struct WrapKey: Equatable {
+        let text: String
+        let cursor: Int
+        let width: CGFloat
+        let font: NSFont
+    }
+    private var wrappedKey: WrapKey?
+    private var wrappedInput: StickyPromptBarModel.WrappedInput?
     private var promptReady = false
     private var hasInput = false
     private var focusObservers: [NSObjectProtocol] = []
@@ -33,6 +41,7 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
     private var hintUpdate: DispatchWorkItem?
     private var desiredHint = "" {
         didSet {
+            guard desiredHint != oldValue else { return }
             hintUpdate?.cancel()
             let text = desiredHint
             let update = DispatchWorkItem { [weak self] in
@@ -191,8 +200,16 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
         branchButton.frame = NSRect(x: pathButton.frame.maxX + 8, y: contextY, width: branchWidth, height: chipHeight)
         let font = lineLabel.font ?? SoraTheme.terminalFont
         let width = max(1, bounds.width - inset * 2 - 24 - 8)
-        let wrapped = StickyPromptBarModel.wrap(displayText, cursorOffset: caretScalarOffset, width: width) {
-            ($0 as NSString).size(withAttributes: [.font: font]).width
+        let key = WrapKey(text: displayText, cursor: caretScalarOffset, width: width, font: font)
+        let wrapped: StickyPromptBarModel.WrappedInput
+        if wrappedKey == key, let cached = wrappedInput {
+            wrapped = cached
+        } else {
+            wrapped = StickyPromptBarModel.wrap(displayText, cursorOffset: caretScalarOffset, width: width) {
+                ($0 as NSString).size(withAttributes: [.font: font]).width
+            }
+            wrappedKey = key
+            wrappedInput = wrapped
         }
         let lines = wrapped.lines
         let visibleLines = min(6, max(1, lines.count))
@@ -299,7 +316,10 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
     }
 
     func updateSuggestion(_ suffix: String?) {
-        guard promptReady, let suffix, !suffix.isEmpty else { return }
+        guard promptReady, let suffix, !suffix.isEmpty else {
+            hintLabel.toolTip = nil
+            return
+        }
         desiredHint = "Tab  Complete: " + suffix.replacingOccurrences(of: "\n", with: " ↵ ")
         hintLabel.isHidden = false
         hintLabel.toolTip = suffix
@@ -307,6 +327,8 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
     }
 
     func updateCaret(text: String, scalarOffset: Int, visible: Bool) {
+        let offset = min(max(0, scalarOffset), text.unicodeScalars.count)
+        guard caretText != text || caretScalarOffset != offset || caretVisible != visible else { return }
         if caretText != text { clearInputSelection() }
         caretText = text
         caretScalarOffset = min(max(0, scalarOffset), text.unicodeScalars.count)
@@ -315,6 +337,7 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
     }
 
     func updatePromptReady(_ ready: Bool) {
+        guard promptReady != ready else { return }
         promptReady = ready
         if !hasInput {
             lineLabel.stringValue = ready ? "Type a command, or ask Agent…" : "Command running…"
@@ -396,6 +419,7 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
     }
 
     func clearInputSelection() {
+        guard selectionAnchor != nil || selectionRange != nil else { return }
         selectionAnchor = nil
         selectionRange = nil
         needsLayout = true
@@ -501,11 +525,11 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
 /// Path/branch chip matching chrome `ContextChip`: icon + label, hover wash, menu.
 private final class StickyContextChipButton: NSButton {
     var symbolName = "folder" {
-        didSet { rebuildTitle() }
+        didSet { if oldValue != symbolName { rebuildTitle() } }
     }
 
     var chipTitle = "" {
-        didSet { rebuildTitle() }
+        didSet { if oldValue != chipTitle { rebuildTitle() } }
     }
 
     private var hovering = false

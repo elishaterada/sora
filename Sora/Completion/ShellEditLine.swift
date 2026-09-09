@@ -5,6 +5,7 @@ import Foundation
 /// desyncs on paste, history recall, and completion, and the rendered grid has
 /// no prompt boundary to scrape because `PS1` is empty.
 enum ShellEditLine {
+    static let commandStartedTitle = "\u{2400}sora-command-started\u{2400}"
     static let multilineSentinel = "\u{2400}sora-multiline\u{2400}"
     static let inputSentinel = "\u{2400}sora-input\u{2400}"
 

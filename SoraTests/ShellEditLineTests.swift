@@ -1,6 +1,23 @@
 import XCTest
 
 final class ShellEditLineTests: XCTestCase {
+    func testShellEmitsDistinctCommandStartedSignal() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        process.environment = ProcessInfo.processInfo.environment.merging(["LC_ALL": "en_US.UTF-8"]) { _, value in value }
+        process.arguments = ["-f", "-c", "source \"$1\"; _sora_report_command_started", "test", root.appendingPathComponent("Sora/Resources/zsh/prompt-line.zsh").path]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        try process.run()
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        XCTAssertEqual(process.terminationStatus, 0)
+        XCTAssertEqual(String(data: data, encoding: .utf8), "\u{1b}]2;" + ShellEditLine.commandStartedTitle + "\u{07}")
+        XCTAssertNil(ShellEditLine.parse(title: ShellEditLine.commandStartedTitle))
+        XCTAssertFalse(ShellEditLine.isMirror(title: ShellEditLine.commandStartedTitle))
+    }
+
     func testMultilineTransportPreservesLiteralEscapesAndCursor() {
         let title = ShellEditLine.multilineSentinel + "8;1;echo a%0Aecho %250A"
         XCTAssertEqual(ShellEditLine.parse(title: title), "echo a\necho %0A")
