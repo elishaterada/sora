@@ -34,7 +34,8 @@ enum TerminalHistoryArchive {
     /// terminal commands so restoring a transcript cannot invoke side effects.
     static func sanitized(_ text: String) -> String {
         let chars = Array(text.unicodeScalars)
-        var result = ""
+        var result: [Unicode.Scalar] = []
+        result.reserveCapacity(chars.count)
         var index = 0
         while index < chars.count {
             let scalar = chars[index]
@@ -48,7 +49,7 @@ enum TerminalHistoryArchive {
                     while index < chars.count, (0x30...0x3f).contains(chars[index].value) { index += 1 }
                     let valid = chars[parameters..<index].allSatisfy { (48...57).contains($0.value) || $0 == ";" || $0 == ":" }
                     if index < chars.count, chars[index] == "m", valid {
-                        result.unicodeScalars.append(contentsOf: chars[start...index])
+                        result.append(contentsOf: chars[start...index])
                         index += 1
                     } else {
                         while index < chars.count, !(0x40...0x7e).contains(chars[index].value) { index += 1 }
@@ -67,17 +68,18 @@ enum TerminalHistoryArchive {
                 continue
             }
             if scalar == "\n" || scalar == "\t" || ![.control, .format].contains(scalar.properties.generalCategory) {
-                result.unicodeScalars.append(scalar)
+                result.append(scalar)
             }
             index += 1
         }
-        return result + "\u{1b}[0m"
+        return String(String.UnicodeScalarView(result)) + "\u{1b}[0m"
     }
 
     /// The launch banner is UI chrome, not command output. Replaying it would
     /// archive another copy on every quit, including sessions with no commands.
     static func removingRestoreBanners(_ text: String) -> String {
         let marker = "── Previous session ended · New shell ──"
+        guard text.contains(marker) else { return text }
         var lines: [String] = []
         for line in text.components(separatedBy: "\n") {
             let plain = line.replacingOccurrences(of: "\u{1b}\\[[0-9;:]*m", with: "", options: .regularExpression)
@@ -102,5 +104,62 @@ enum TerminalHistoryArchive {
         let data = Data(safe.utf8.suffix(2_000_000))
         try data.write(to: url, options: .atomic)
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+    }
+}
+
+/// Serial, coalesced disk work. Only immutable snapshots cross from the UI;
+/// libghostty export remains on its owning thread. Flush only at termination.
+final class TerminalHistoryWriter: @unchecked Sendable {
+    struct Snapshot: Sendable {
+        let id: UUID
+        let text: String?
+        let draft: String
+    }
+
+    private let queue = DispatchQueue(label: "dev.sora.history-writer", qos: .utility)
+    private let lock = NSLock()
+    private var pending: [UUID: Snapshot] = [:]
+    private var scheduled = false
+    private let write: @Sendable (Snapshot) -> Void
+
+    init(write: @escaping @Sendable (Snapshot) -> Void = { snapshot in
+        do {
+            let url = TerminalHistoryArchive.url(for: snapshot.id).appendingPathExtension("draft")
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true,
+                                                   attributes: [.posixPermissions: 0o700])
+            try Data(snapshot.draft.utf8.prefix(100_000)).write(to: url, options: .atomic)
+            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+        } catch { NSLog("Could not save terminal draft: %@", error.localizedDescription) }
+        if let text = snapshot.text, !text.isEmpty {
+            do { try TerminalHistoryArchive.save(text, for: snapshot.id) }
+            catch { NSLog("Could not save terminal history: %@", error.localizedDescription) }
+        }
+    }) {
+        self.write = write
+    }
+
+    func enqueue(_ snapshot: Snapshot) {
+        lock.lock()
+        pending[snapshot.id] = snapshot
+        if !scheduled {
+            scheduled = true
+            queue.async { self.drain() }
+        }
+        lock.unlock()
+    }
+
+    func flush() { queue.sync {} }
+
+    private func drain() {
+        while true {
+            lock.lock()
+            guard let id = pending.keys.first, let snapshot = pending.removeValue(forKey: id) else {
+                scheduled = false
+                lock.unlock()
+                return
+            }
+            lock.unlock()
+            write(snapshot)
+        }
     }
 }

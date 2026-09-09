@@ -116,14 +116,7 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
         caret.wantsLayer = true
         caret.layer?.backgroundColor = SoraTheme.nsAccent.cgColor
         inputClip.addSubview(caret)
-        if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
-            let blink = CAKeyframeAnimation(keyPath: "opacity")
-            blink.values = [1, 1, 0, 0]
-            blink.keyTimes = [0, 0.49, 0.5, 1]
-            blink.duration = 1
-            blink.repeatCount = .infinity
-            caret.layer?.add(blink, forKey: "blink")
-        }
+        resetCaretBlink()
         addSubview(hintLabel)
         addSubview(routeLabel)
         microphoneButton.image = NSImage(systemSymbolName: "mic", accessibilityDescription: "Dictate")
@@ -326,10 +319,28 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
         hintLabel.setAccessibilityLabel("Press Tab to complete with " + suffix)
     }
 
+    /// Restart with a visible caret, including keys whose shell echo arrives later.
+    func resetCaretBlink() {
+        guard let layer = caret.layer else { return }
+        layer.removeAnimation(forKey: "blink")
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        layer.opacity = 1
+        CATransaction.commit()
+        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { return }
+        let blink = CAKeyframeAnimation(keyPath: "opacity")
+        blink.values = [1, 1, 0, 0]
+        blink.keyTimes = [0, 0.49, 0.5, 1]
+        blink.duration = 1
+        blink.repeatCount = .infinity
+        layer.add(blink, forKey: "blink")
+    }
+
     func updateCaret(text: String, scalarOffset: Int, visible: Bool) {
         let offset = min(max(0, scalarOffset), text.unicodeScalars.count)
         guard caretText != text || caretScalarOffset != offset || caretVisible != visible else { return }
         if caretText != text { clearInputSelection() }
+        resetCaretBlink()
         caretText = text
         caretScalarOffset = min(max(0, scalarOffset), text.unicodeScalars.count)
         caretVisible = visible

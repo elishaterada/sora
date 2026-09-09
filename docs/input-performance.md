@@ -110,3 +110,42 @@ from Ready to Running when Vim starts and back to Ready when it exits. Clipboard
 large-paste verification is not claimed; component tests cover long buffers.
 The user's exact M5 setup and Codex CLI session still require a local check with
 the updated build. No release has been published by this task.
+
+## Follow-up: colored output in another tab
+
+The two-tab reproduction against `41ce54a` found a different bottleneck: the
+10-second persistence timer sanitized every transcript synchronously on the
+main thread. Appending SGR runs through `String.unicodeScalars` repeatedly
+copied the growing string. A profile while streaming colored logs attributed
+4,441 of 6,035 main-thread samples to history saving. Hidden Ghostty renderer
+threads were predominantly waiting, rather than redrawing on each keypress.
+
+Sanitization now builds one scalar buffer. Archive sanitization, banner removal,
+draft writes, and disk writes run on a per-workspace serial worker. Pending
+snapshots coalesce by tab identity; a newer queued snapshot replaces an older
+one. Termination captures and flushes final snapshots. Ghostty export still runs
+on its owning main thread; moving Ghostty calls to a background queue would be
+unsafe. The worker retains itself until accepted writes finish, including after
+a tab or window closes. Sanitization still strips terminal commands except SGR.
+
+A Release benchmark of 100,000 repetitions of
+`ESC[36mapi-1ESC[0m | Request completed status=200 elapsed=12ms\n`
+(5.9 MB) took **11.13 seconds before, 0.64 seconds after**, using `swiftc -O`.
+This is archive processing time, not keyboard latency.
+
+An isolated Release app was tested with one tab emitting 1,000 colored log lines
+every 50 ms and another receiving letters, spaces, and Ctrl-U. In a 20-second
+post-change profile, history capture occupied 57 of 15,766 main-thread samples
+(0.36%); sanitation and disk work appeared on the history worker. The main
+thread was waiting for events in about 87% of samples. These are sampled CPU
+observations, not input-to-photon measurements or a guarantee for the remote M5.
+
+The custom prompt caret now restarts its animation visibly on keydown and on
+text/cursor changes, including spaces, paste, and delayed shell echo. Reduce
+Motion keeps the caret steady. Native terminal cursors remain Ghostty-owned.
+
+Regression tests cover large colored Unicode transcripts and a blocked history
+worker receiving superseded snapshots, including final flush and background
+execution. All 227 Release tests pass. Remaining measurement: actual display
+latency on the reported M5 with the user's Docker Compose workload, including
+the still-main-thread Ghostty history export.
