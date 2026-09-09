@@ -17,6 +17,24 @@ struct AIMessage: Codable, Identifiable, Equatable, Sendable {
     var commandDirectory: String?
     var isAgentContinuation: Bool?
     var isVoiceInput: Bool?
+    /// Local debugging only; never included in contentForProvider().
+    var actionDiagnostics: [ActionDiagnostic]?
+
+    struct ActionDiagnostic: Codable, Equatable, Sendable {
+        let attempt: Int
+        let reasons: [String]
+        let responseExcerpt: String
+        let truncated: Bool
+    }
+
+    mutating func recordRejectedAction(_ response: String, attempt: Int) {
+        let limit = 12_000
+        let diagnostic = ActionDiagnostic(attempt: attempt,
+            reasons: AgentEnvelope.validationReasons(for: response),
+            responseExcerpt: String(decoding: response.utf8.prefix(limit), as: UTF8.self),
+            truncated: response.utf8.count > limit)
+        actionDiagnostics = (actionDiagnostics ?? []) + [diagnostic]
+    }
 
     func contentForProvider() throws -> String {
         var content = text
@@ -174,5 +192,36 @@ enum RealtimeVoiceError: LocalizedError {
         case .audioFailed(let reason): return "Realtime audio could not start: \(reason)"
         case .server(let reason): return "Realtime voice stopped: \(reason)"
         }
+    }
+}
+
+/// User-requested export only. No credentials, environment variables, or other
+/// conversations are read. Conversation text itself may contain sensitive data.
+enum ConversationDebugLog {
+    static func render(messages: [AIMessage], provider: String, model: String,
+                       permissionMode: String, error: String?,
+                       bundle: Bundle = .main) throws -> String {
+        struct Report: Encodable {
+            let formatVersion: Int
+            let appVersion: String
+            let build: String
+            let macOS: String
+            let provider: String
+            let model: String
+            let permissionMode: String
+            let error: String?
+            let messages: [AIMessage]
+        }
+        let report = Report(formatVersion: 1,
+            appVersion: bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown",
+            build: bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown",
+            macOS: ProcessInfo.processInfo.operatingSystemVersionString,
+            provider: provider, model: model, permissionMode: permissionMode,
+            error: error, messages: messages)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        encoder.dateEncodingStrategy = .iso8601
+        return "Sora conversation debug log\nReview before sharing: conversation text, commands, paths, URLs, and tool output may contain private information. No credentials are read from settings or Keychain.\nEarlier rejected responses may be unavailable in conversations created before debug logging was added.\n\n"
+            + String(decoding: try encoder.encode(report), as: UTF8.self)
     }
 }

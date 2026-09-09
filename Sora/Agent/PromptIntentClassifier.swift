@@ -32,11 +32,16 @@ enum PromptIntentClassifier {
         guard !value.isEmpty else { return .shell }
         if explicitQuestion(in: value) != nil { return .agent }
 
-        if shellCommandKnown { return .shell }
-
         // Clear shell syntax stays with the shell even when a token is missing —
         // the user is writing a pipeline/path, not chatting.
         if hasShellSyntax(value) { return .shell }
+
+        // Sentence capitalization is an intentional conversational cue, even
+        // when a case-insensitive filesystem resolves "Install" to "install".
+        // Cmd-Return remains available for actual capitalized commands.
+        if value.first?.isUppercase == true { return .agent }
+
+        if shellCommandKnown { return .shell }
 
         let lower = value.lowercased()
         if conversationalStarts.contains(where: lower.hasPrefix) {

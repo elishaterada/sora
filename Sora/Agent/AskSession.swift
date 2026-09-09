@@ -505,6 +505,7 @@ final class AskSession: ObservableObject {
                         let text = self.messages[index].text
                         guard !text.isEmpty else { throw AIError.responseFailed }
                         guard AgentEnvelope.needsRepair(text), attempt < 3 else { break }
+                        self.messages[index].recordRejectedAction(text, attempt: attempt + 1)
                         // Nothing is executed during repair. Include the rejected answer
                         // and concrete feedback so the model can correct it, not guess again.
                         var repairedContext = request.messages
@@ -670,6 +671,7 @@ final class AskSession: ObservableObject {
                         messages[index].programProposal = match.proposal
                     }
                 } else if AgentEnvelope.needsRepair(text) {
+                    messages[index].recordRejectedAction(text, attempt: 4)
                     // Never leave Sora's wire format in the transcript. Say what
                     // happened instead of silently dropping the request.
                     let prose = AgentCommandProposalParser.proseBeforeEnvelope(in: text)

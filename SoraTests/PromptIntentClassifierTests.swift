@@ -17,6 +17,30 @@ final class PromptIntentClassifierTests: XCTestCase {
         XCTAssertTrue(TerminalPreferences.automaticAgentRouting)
     }
 
+    func testCapitalizedRequestsOverrideKnownCommands() {
+        for line in ["Install this program", "Find large files", "Open this folder", "Install"] {
+            for shellKnown in [false, true] {
+                XCTAssertEqual(PromptIntentClassifier.intent(for: line, shellCommandKnown: shellKnown,
+                                                             commandExists: { _ in true }), .agent)
+                XCTAssertEqual(PromptIntentClassifier.submission(for: line, shellCommandKnown: shellKnown,
+                                                                 commandExists: { _ in true }), .agent(line))
+            }
+        }
+        XCTAssertEqual(PromptIntentClassifier.submission(for: "  Install this program  ",
+                                                         commandExists: { _ in true }), .agent("Install this program"))
+    }
+
+    func testCapitalizedCommandsRetainShellOverrides() {
+        for line in ["Install this program", "Open this folder"] {
+            XCTAssertEqual(PromptIntentClassifier.submission(for: line, forceShell: true), .shell)
+            XCTAssertEqual(PromptIntentClassifier.submission(for: line, allowImplicitAgent: false), .shell)
+        }
+        for line in ["install source destination", "Install source | cat", "FOO=bar Install source",
+                     "./Install source", "/usr/bin/Install source"] {
+            XCTAssertEqual(PromptIntentClassifier.submission(for: line, commandExists: { _ in true }), .shell)
+        }
+    }
+
     func testLiveShellDefinitionsOverrideImplicitAgentRouting() {
         for line in ["..", "please help", "my_function arg"] {
             XCTAssertEqual(PromptIntentClassifier.intent(for: line, shellCommandKnown: true, commandExists: { _ in false }), .shell)

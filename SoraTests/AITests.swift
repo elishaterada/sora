@@ -1408,3 +1408,35 @@ final class AgentProgramTests: XCTestCase {
         XCTAssertEqual(attributes[.posixPermissions] as? Int, 0o600)
     }
 }
+
+final class ConversationDebugLogTests: XCTestCase {
+    func testExportIncludesConversationMetadataAndRejectedAction() throws {
+        var message = AIMessage(role: .assistant, text: "Could not install")
+        let rejected = "<SORA_COMMAND>{\"summary\":\"Install\",\"command\":\"echo first\\necho second\"}</SORA_COMMAND>"
+        message.recordRejectedAction(rejected, attempt: 1)
+        let log = try ConversationDebugLog.render(
+            messages: [AIMessage(role: .user, text: "Install this program"), message],
+            provider: "openai", model: "test-model", permissionMode: "ask", error: "Invalid action")
+        let json = String(log[log.range(of: "{\n")!.lowerBound...])
+        let object = try JSONSerialization.jsonObject(with: Data(json.utf8)) as! [String: Any]
+        XCTAssertEqual(object["model"] as? String, "test-model")
+        XCTAssertEqual(object["error"] as? String, "Invalid action")
+        let messages = object["messages"] as! [[String: Any]]
+        XCTAssertEqual(messages.count, 2)
+        let diagnostics = messages[1]["actionDiagnostics"] as! [[String: Any]]
+        XCTAssertEqual(diagnostics[0]["responseExcerpt"] as? String, rejected)
+        XCTAssertFalse((diagnostics[0]["reasons"] as! [String]).isEmpty)
+        XCTAssertFalse(try message.contentForProvider().contains("SORA_COMMAND"))
+    }
+
+    func testRejectedActionCaptureIsBoundedAndSurvivesCoding() throws {
+        var message = AIMessage(role: .assistant, text: "Failed")
+        message.recordRejectedAction(String(repeating: "x", count: 20_000), attempt: 2)
+        let restored = try JSONDecoder().decode(AIMessage.self, from: JSONEncoder().encode(message))
+        XCTAssertEqual(restored.actionDiagnostics?.first?.responseExcerpt.utf8.count, 12_000)
+        XCTAssertEqual(restored.actionDiagnostics?.first?.truncated, true)
+        var legacy = message
+        legacy.actionDiagnostics = nil
+        XCTAssertNil(try JSONDecoder().decode(AIMessage.self, from: JSONEncoder().encode(legacy)).actionDiagnostics)
+    }
+}

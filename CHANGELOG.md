@@ -4,6 +4,21 @@ Human-readable highlights for each Sora release live here. Add the newest
 version before creating its `vX.Y.Z` tag; the release workflow requires a
 matching section and publishes it to GitHub.
 
+## 0.1.12 — 2026-09-09
+
+### What’s new
+
+- Copy a conversation debug log from Agent’s conversation menu, including messages, tool results, and action rejection details to help diagnose failures. Review and edit the report before sharing; nothing is uploaded automatically.
+
+### Fixes
+
+- Treat capitalized requests such as “Install this program” as conversations, even when a similarly named shell command exists. Lowercase commands and explicit shell syntax still run in the terminal; Command-Return forces shell execution.
+
+### Known limitations
+
+- Rejected action details discarded by older versions cannot be recovered. New rejected responses retain bounded excerpts for debugging.
+- Debug logs may contain private information from messages and tool output; review them before sharing.
+
 ## 0.1.11 — 2026-09-08
 
 ### What’s new
