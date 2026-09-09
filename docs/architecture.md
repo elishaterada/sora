@@ -330,8 +330,9 @@ and cannot supply previously lost history.
   closing the other session. The pair and divider position persist across relaunch. Arbitrary nested splits are not implemented.
 - Tab/window close and application quit ask before terminating a running child
   process. Background command completions appear as sidebar status text.
-- Shell input is the default destination for Return. Automatic natural-language
-  routing is opt-in under Terminal Settings; explicit /agent remains available.
+- Automatic natural-language routing is enabled by default under Terminal
+  Settings, preserving explicit opt-outs. Known shell commands stay in the shell;
+  explicit /agent remains available, and Cmd-Return forces shell execution.
 - Drafts are saved alongside terminal history (100 KB per tab, private files).
   The first ZLE line-init hook reads them directly into BUFFER without evaluation.
   This hook is independent of which syntax highlighter the user has installed.

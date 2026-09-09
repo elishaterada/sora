@@ -4,6 +4,17 @@ Human-readable highlights for each Sora release live here. Add the newest
 version before creating its `vX.Y.Z` tag; the release workflow requires a
 matching section and publishes it to GitHub.
 
+## 0.1.11 — 2026-09-08
+
+### What’s new
+
+- Send natural-language requests to Agent automatically by default. Real shell commands continue to run in the terminal, and an existing preference to disable automatic routing is preserved.
+
+### Fixes
+
+- Keep typing responsive when another tab contains large, colored output such as Docker Compose logs.
+- Reset the prompt cursor blink when typing letters or spaces so the cursor stays visible as you type.
+
 ## 0.1.10 — 2026-09-08
 
 ### What’s new

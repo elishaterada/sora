@@ -3,7 +3,7 @@ import Foundation
 /// User preferences that affect terminal and agent chrome.
 enum TerminalPreferences {
     static var automaticAgentRouting: Bool {
-        get { UserDefaults.standard.bool(forKey: "terminal.automaticAgentRouting") }
+        get { UserDefaults.standard.object(forKey: "terminal.automaticAgentRouting") as? Bool ?? true }
         set { UserDefaults.standard.set(newValue, forKey: "terminal.automaticAgentRouting") }
     }
     static let notificationsEnabledKey = "terminal.notificationsEnabled"

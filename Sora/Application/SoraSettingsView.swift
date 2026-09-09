@@ -49,7 +49,7 @@ private struct SettingsPage<Content: View>: View {
 }
 
 private struct TerminalSettingsView: View {
-    @AppStorage("terminal.automaticAgentRouting") private var automaticAgentRouting = false
+    @AppStorage("terminal.automaticAgentRouting") private var automaticAgentRouting = true
     @State private var fontSize = TerminalPreferences.fontSize
     var body: some View {
         SettingsPage(title: "Terminal") {

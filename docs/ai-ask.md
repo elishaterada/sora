@@ -413,11 +413,13 @@ invalid action, the transcript preserves validation reasons across restarts.
 Rejected action payloads are not stored as diagnostics. The original PDF
 request's precise payload could not be recovered from the older empty transcript.
 
-### Explicit terminal routing by default
+### Automatic agent routing by default
 
-Return now stays in the shell unless input begins with /agent. Users can enable
-automatic natural-language routing in Terminal Settings. The displayed route
-and submission logic share the same preference; Cmd-Return still forces shell.
+Return routes natural-language requests and unknown commands to Agent by default.
+Known shell commands and shell syntax continue to run in the terminal. Users can
+disable automatic routing in Terminal Settings; an explicitly saved opt-out is
+preserved. The displayed route and submission logic share the same preference.
+Explicit /agent remains available when routing is disabled; Cmd-Return forces shell.
 
 ## Independent Agent windows
 
