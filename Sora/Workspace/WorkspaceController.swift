@@ -14,6 +14,7 @@ final class WorkspaceController: ObservableObject {
     private let model: WorkspaceModel
     private var surfaces: [UUID: GhosttySurfaceView] = [:]
     private var historyTimer: Timer?
+    private let historyWriter = TerminalHistoryWriter()
     private var terminationObserver: NSObjectProtocol?
     private let persist: (WorkspaceSnapshot) -> Void
 
@@ -58,6 +59,7 @@ final class WorkspaceController: ObservableObject {
         }
         self.terminationObserver = NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
             self?.refreshWorkingDirectories()
+            self?.historyWriter.flush()
         }
         persist(snapshotForSave())
     }
@@ -200,15 +202,7 @@ final class WorkspaceController: ObservableObject {
 
     private func saveHistories() {
         for (id, view) in surfaces {
-            do {
-                let draftURL = TerminalHistoryArchive.url(for: id).appendingPathExtension("draft")
-                try FileManager.default.createDirectory(at: draftURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-                try Data(view.draftText.utf8.prefix(100_000)).write(to: draftURL, options: .atomic)
-                try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: draftURL.path)
-            } catch { NSLog("Could not save terminal draft: %@", error.localizedDescription) }
-            guard let text = view.historyText(), !text.isEmpty else { continue }
-            do { try TerminalHistoryArchive.save(text, for: id) }
-            catch { NSLog("Could not save terminal history: %@", error.localizedDescription) }
+            historyWriter.enqueue(.init(id: id, text: view.historyText(), draft: view.draftText))
         }
     }
 

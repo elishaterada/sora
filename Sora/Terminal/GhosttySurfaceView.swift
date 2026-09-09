@@ -151,6 +151,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         let interval = OSSignpostID(log: Self.inputLog)
         os_signpost(.begin, log: Self.inputLog, name: "Terminal keyDown", signpostID: interval)
         defer { os_signpost(.end, log: Self.inputLog, name: "Terminal keyDown", signpostID: interval) }
+        stickyBar?.resetCaretBlink()
         stickyBar?.clearInputSelection()
         captureGhostTextAnchor()
         let characters = event.characters ?? ""

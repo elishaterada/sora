@@ -10,6 +10,40 @@ final class WorkspaceSnapshotTests: XCTestCase {
         XCTAssertNotEqual(restored.tabs[0].id, restored.tabs[1].id)
     }
 
+    func testColoredLogSanitizationScalesToLargeHistory() {
+        let line = "\u{1b}[36mapi-1\u{1b}[0m | completed café 🚀\n"
+        let text = String(repeating: line, count: 100_000)
+        let start = Date()
+        XCTAssertEqual(TerminalHistoryArchive.sanitized(text), text + "\u{1b}[0m")
+        // Generous regression ceiling: the former repeated string copies take
+        // seconds on this fixture, while linear processing takes milliseconds.
+        XCTAssertLessThan(Date().timeIntervalSince(start), 2)
+    }
+
+    func testHistoryWriterCoalescesPendingSnapshotsAndFlushesLatest() {
+        let started = expectation(description: "first write started")
+        let release = DispatchSemaphore(value: 0)
+        let latest = expectation(description: "latest snapshot persisted")
+        let id = UUID()
+        let writer = TerminalHistoryWriter { snapshot in
+            XCTAssertFalse(Thread.isMainThread)
+            if snapshot.draft == "first" {
+                started.fulfill()
+                release.wait()
+            } else {
+                XCTAssertEqual(snapshot.draft, "latest")
+                latest.fulfill()
+            }
+        }
+        writer.enqueue(.init(id: id, text: nil, draft: "first"))
+        wait(for: [started], timeout: 5)
+        writer.enqueue(.init(id: id, text: nil, draft: "superseded"))
+        writer.enqueue(.init(id: id, text: nil, draft: "latest"))
+        release.signal()
+        writer.flush()
+        wait(for: [latest], timeout: 1)
+    }
+
     func testLegacySnapshotStillLoads() throws {
         let snapshot = try JSONDecoder().decode(WorkspaceSnapshot.self, from: Data(#"{"directories":["/tmp"],"selectedIndex":0}"#.utf8))
         XCTAssertNil(snapshot.sessionIDs)
