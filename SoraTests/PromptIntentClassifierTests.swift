@@ -1,6 +1,22 @@
 import XCTest
 
 final class PromptIntentClassifierTests: XCTestCase {
+    func testAutomaticRoutingDefaultsOnAndPreservesOptOut() {
+        let key = "terminal.automaticAgentRouting"
+        let defaults = UserDefaults.standard
+        let previous = defaults.object(forKey: key)
+        defer {
+            if let previous { defaults.set(previous, forKey: key) }
+            else { defaults.removeObject(forKey: key) }
+        }
+        defaults.removeObject(forKey: key)
+        XCTAssertTrue(TerminalPreferences.automaticAgentRouting)
+        TerminalPreferences.automaticAgentRouting = false
+        XCTAssertFalse(TerminalPreferences.automaticAgentRouting)
+        TerminalPreferences.automaticAgentRouting = true
+        XCTAssertTrue(TerminalPreferences.automaticAgentRouting)
+    }
+
     func testLiveShellDefinitionsOverrideImplicitAgentRouting() {
         for line in ["..", "please help", "my_function arg"] {
             XCTAssertEqual(PromptIntentClassifier.intent(for: line, shellCommandKnown: true, commandExists: { _ in false }), .shell)
