@@ -410,13 +410,18 @@ as a separate file. These are local backups; they do not protect against disk lo
 After two rejected action repairs, Agent requests a plain-language explanation
 instead of ending with an empty answer. If that response also contains an
 invalid action, the transcript preserves validation reasons across restarts.
-Rejected action payloads are not stored as diagnostics. The original PDF
-request's precise payload could not be recovered from the older empty transcript.
+Earlier releases did not retain rejected action payloads. Those original
+payloads cannot be recovered retroactively. New messages retain local diagnostic
+excerpts as described below.
 
 ### Automatic agent routing by default
 
 Return routes natural-language requests and unknown commands to Agent by default.
-Known shell commands and shell syntax continue to run in the terminal. Users can
+Capitalized input such as `Install this program` is conversational even when a
+case-insensitive lookup finds an executable named `install`. Explicit shell syntax
+(paths, assignments, pipelines) takes precedence over capitalization. Lowercase
+known commands continue to run in the terminal; Cmd-Return also runs capitalized
+commands directly. Users can
 disable automatic routing in Terminal Settings; an explicitly saved opt-out is
 preserved. The displayed route and submission logic share the same preference.
 Explicit /agent remains available when routing is disabled; Cmd-Return forces shell.
@@ -437,3 +442,25 @@ Verification: 214 tests cover independent concurrent streams, stop isolation,
 shared preference updates, catalog refresh and stale-catalog edits. Native UI
 checks verified separate composer drafts and preservation of the first draft
 when closing the second window. No live API requests were needed for these checks.
+
+
+## Copying a conversation debug log
+
+Open the conversation’s options menu (ellipsis) and choose **Copy Debug Log…**.
+Review or edit the text, then choose **Copy Log** and paste it into a bug report.
+The export includes the app/build and macOS versions, provider/model, permission
+mode, current error, and all messages in the active conversation (including
+internal continuation results). Structured proposals, approval states, command
+results, and webpage snapshots are included, not just the currently visible rows.
+
+Rejected action responses are retained on their assistant message before repair
+or replacement: attempt number, validator reasons, and a response excerpt capped
+at 12,000 UTF-8 bytes with a truncation flag. These diagnostics are not sent back
+to the model by conversation serialization. They follow the message’s existing
+local persistence and clearing lifecycle. Earlier discarded payloads cannot be
+recovered; the export says so. This is a conversation snapshot, not a complete
+network trace or hidden model reasoning log.
+
+Export reads no Keychain credentials or environment variables. Messages and tool
+output may still contain secrets, URLs, and local paths; the editable preview
+allows users to remove those before sharing. Copying never uploads a report.

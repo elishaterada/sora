@@ -8,6 +8,8 @@ struct AskView: View {
     var onRunCommand: ((UUID) -> Void)?
     @StateObject private var voiceInput = VoiceInputController()
     @StateObject private var realtimeVoice = RealtimeVoiceController()
+    @State private var debugLog: String?
+    @State private var debugLogError: String?
     @State private var transcriptLimit = 40
     @State private var showsPrograms = false
     @State private var programDirectories: [UUID: String] = [:]
@@ -192,6 +194,14 @@ struct AskView: View {
                         .disabled(session.messages.isEmpty)
                 }
                 Menu {
+                    Button("Copy Debug Log…") {
+                        do {
+                            debugLog = try ConversationDebugLog.render(messages: session.messages,
+                                provider: session.selectedProvider.rawValue, model: session.model,
+                                permissionMode: session.permissionMode.rawValue, error: session.errorMessage)
+                        } catch { debugLogError = error.localizedDescription }
+                    }
+                    .disabled(session.messages.isEmpty)
                     Button("Save Workflow as Program…") { session.requestReusableProgram() }
                         .disabled(session.messages.isEmpty || !session.enabled || session.isSending || session.isRunningCommand)
                     Button("Agent Settings…") { SoraSettingsOpener.open() }
@@ -206,6 +216,28 @@ struct AskView: View {
                         .contentShape(Rectangle())
                 }
                 .menuStyle(.borderlessButton)
+                .sheet(isPresented: Binding(get: { debugLog != nil }, set: { if !$0 { debugLog = nil } })) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Conversation Debug Log").font(.headline)
+                        Text("Review before sharing. This includes messages, commands, tool output, and action rejection details. It may contain private information. Nothing is sent automatically.")
+                            .font(.callout).foregroundStyle(.secondary)
+                        TextEditor(text: Binding(get: { debugLog ?? "" }, set: { debugLog = $0 }))
+                            .font(.system(.body, design: .monospaced))
+                            .accessibilityLabel("Debug log — edit to remove private information")
+                        HStack {
+                            Spacer()
+                            Button("Cancel") { debugLog = nil }.keyboardShortcut(.cancelAction)
+                            Button("Copy Log") {
+                                if let debugLog { PathActions.copy(debugLog) }
+                                debugLog = nil
+                            }.keyboardShortcut(.defaultAction)
+                        }
+                    }.padding(20).frame(width: 680, height: 520)
+                }
+                .alert("Could not create debug log", isPresented: Binding(
+                    get: { debugLogError != nil }, set: { if !$0 { debugLogError = nil } })) {
+                    Button("OK") { debugLogError = nil }
+                } message: { Text(debugLogError ?? "") }
                 .help("Conversation options")
                 .accessibilityLabel("Conversation options")
             }

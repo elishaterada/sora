@@ -214,7 +214,9 @@ suffixes appear separately in the hint row when the tracked and authoritative
 buffers agree and the caret is at the end. Next-command predictions appear only
 when the buffer is empty. ZLE also reports whether the first token resolves in
 the live shell using `whence`. Aliases, functions, builtins, and shell PATH
-commands take precedence over implicit Agent routing; explicit `/agent`
+commands take precedence over implicit Agent routing for lowercase input.
+Capitalized input is conversational even when `whence` recognizes a command;
+explicit shell syntax and Cmd-Return still force shell execution. Explicit `/agent`
 requests retain their meaning. Alias definitions are not sent to the app.
 
 Clicking input maps the visible row and nearest character boundary back to a
@@ -331,7 +333,7 @@ and cannot supply previously lost history.
 - Tab/window close and application quit ask before terminating a running child
   process. Background command completions appear as sidebar status text.
 - Automatic natural-language routing is enabled by default under Terminal
-  Settings, preserving explicit opt-outs. Known shell commands stay in the shell;
+  Settings, preserving explicit opt-outs. Lowercase known commands stay in the shell;
   explicit /agent remains available, and Cmd-Return forces shell execution.
 - Drafts are saved alongside terminal history (100 KB per tab, private files).
   The first ZLE line-init hook reads them directly into BUFFER without evaluation.
