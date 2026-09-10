@@ -346,6 +346,17 @@ struct AskView: View {
 
     private var composer: some View {
         VStack(alignment: .leading, spacing: SoraTheme.space2) {
+            if !session.pendingImages.isEmpty {
+                HStack {
+                    ForEach(session.pendingImages) { image in
+                        VStack {
+                            imagePreview(image)
+                            Button("Remove " + image.name) { session.pendingImages.removeAll { $0.id == image.id } }
+                                .font(.caption).lineLimit(1)
+                        }
+                    }
+                }
+            }
             if ProgramMention.query(in: session.draft) != nil {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Mention a program · Return selects the first match")
@@ -386,6 +397,12 @@ struct AskView: View {
                         .foregroundStyle(.tertiary)
                 }
                 Spacer()
+                Button("Attach image", systemImage: "photo") {
+                    let panel = NSOpenPanel()
+                    panel.allowedContentTypes = [.image]
+                    panel.allowsMultipleSelection = true
+                    if panel.runModal() == .OK { session.attachImages(panel.urls) }
+                }.buttonStyle(.borderless)
                 Button {
                     if voiceInput.isListening {
                         voiceInput.stop()
@@ -415,6 +432,14 @@ struct AskView: View {
         .padding(.horizontal, SoraTheme.gridPaddingX)
         .padding(.top, 10)
         .padding(.bottom, inline ? 6 : SoraTheme.space4)
+    }
+
+    @ViewBuilder
+    private func imagePreview(_ attachment: AIImageAttachment) -> some View {
+        if let image = NSImage(data: attachment.png) {
+            Image(nsImage: image).resizable().scaledToFit().frame(maxWidth: 180, maxHeight: 100)
+                .accessibilityLabel(attachment.name).help(attachment.name)
+        }
     }
 
     private func submitComposer() {
@@ -493,6 +518,7 @@ struct AskView: View {
         VStack(alignment: .leading, spacing: SoraTheme.space2) {
             if message.role == .user {
                 userPrompt(message.text, voice: message.isVoiceInput == true)
+                ForEach(message.images ?? []) { image in imagePreview(image) }
             } else {
                 HStack {
                     Text("Sora").font(SoraTheme.agentCaption.weight(.semibold)).foregroundStyle(SoraTheme.muted)

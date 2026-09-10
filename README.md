@@ -96,6 +96,16 @@ Trackpad scrolling moves smoothly between text rows, following macOS momentum.
 Block highlights and text selection stay aligned while scrolling. A sticky header
 keeps the command visible while you read its output, yielding to the next block.
 
+Images can be dropped onto the terminal output or input area. At a shell prompt,
+Sora inserts quoted file paths. While a program is running, it puts the image
+pixels on the macOS clipboard and sends Control-V for programs such as Codex CLI.
+Command-V also forwards copied images this way. Drop one image at a time into
+running programs; the last image remains on the clipboard.
+Files keep their original locations; image-data and promised-file drops are
+saved under Sora's Application Support folder. Dropping never submits a command.
+
+Agent also accepts dropped images or **Attach image**. Thumbnails stay in the draft until Send. Image bytes are saved with the conversation and sent to the selected service; a vision-capable model is required. Up to four images can be attached per message (5 MB as PNG and 8192 pixels per side).
+
 ## Terminal notifications
 
 Background terminal sessions can send native macOS alerts using OSC 9, OSC 777,

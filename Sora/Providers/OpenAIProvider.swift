@@ -24,7 +24,7 @@ struct OpenAIProvider: AIProvider {
             "store": false,
             "max_output_tokens": 4096,
             "instructions": AIRequest.instructions,
-            "input": try request.messages.map { ["role": $0.role.rawValue, "content": try $0.contentForProvider()] }
+            "input": try request.messages.map { ["role": $0.role.rawValue, "content": try $0.imageContent(format: "responses")] }
         ])
         return result
     }

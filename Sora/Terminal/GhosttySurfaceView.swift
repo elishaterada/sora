@@ -360,8 +360,37 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         GhosttyClipboard.writePlainText(value, to: .general)
     }
 
+    var usesBinaryImagePaste: Bool { !isShellPromptReady }
+
+    func insertDroppedImages(_ files: [URL]) throws {
+        if usesBinaryImagePaste {
+            guard files.count == 1, let image = files.first else { throw TerminalImageDrop.DropError.multipleImages }
+            try GhosttyClipboard.writeImage(at: image, to: .general)
+            pasteClipboardImageIntoProgram()
+            return
+        }
+        let paths = try files.map(TerminalImageDrop.quotedPath)
+        guard surface != nil, !paths.isEmpty else { return }
+        leaveCommandBlocks()
+        acceptCommandHistory()
+        window?.makeFirstResponder(self)
+        for path in paths {
+            captureGhostTextAnchor()
+            completion.handlePaste(path)
+            // ghostty_surface_text uses bracketed paste when the foreground
+            // application requests it. Each image gets its own paste boundary.
+            insertText(path)
+        }
+        refreshCompletion()
+        scheduleCompletionRefresh()
+    }
+
     func pasteFromPasteboard() {
         guard surface != nil else { return }
+        if usesBinaryImagePaste, GhosttyClipboard.hasImage(in: .general) {
+            pasteClipboardImageIntoProgram()
+            return
+        }
         guard let value = GhosttyClipboard.plainText(from: .general), !value.isEmpty else { return }
         leaveCommandBlocks()
         acceptCommandHistory()
@@ -371,6 +400,15 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         refreshCompletion()
         insertText(value)
         scheduleCompletionRefresh()
+    }
+
+    private func pasteClipboardImageIntoProgram() {
+        leaveCommandBlocks()
+        acceptCommandHistory()
+        window?.makeFirstResponder(self)
+        // Ctrl-V asks the foreground CLI to read the image from the native
+        // clipboard. No binary bytes, base64, file paths, or Return enter the PTY.
+        sendControlKey(keyCode: 9, unshifted: UnicodeScalar("v"))
     }
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {

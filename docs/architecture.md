@@ -508,3 +508,27 @@ stops above 1,024 characters to keep large buffers editable.
 
 See [input performance](input-performance.md) for measured baselines, stress
 tests, reproducible commands, and measurement limitations.
+
+## Terminal image drops
+
+`TerminalPaneView` accepts native image file URLs, PNG/TIFF data, and image file
+promises over both the renderer and prompt bar. Drops over the Agent overlay
+attach images to its draft instead of sending terminal input.
+`TerminalImageDrop` resolves them to validated local files, with separate durable
+Application Support directories for generated/promised images. It never uploads images. Existing files are referenced in place.
+
+At a ready shell prompt, each shell-quoted path is sent separately through
+Ghostty's text/paste API. While a program is running, Sora instead writes binary
+PNG and TIFF representations (no URL/text flavor) to the general pasteboard and
+sends Control-V. Codex CLI reads the pixels through its native clipboard API.
+Command-V with an image on the clipboard follows the same route. Running programs
+accept one image per drop; the image remains on the clipboard because there is
+no reliable acknowledgement of when another process has finished reading it. Control characters in
+filenames are rejected; drops never insert Return. Promise callbacks retain the
+original target session identity and do not redirect to a newly selected tab.
+Receive failures are presented as native errors. Generated images are retained
+so references remain valid after relaunch; automatic cleanup is not implemented.
+Binary image paste requires a local program supporting Control-V image paste;
+this does not transfer image data over SSH. Shell paths likewise refer to local files.
+
+Agent images are optional binary PNG attachments on AIMessage, preserving compatibility with older saved messages. Responses, Anthropic, chat-completions, and Codex app-server requests encode the actual image data rather than local paths. Conversation image context is capped at 20 MB; drafts are not submitted by a drop. Local terminal programs receive PNG/TIFF on the native clipboard plus Ctrl-V, while shell prompts retain quoted file-path insertion.

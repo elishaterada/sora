@@ -1,9 +1,36 @@
+import AppKit
 import Combine
 import Foundation
 
 @MainActor
 final class AskSession: ObservableObject {
     @Published var draft = ""
+    @Published var pendingImages: [AIImageAttachment] = []
+    private var imageDrafts: [String: [AIImageAttachment]] = [:]
+
+    func attachImages(_ urls: [URL]) {
+        do {
+            guard pendingImages.count + urls.count <= 4 else { throw imageError("Attach up to four images at a time.") }
+            let attachments = try urls.map { url -> AIImageAttachment in
+                let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+                guard size <= 20_000_000 else { throw imageError("Choose an image smaller than 20 MB.") }
+                let data = try Data(contentsOf: url)
+                guard let bitmap = NSBitmapImageRep(data: data),
+                      bitmap.pixelsWide <= 8192, bitmap.pixelsHigh <= 8192,
+                      let png = bitmap.representation(using: .png, properties: [:]), png.count <= 5_000_000 else {
+                    throw imageError("Choose an image under 8192 pixels per side and 5 MB when converted to PNG.")
+                }
+                return AIImageAttachment(name: url.lastPathComponent, png: png)
+            }
+            pendingImages += attachments
+            errorMessage = nil
+        } catch { errorMessage = error.localizedDescription }
+    }
+
+    private func imageError(_ message: String) -> NSError {
+        NSError(domain: "Sora.Image", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
+    }
+
     @Published private(set) var programs: [AgentProgram] = []
     @Published private(set) var programError: String?
     private var programStore: AgentProgramStore
@@ -151,6 +178,7 @@ final class AskSession: ObservableObject {
         finalizeRealtimeVoiceMessages()
         stashCurrentTranscript()
         stop()
+        pendingImages = imageDrafts[transcriptKey(tab: id, provider: selectedProvider)] ?? []
         activeTabID = id
         messages = transcripts[transcriptKey(tab: id, provider: selectedProvider)] ?? []
         loaded = true
@@ -162,9 +190,11 @@ final class AskSession: ObservableObject {
     func discardTab(_ id: UUID) {
         for provider in AIBackendID.allCases {
             transcripts.removeValue(forKey: transcriptKey(tab: id, provider: provider))
+            imageDrafts.removeValue(forKey: transcriptKey(tab: id, provider: provider))
         }
         guard activeTabID == id else { return }
         stop()
+        pendingImages = []
         activeTabID = nil
         messages = transcripts[transcriptKey(tab: unboundTabID, provider: selectedProvider)] ?? []
         loaded = true
@@ -175,6 +205,7 @@ final class AskSession: ObservableObject {
         let trimmed = question.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         stop()
+        pendingImages = []
         messages = []
         transcripts[transcriptKey(tab: transcriptTabID, provider: selectedProvider)] = []
         webpage = nil
@@ -194,6 +225,7 @@ final class AskSession: ObservableObject {
 
     private func stashCurrentTranscript() {
         transcripts[transcriptKey(tab: transcriptTabID, provider: selectedProvider)] = messages
+        imageDrafts[transcriptKey(tab: transcriptTabID, provider: selectedProvider)] = pendingImages
     }
 
     /// Visible when the user returns to the terminal after an agent turn.
@@ -281,6 +313,7 @@ final class AskSession: ObservableObject {
         stashCurrentTranscript()
         drafts[selectedProvider] = draft
         webpages[selectedProvider] = webpage
+        pendingImages = imageDrafts[transcriptKey(tab: transcriptTabID, provider: id)] ?? []
         selectedProvider = id
         defaults.set(id.rawValue, forKey: "ai.provider")
         model = defaults.string(forKey: "ai.model.\(id.rawValue)")
@@ -297,7 +330,7 @@ final class AskSession: ObservableObject {
     deinit { task?.cancel(); commandTask?.cancel(); commandRunner?.cancel() }
 
     var canSend: Bool {
-        enabled && !isSending && !isRunningCommand && !isUpdatingKey && !loadFailed && !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        enabled && !isSending && !isRunningCommand && !isUpdatingKey && !loadFailed && (!draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !pendingImages.isEmpty)
     }
 
     var realtimeVoiceAvailability: RealtimeVoiceAvailability {
@@ -425,7 +458,8 @@ final class AskSession: ObservableObject {
         guard !isSending, !isRunningCommand, !isUpdatingKey else { return }
         guard enabled else { errorMessage = AIError.disabled.localizedDescription; return }
         guard !loadFailed else { return }
-        let question = (continuation ?? draft).trimmingCharacters(in: .whitespacesAndNewlines)
+        var question = (continuation ?? draft).trimmingCharacters(in: .whitespacesAndNewlines)
+        if question.isEmpty, continuation == nil, !pendingImages.isEmpty { question = "What do you see in this image?" }
         guard !question.isEmpty else { return }
         let model = model.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !selectedProvider.needsKey || !model.isEmpty else { errorMessage = AIError.invalidModel.localizedDescription; return }
@@ -438,7 +472,7 @@ final class AskSession: ObservableObject {
                 guard index > 0, messages[index - 1].role == .user else { continue }
                 context.append(contentsOf: [messages[index - 1], messages[index]])
             }
-            let user = AIMessage(role: .user, text: question, webpage: continuation == nil ? webpage : nil, isAgentContinuation: continuation != nil)
+            let user = AIMessage(role: .user, text: question, images: continuation == nil ? pendingImages : nil, webpage: continuation == nil ? webpage : nil, isAgentContinuation: continuation != nil)
             context.append(user)
             let mentioned = ProgramMention.resolve(question, programs: programs)
             if !mentioned.isEmpty, programError == nil {
@@ -454,11 +488,13 @@ final class AskSession: ObservableObject {
             guard try context.reduce(0, { $0 + (try $1.contentForProvider()).utf8.count }) <= 100_000 else {
                 throw AIError.contextTooLarge
             }
+            guard context.flatMap({ $0.images ?? [] }).reduce(0, { $0 + $1.png.count }) <= 20_000_000 else { throw AIError.contextTooLarge }
             let response = AIMessage(role: .assistant, text: "", status: .streaming, commandDirectory: agentDirectory?.path)
             let updated = messages + [user, response]
             try conversations.save(updated)
             messages = updated
             if continuation == nil {
+                pendingImages = []
                 draft = ""
                 webpage = nil
                 webpages[selectedProvider] = nil
@@ -594,6 +630,7 @@ final class AskSession: ObservableObject {
     }
 
     func newConversation() {
+        pendingImages = []
         stop()
         messages = []
         transcripts[transcriptKey(tab: transcriptTabID, provider: selectedProvider)] = []
