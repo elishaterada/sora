@@ -35,6 +35,7 @@ final class TerminalPaneView: NSView {
         self.ask = ask
         self.tabID = tabID
         super.init(frame: .zero)
+        registerForDraggedTypes(TerminalImageDrop.draggedTypes)
         wantsLayer = true
         // The reserved resume strip belongs to the input surface, so it must
         // not expose a contrasting wallpaper gutter when the strip is hidden.
@@ -131,6 +132,45 @@ final class TerminalPaneView: NSView {
             }
         refreshResumeStrip()
         publishActivityTitleIfActive()
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        guard surface.surface != nil,
+              sender.draggingSourceOperationMask.contains(.copy),
+              TerminalImageDrop.canRead(sender.draggingPasteboard) else { return [] }
+        return .copy
+    }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        draggingEntered(sender)
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        guard draggingEntered(sender) == .copy, let target = surface.surface else { return false }
+        if isShowingAgent, let ask {
+            let tab = ask.activeTabID
+            let provider = ask.selectedProvider
+            TerminalImageDrop.receive(sender.draggingPasteboard) { [weak ask] result in
+                guard let ask, ask.activeTabID == tab, ask.selectedProvider == provider else { return }
+                switch result {
+                case .success(let files): ask.attachImages(files)
+                case .failure(let error): NSAlert(error: error).runModal()
+                }
+            }
+            return true
+        }
+        let destination = surface
+        TerminalImageDrop.receive(sender.draggingPasteboard, allowsMultiple: !destination.usesBinaryImagePaste) { [weak self, weak destination] result in
+            guard let self, let destination, destination.surface == target else { return }
+            do {
+                let files = try result.get()
+                try destination.insertDroppedImages(files)
+            } catch {
+                let alert = NSAlert(error: error)
+                if let window = self.window { alert.beginSheetModal(for: window) }
+            }
+        }
+        return true
     }
 
     @available(*, unavailable)

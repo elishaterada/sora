@@ -22,7 +22,7 @@ struct CodexProvider: AIProvider {
                     }
                     _ = try await connection.rpc("turn/start", [
                         "threadId": id, "environments": [], "runtimeWorkspaceRoots": [],
-                        "input": [["type": "text", "text": try Self.prompt(request), "text_elements": []]]
+                        "input": try Self.input(request)
                     ])
                 } catch { continuation.finish(throwing: error); connection.close() }
             }
@@ -41,6 +41,17 @@ struct CodexProvider: AIProvider {
         ]
         if !model.isEmpty { value["model"] = model }
         return value
+    }
+
+    static func input(_ request: AIRequest) throws -> [[String: Any]] {
+        var items: [[String: Any]] = [["type": "text", "text": try prompt(request), "text_elements": []]]
+        for message in request.messages {
+            for image in message.images ?? [] {
+                items.append(["type": "text", "text": "Image from \(message.role.rawValue) message \(message.id): \(image.name)", "text_elements": []])
+                items.append(["type": "image", "url": image.dataURL])
+            }
+        }
+        return items
     }
 
     static func prompt(_ request: AIRequest) throws -> String {

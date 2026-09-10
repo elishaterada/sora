@@ -4,6 +4,26 @@ Human-readable highlights for each Sora release live here. Add the newest
 version before creating its `vX.Y.Z` tag; the release workflow requires a
 matching section and publishes it to GitHub.
 
+## 0.1.13 — 2026-09-10
+
+### What’s new
+
+- Drop images into Agent to attach visual references, preview them, and remove them before sending. Image contents travel with the conversation, so the selected service does not need access to your local files.
+- Drop an image into a running image-aware CLI such as Codex to paste the actual image through the macOS clipboard. At a shell prompt, dropping images inserts safely quoted file paths.
+- Browse command history with Up and Down in the input. Click an output block to move between blocks with the arrow keys and access block actions.
+- Keep the command visible while scrolling through long output with smoothly transitioning sticky headers.
+
+### Fixes
+
+- Scroll terminal output smoothly without snapping to whole lines.
+- Open command history at the latest entry immediately, without an animated scroll.
+- Keep selected block spacing aligned and avoid showing a sticky header before its command scrolls out of view.
+
+### Known limitations
+
+- Agent image attachments require a vision-capable model. Attach up to four images per message, each under 5 MB as PNG and 8192 pixels per side.
+- Running CLI programs must support image paste from the macOS clipboard; drop one image at a time. Image paste replaces the clipboard contents.
+
 ## 0.1.12 — 2026-09-09
 
 ### What’s new

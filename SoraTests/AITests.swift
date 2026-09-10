@@ -2,6 +2,34 @@ import Foundation
 import XCTest
 
 final class OpenAIProviderTests: XCTestCase {
+    func testImagesAreEmbeddedForEveryProviderAndSurvivePersistence() throws {
+        let bytes = Data([0x89, 0x50, 0x4e, 0x47])
+        let image = AIImageAttachment(name: "reference.png", png: bytes)
+        let message = AIMessage(role: .user, text: "Describe", images: [image])
+        let restored = try JSONDecoder().decode(AIMessage.self, from: JSONEncoder().encode(message))
+        XCTAssertEqual(restored.images?.first?.png, bytes)
+        let request = AIRequest(model: "test", messages: [message])
+        for kind in [AIBackendID.openai, .anthropic, .gateway, .grok] {
+            let request = try HTTPAIProvider.urlRequest(kind: kind, request: request, credential: "fixture")
+            let body = try XCTUnwrap(JSONSerialization.jsonObject(with: request.httpBody!) as? [String: Any])
+            let messages = try XCTUnwrap(body[kind == .openai ? "input" : "messages"] as? [[String: Any]])
+            let parts = try XCTUnwrap(messages.last?["content"] as? [[String: Any]])
+            XCTAssertEqual(parts.count, 2)
+            if kind == .anthropic {
+                XCTAssertEqual((parts[1]["source"] as? [String: Any])?["data"] as? String, bytes.base64EncodedString())
+            } else if kind == .openai {
+                XCTAssertEqual(parts[1]["image_url"] as? String, image.dataURL)
+            } else {
+                XCTAssertEqual((parts[1]["image_url"] as? [String: Any])?["url"] as? String, image.dataURL)
+            }
+        }
+        let input = try CodexProvider.input(request)
+        XCTAssertEqual(input.last?["type"] as? String, "image")
+        XCTAssertEqual(input.last?["url"] as? String, image.dataURL)
+        let legacy = AIMessage(role: .user, text: "No image")
+        XCTAssertNil(try JSONDecoder().decode(AIMessage.self, from: JSONEncoder().encode(legacy)).images)
+    }
+
     func testProviderErrorsExplainQuotaAndRateLimitsSeparately() {
         let quota = ProviderAPIError.parse(provider: "OpenAI", status: 429, object: ["error": ["code": "insufficient_quota"]]).localizedDescription
         XCTAssertTrue(quota.contains("credits or spending limit"))
