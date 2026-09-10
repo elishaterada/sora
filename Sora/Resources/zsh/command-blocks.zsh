@@ -113,6 +113,22 @@ if [[ -o interactive ]]; then
   bindkey -- "$_SORA_AGENT_HANDOFF_KEY" _sora_agent_handoff
 fi
 
+# Sora's Use Command action clears the authoritative edit buffer before
+# pasting the selected command. It never invokes accept-line. Save the old
+# draft in zsh's kill buffer so the explicit replacement can be undone/yanked.
+_sora_prepare_reuse() {
+  builtin emulate -L zsh
+  CUTBUFFER=$BUFFER
+  BUFFER=''
+  CURSOR=0
+}
+if [[ -o interactive ]]; then
+  zle -N _sora_prepare_reuse
+  bindkey -M emacs '^X^R' _sora_prepare_reuse
+  bindkey -M viins '^X^R' _sora_prepare_reuse
+  bindkey -M vicmd '^X^R' _sora_prepare_reuse
+fi
+
 # Ignore an empty primary prompt in ZLE itself, where BUFFER is authoritative.
 # Continuation prompts and interactive programs retain normal Return behavior.
 _sora_accept_line() {

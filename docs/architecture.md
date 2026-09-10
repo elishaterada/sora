@@ -107,7 +107,7 @@ The host does not implement VT parsing, glyph rendering, or PTY spawn.
 - Inline suggestions use a fixed prompt origin captured before the first keystroke. The tracked ASCII buffer determines the suffix column, so text and position change together without following intermediate PTY cursor redraws or running a polling timer. Untracked, non-ASCII, and wrapped input suppresses the overlay rather than guessing its position.
 - overlay resets on Enter, Esc, arrows (except accept), Ctrl-C/U/A/E/K/W, Option-as-Meta (no printable text), and multiline paste. Ready-prompt mouse focus keeps tracking so conversational Return still sees the typed line. zsh Tab-complete and history recall desync the buffer until the next prompt.
 - Agent-vs-shell routing does not use the keystroke buffer or the rendered grid. zsh mirrors its live ZLE `$BUFFER` to Sora on every `zle-line-pre-redraw` through a sentinel-prefixed OSC 2 title (`ShellEditLine`), which Sora consumes as routing state and never shows as a window or tab title. That buffer stays correct through paste, history recall, completion, and wrapping, and its arrival also proves the shell is at an interactive prompt. Screen scraping cannot substitute: `PS1` is empty, so nothing on screen marks where the prompt begins. Shells without the Sora hooks fall back to the keystroke buffer.
-- next-command prediction on an empty prompt after a successful command, shown as accent `→` text in the sticky prompt footer under the grid (not as an overlay on scrollback). Esc or Up/Down/Left dismisses it until the next successful command. Prefix ghost text stays on-grid only while the live prompt is visible; scrolling away hides the overlay and mirrors the line in the footer.
+- next-command prediction on an empty prompt after a successful command, shown as accent `→` text in the sticky prompt footer under the grid (not as an overlay on scrollback). Esc or Left dismisses it until the next successful command. Up/Down opens history and hides the prediction while browsing. Prefix ghost text stays on-grid only while the live prompt is visible; scrolling away hides the overlay and mirrors the line in the footer.
 
 ### Agent, Providers, and Tools
 
@@ -235,9 +235,10 @@ excluded. Backgrounds extend through window padding to the pane edges using
 `window-padding-color = extend-always`. Text has 24-point horizontal and 18-point
 vertical insets. The reserved Agent-resume strip shares the dark backing.
 
-Two blank terminal rows follow the duration label; historical dividers sit
-between them, a full terminal row above the command, balancing both sides; the live divider
-is flush with the region transition. Empty historical prompts receive no rule.
+Two blank terminal rows follow the duration label. Dividers split them between
+adjacent blocks, leaving one blank row below the duration and one above the next
+command. The live input region uses the same boundary. Empty historical prompts
+receive no rule. Boundaries never borrow a nonblank or soft-wrapped output row.
 Empty Return at a primary ZLE prompt is ignored without advancing the grid. The
 accept-line wrapper preserves the previously configured widget for nonempty
 input and continuation prompts. Interactive programs bypass ZLE and retain
@@ -245,9 +246,85 @@ ordinary Return behavior; whitespace-only input retains shell semantics.
 
 Hint messages settle for 150 ms before replacing the visible hint, avoiding flashes between transient keystroke-tracking and shell-mirror states. The hint row stays visible while editing.
 
+### Command history picker
+
+`CommandHistorySession` owns a transient history preview for a focused, ready
+input with Sora's ZLE integration. `CommandHistoryStore.recall` queries SQLite
+on a worker queue for the latest 200 distinct commands matching a literal prefix,
+ordered by last use across tabs and app launches. Failed commands remain
+recallable. This uses Sora's recorded history; it does not import shell history
+files. Request identities discard late results after dismissal or a new query.
+Loading, empty, and failure states are explicit, and arrows remain responsive
+while loading. New entries use an encoded preexec command report, preserving
+newlines and tabs that ordinary window titles remove. Older title-only multiline
+records cannot have their missing line breaks reconstructed from this database.
+
+`CommandHistoryPopoverView` is a native table overlay above the sticky input.
+It leaves terminal dimensions and the first responder unchanged. At short
+window heights the picker uses the available area above input and reduces its
+header/footer before sacrificing rows, keeping selection visible even above a
+six-line draft at the minimum workspace height. Newest entries
+appear at the bottom; selection scrolls into view. The sticky input previews the
+selected command, with completion ghosts suppressed, while ZLE retains the
+original draft and cursor. The input height stays fixed during preview; long
+commands scroll to the caret within those rows instead of reflowing the PTY.
+Escape, Down beyond the latest, switching panes, or
+entering block/Agent mode dismisses the preview without changing that draft.
+
+Return stages the selected command with the existing whole-buffer ZLE widget
+and paste path, then sends one shell Return, bypassing conversational routing.
+Tab, a row click, or editing stages the command without executing it. No-match
+Return dismisses the list and follows the ordinary draft submission path.
+Control-P/N remain native shell history controls. In multiline drafts, Up/Down
+enter history only from the first/last logical line respectively.
+
+### Command block keyboard focus
+
+`CommandBlockInput` routes Cmd-Up from a ready shell prompt into completed
+blocks. Unmodified input arrows belong to command history, with ordinary ZLE
+cursor movement preserved within multiline drafts. Up/Down navigate selected
+blocks; Escape or Down beyond the latest block returns to input. Typing/paste
+resumes the unchanged draft at its existing cursor. Running programs bypass
+block routing, with an additional alternate-screen check inside Ghostty.
+ZLE line-init publishes the current buffer after draft restoration so Control-C
+cannot leave stale input text affecting routing on the next prompt.
+
+`CommandBlockActionsView` is a separate native first responder in the existing
+36-point resume slot. Selection hides the input caret and shows a full-width
+Ghostty selection plus copy/reuse/menu controls. The grid does not resize when
+selection changes. Single clicks select blocks; dragging and multiple clicks
+retain Ghostty text selection. Right-click and Tab expose the same native menu,
+including Copy Command, Copy Output, Copy Entire Block, and Save Output. AppKit
+copy/paste commands are forwarded by the block responder.
+
+Block highlights and pointer hit testing use the divider boundaries, including
+the leading spacer and excluding the next block's spacer. The tracked selection
+retains its semantic command/output bounds for navigation and copy/reuse actions.
+Ordinary text selections keep their exact cell bounds. The renderer computes the
+visual range under the terminal lock and draws from its own snapshot.
+
+The existing Ghostty patch adds small embedded API entry points over OSC 133
+prompt/input/output metadata and tracked selection pins. Swift does not keep a
+second scrollback model or infer boundaries from displayed text. The next prompt
+closes a block, empty prompts are skipped, and missing/pruned metadata is not
+guessed. Reflow now marks additional physical prompt rows as continuations and
+preserves the primary marker when widening. This prevents a wrapped command
+from becoming several independently selectable blocks.
+
+Actions read current selected text on demand, trimming trailing grid padding.
+Output includes the shell-generated duration footer. Return/Use Command stages
+the semantic input text through the existing paste path, after a bundled
+Control-X Control-R ZLE widget clears the entire draft into CUTBUFFER. No
+accept-line is sent. The widget is bound in emacs, vi insert, and vi command maps.
+No AI calls are involved. Archives now preserve passive OSC 133 metadata, so
+clicking a restored block enters the same responder and arrow navigation as a
+new command. Older archives that already lost their metadata remain searchable
+and text-selectable; their missing command boundaries cannot be reconstructed.
+
 Shell-mirror updates render input immediately, independently of deferred completion refreshes. Key events reach the PTY before completion lookup, queued refreshes coalesce, and directory/branch context is cached until the shell reports its working directory again. Hint settling never gates input rendering.
 
-Divider padding depends on whether the prompt is actual visible live input, not merely the last prompt in the viewport. Historical commands retain their spacing when the live prompt scrolls off-screen.
+Divider spacing stays consistent when the live prompt scrolls off-screen. The
+last visible historical command is not mistaken for live input.
 
 Provider failures are classified from bounded structured HTTP error bodies (up to 64 KiB) and streaming error events. User messages identify the provider, distinguish exhausted credits from temporary throttling, explain input/output token limits, authentication/access/model failures, and service/network failures, and suggest an action. HTTP status is retained; raw provider bodies and credentials are not displayed. Numeric Retry-After values are honored in the suggested wait. These messages do not automatically retry requests or spend additional API credit.
 
@@ -316,11 +393,49 @@ Workspace snapshots retain stable tab IDs. Ghostty scrollback with SGR text styl
 checkpointed every ten seconds and on normal workspace shutdown, capped at
 2 MB per tab, in private Application Support/Sora/TerminalHistory files.
 The zsh bootstrap prints that text once before starting the new prompt; it never
-evaluates archived text. Colors and text styling are restored; running processes are not. Ghostty’s VT export is captured without modifying the clipboard, and non-SGR terminal escape sequences are removed before saving. Older plain-text archives remain readable. A crash
+evaluates archived text. Colors, text styling, and command boundaries are restored;
+running processes are not. The embedded archive export reads the primary screen
+under Ghostty's terminal lock, even during fullscreen programs. Its opt-in VT
+formatter emits prompt/input/output markers with `aid=sora-archive`, including
+empty closing prompts and multiline continuations. The stream handler restores
+their grid metadata without generating command-start/finish events. Ordinary
+copy/export formats keep their existing behavior. The sanitizer allows only SGR
+and those four exact passive OSC 133 forms; titles, clipboard actions, command
+completion notifications, and other escapes are discarded. Older plain-text
+archives remain readable. A crash
 may lose output since the last checkpoint. Older versions did not save output
 and cannot supply previously lost history.
 
 ## Everyday terminal controls
+
+A native sticky command header overlays the top of the terminal without changing
+PTY dimensions. A read-only Ghostty snapshot finds the semantic command above
+the viewport, its signed position, and the distance to the next command, including
+fractional scroll offsets. The header follows the command into its pinned position
+and is pushed away by the next command. Geometry updates synchronously with the
+scroll position, without delayed animations or a whole-row visibility threshold.
+At the start of scrollback the normal command remains visible until its source
+crosses the pinning point; the initial unscrolled row never activates a header.
+Two clipped header views share the same top band so the incoming command is
+visible while it pushes the outgoing command away. It follows completed, restored, and running
+commands, hides on the alternate screen, and never changes the current selection.
+Long/multiline commands use a single truncated line with the full command in a
+tooltip and accessibility value. Older archives without semantic markers cannot
+supply sticky headers.
+
+Trackpad scrollback uses Ghostty's opt-in `smooth-scrolling` path. AppKit precise
+deltas are converted from points to backing pixels at the view's actual scale.
+The primary screen retains a fractional viewport row alongside its tracked
+integer viewport; macOS continues to supply gesture and momentum events. Limits
+clamp immediately without overscroll debt. Discrete scrolling, fullscreen
+applications, and mouse-reporting programs retain Ghostty's existing routing.
+
+The render snapshot includes the partially visible bottom row without changing
+PTY dimensions. The renderer shifts its projection and background sampling by
+the same pixel offset, including block dividers and selection colors. Pointer
+hit testing reads that offset under the terminal lock, including the extra edge
+row. Fraction-only frames reuse existing glyph rows. Keyboard/block jumps,
+return-to-input, resize, and screen reset restore row-aligned positioning.
 
 - Cmd-F opens native output search. Ghostty owns matching, highlighting, and
   match navigation, including restored output. Return/Shift-Return navigate.

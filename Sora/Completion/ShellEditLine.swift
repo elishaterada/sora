@@ -9,6 +9,22 @@ enum ShellEditLine {
     static let multilineSentinel = "\u{2400}sora-multiline\u{2400}"
     static let inputSentinel = "\u{2400}sora-input\u{2400}"
 
+    /// Preexec's original command, before the ordinary window title removes
+    /// newlines. An empty result also supports the older readiness-only mark.
+    static func startedCommand(title: String) -> String? {
+        guard title.hasPrefix(commandStartedTitle) else { return nil }
+        return decodeTransport(String(title.dropFirst(commandStartedTitle.count)))
+    }
+
+    private static func decodeTransport(_ text: String) -> String {
+        text.replacingOccurrences(of: "%0A", with: "\n")
+            .replacingOccurrences(of: "%09", with: "\t")
+            .replacingOccurrences(of: "%0D", with: "\r")
+            .replacingOccurrences(of: "%1B", with: "\u{1B}")
+            .replacingOccurrences(of: "%07", with: "\u{07}")
+            .replacingOccurrences(of: "%25", with: "%")
+    }
+
     static func shellRecognizesCommand(title: String) -> Bool {
         let title = title.replacingOccurrences(of: multilineSentinel, with: inputSentinel, options: .anchored)
         guard title.hasPrefix(inputSentinel) else { return false }
@@ -22,11 +38,7 @@ enum ShellEditLine {
         let parts = title.dropFirst(inputSentinel.count).split(separator: ";", maxSplits: 2, omittingEmptySubsequences: false)
         guard parts.count == 3, parts[1] == "0" || parts[1] == "1" else { return title }
         let text = String(parts[2])
-        let decoded = encoded ? text.replacingOccurrences(of: "%0A", with: "\n")
-            .replacingOccurrences(of: "%0D", with: "\r")
-            .replacingOccurrences(of: "%1B", with: "\u{1B}")
-            .replacingOccurrences(of: "%07", with: "\u{07}")
-            .replacingOccurrences(of: "%25", with: "%") : text
+        let decoded = encoded ? decodeTransport(text) : text
         return cursorSentinel + parts[0] + ";" + decoded
     }
 

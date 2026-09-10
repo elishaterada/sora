@@ -1,6 +1,47 @@
 import XCTest
 
 final class ShellEditLineTests: XCTestCase {
+    func testStartedCommandTransportPreservesMultilineTextAndLiteralEscapes() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        let command = "printf '日本語\n\tline two\n%0A %09 %25\r\u{1b}\u{07}'"
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        process.environment = ProcessInfo.processInfo.environment.merging(["LC_ALL": "en_US.UTF-8"]) { _, value in value }
+        process.arguments = ["-f", "-c", "source \"$1\"; _sora_report_command_started \"$2\"", "test",
+                             root.appendingPathComponent("Sora/Resources/zsh/prompt-line.zsh").path, command]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        try process.run()
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        XCTAssertEqual(process.terminationStatus, 0)
+        let output = try XCTUnwrap(String(data: data, encoding: .utf8))
+        XCTAssertTrue(output.hasPrefix("\u{1b}]2;"))
+        XCTAssertTrue(output.hasSuffix("\u{07}"))
+        let title = String(output.dropFirst(4).dropLast())
+        XCTAssertEqual(ShellEditLine.startedCommand(title: title), command)
+        XCTAssertNil(ShellEditLine.parse(title: title))
+        XCTAssertFalse(ShellEditLine.isMirror(title: title))
+        XCTAssertEqual(ShellEditLine.startedCommand(title: ShellEditLine.commandStartedTitle), "")
+        XCTAssertNil(ShellEditLine.startedCommand(title: "ordinary title"))
+    }
+
+    func testNewEmptyPromptPublishesAfterCancellationWithoutRedraw() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        process.environment = ProcessInfo.processInfo.environment.merging(["LC_ALL": "en_US.UTF-8"]) { _, value in value }
+        process.arguments = ["-f", "-c", "source \"$1\"; BUFFER='' CURSOR=0 _SORA_RESTORE_DRAFT=''; _sora_begin_line",
+                             "test", root.appendingPathComponent("Sora/Resources/zsh/prompt-line.zsh").path]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        try process.run()
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        XCTAssertEqual(process.terminationStatus, 0)
+        XCTAssertEqual(String(data: data, encoding: .utf8), "\u{1b}]2;" + ShellEditLine.multilineSentinel + "0;0;\u{07}")
+    }
+
     func testShellEmitsDistinctCommandStartedSignal() throws {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
         let process = Process()

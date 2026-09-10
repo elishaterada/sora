@@ -8,6 +8,7 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
 
     var onHeightChange: (() -> Void)?
     private(set) var preferredHeight: CGFloat = height
+    private var historyPreviewHeight: CGFloat?
     var onMoveCursor: ((Int) -> Void)?
     private var selectionAnchor: Int?
     private var selectionRange: Range<Int>?
@@ -205,8 +206,9 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
             wrappedInput = wrapped
         }
         let lines = wrapped.lines
-        let visibleLines = min(6, max(1, lines.count))
-        let height = Self.height + CGFloat(visibleLines - 1) * 24
+        let maximumLines = historyPreviewHeight.map { max(1, Int(($0 - Self.height) / 24) + 1) } ?? 6
+        let visibleLines = min(maximumLines, max(1, lines.count))
+        let height = historyPreviewHeight ?? (Self.height + CGFloat(visibleLines - 1) * 24)
         if preferredHeight != height {
             preferredHeight = height
             onHeightChange?()
@@ -393,6 +395,30 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
         needsLayout = true
     }
 
+    func updateBlockBrowsing(_ browsing: Bool) {
+        inputClip.alphaValue = browsing ? 0.5 : 1
+        statusLabel.stringValue = browsing ? "Browsing" : (promptReady ? "Ready" : "Running")
+        statusLabel.setAccessibilityLabel(browsing ? "Command output selected" : statusLabel.stringValue)
+        if browsing {
+            desiredHint = "↑ ↓  Move between blocks    ·    Return  Use command    ·    Tab  Actions    ·    Esc  Input"
+            hintLabel.setAccessibilityLabel(desiredHint)
+        }
+    }
+
+    func updateHistoryBrowsing(_ browsing: Bool, hasSelection: Bool) {
+        // Previewing a long recalled command must not resize/reflow the PTY.
+        // Follow its caret within the input's existing visible rows instead.
+        if browsing && historyPreviewHeight == nil { historyPreviewHeight = preferredHeight }
+        if !browsing && historyPreviewHeight != nil { historyPreviewHeight = nil; needsLayout = true }
+        guard browsing else { return }
+        statusLabel.stringValue = "History"
+        statusLabel.setAccessibilityLabel("Browsing command history")
+        if hasSelection { routeLabel.isHidden = true }
+        desiredHint = hasSelection ? "Return  Run command" : "Type to keep editing"
+        hintLabel.isHidden = false
+        hintLabel.setAccessibilityLabel(desiredHint)
+    }
+
     func updateDictation(listening: Bool, transcript: String, error: String?) {
         microphoneButton.image = NSImage(
             systemSymbolName: listening ? "waveform.circle.fill" : "mic",
@@ -410,7 +436,7 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
 
     private func applyFallbackHint() {
         if showingPrediction {
-            desiredHint = "Tab  Accept suggestion"
+            desiredHint = "Tab  Accept suggestion    ·    ↑ ↓  History"
             hintLabel.isHidden = false
             hintLabel.setAccessibilityLabel("Press Tab or Right Arrow to accept prediction")
         } else if agentResumeAvailable {
@@ -418,7 +444,9 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
             hintLabel.isHidden = false
             hintLabel.setAccessibilityLabel("Command-Y reopens the agent conversation")
         } else {
-            desiredHint = promptReady ? "Return  Run    ·    ⇧Return  New line    ·    ⌘⇧A  Agent" : "Control-C  Stop command"
+            desiredHint = promptReady
+                ? (hasInput ? "Return  Run    ·    ⇧Return  New line    ·    ⌘↑  Blocks" : "↑ ↓  History    ·    ⌘↑  Blocks    ·    ⌘⇧A  Agent")
+                : "Control-C  Stop command"
             hintLabel.isHidden = false
             hintLabel.setAccessibilityLabel(desiredHint)
         }

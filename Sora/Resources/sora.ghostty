@@ -21,6 +21,7 @@ window-padding-balance = false
 window-padding-color = extend-always
 adjust-cell-height = 12%
 semantic-prompt-boundaries = true
+smooth-scrolling = true
 font-size = 18
 font-family = "SF Mono"
 bold-color = bright

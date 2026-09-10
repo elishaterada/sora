@@ -10,6 +10,7 @@ import SwiftUI
 final class TerminalPaneView: NSView {
     let surface: GhosttySurfaceView
     let stickyBar = StickyPromptBar()
+    private let historyPopover = CommandHistoryPopoverView()
     private var agentHost: NSHostingView<AnyView>!
     private var resumeHost: NSHostingView<AgentResumeStripView>!
     private(set) var isShowingAgent = false
@@ -48,6 +49,22 @@ final class TerminalPaneView: NSView {
         ))
         resumeHost.isHidden = true
         addSubview(resumeHost)
+        addSubview(surface.blockActions)
+        surface.onBlockSelectionChange = { [weak self] in self?.refreshResumeStrip() }
+        historyPopover.isHidden = true
+        addSubview(historyPopover)
+        historyPopover.onChoose = { [weak surface] in surface?.chooseHistoryCommand(at: $0) }
+        historyPopover.onDismiss = { [weak surface] in
+            guard let surface else { return }
+            surface.dismissCommandHistory()
+            surface.window?.makeFirstResponder(surface)
+        }
+        surface.onHistoryChange = { [weak self] in
+            guard let self else { return }
+            self.historyPopover.update(self.surface.commandHistory)
+            self.historyPopover.isHidden = !self.surface.commandHistory.isPresented || self.isShowingAgent
+            self.refreshResumeStrip()
+        }
 
         agentHost = NSHostingView(rootView: AnyView(EmptyView()))
         // AppKit owns this overlay frame; SwiftUI must not feed intrinsic size
@@ -153,6 +170,8 @@ final class TerminalPaneView: NSView {
     }
 
     func showAgent() {
+        surface.dismissCommandHistory()
+        surface.leaveCommandBlocks(focusInput: false)
         ask?.bindTab(tabID)
         ask?.configureAgent(directory: surface.currentWorkingDirectory() ?? surface.initialWorkingDirectory)
         if !isShowingAgent { mountAgentContent() }
@@ -214,6 +233,12 @@ final class TerminalPaneView: NSView {
     }
 
     private func refreshResumeStrip() {
+        surface.blockActions.isHidden = isShowingAgent || !surface.isBrowsingCommandBlocks
+        if (surface.isBrowsingCommandBlocks || surface.commandHistory.isPresented) && !isShowingAgent {
+            resumeHost.isHidden = true
+            needsLayout = true
+            return
+        }
         guard isPaneActive, !isShowingAgent else {
             resumeHost.isHidden = true
             stickyBar.updateAgentResumeHint(false)
@@ -250,6 +275,7 @@ final class TerminalPaneView: NSView {
         resumeHost.frame = isShowingAgent
             ? .zero
             : NSRect(x: 0, y: barH, width: bounds.width, height: resumeSlot)
+        surface.blockActions.frame = resumeHost.frame
         surface.frame = isShowingAgent
             ? bounds
             : NSRect(
@@ -258,6 +284,9 @@ final class TerminalPaneView: NSView {
                 width: bounds.width,
                 height: max(0, bounds.height - barH - resumeSlot)
             )
+        historyPopover.frame = NSRect(x: 0, y: barH, width: bounds.width,
+                                      height: CommandHistoryLayout.panelHeight(
+                                        preferred: historyPopover.preferredHeight, pane: bounds.height, input: barH))
         if agentHost.frame != bounds { agentHost.frame = bounds }
     }
 }

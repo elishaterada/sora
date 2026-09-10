@@ -26,6 +26,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     private(set) var cellSize = NSSize(width: 8, height: 16)
     private let completion = CompletionSession()
     private let ghostText = GhostTextView()
+    private let commandHeaders = [StickyCommandHeaderView(), StickyCommandHeaderView()]
     private var ghostTextAnchor: GhostTextAnchor?
     private weak var stickyBar: StickyPromptBar?
     private var scrollbarTotal: UInt64 = 0
@@ -39,6 +40,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     private var completionRefreshPending = false
     private var shellRecognizesCommand = false
     private var shellEditLine: String?
+    private var runningCommand: String?
     private var shellCursorOffset = 0
     private var promptIntent: PromptIntent?
     var onFocus: (() -> Void)?
@@ -49,6 +51,13 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     var draftText: String { isShellPromptReady ? promptLineForSubmission() : "" }
     var onAgentPrompt: ((String) -> Void)?
     var onContinueAgent: (() -> Bool)?
+    let commandHistory = CommandHistorySession()
+    var onHistoryChange: (() -> Void)?
+    let blockActions = CommandBlockActionsView()
+    private(set) var isBrowsingCommandBlocks = false
+    var onBlockSelectionChange: (() -> Void)?
+    private var outputMouseDragged = false
+    private var handledBlockContextClick = false
 
     override var isOpaque: Bool { false }
     override var acceptsFirstResponder: Bool { true }
@@ -65,6 +74,19 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         ghostText.wantsLayer = true
         ghostText.layer?.backgroundColor = NSColor.clear.cgColor
         addSubview(ghostText)
+        commandHeaders.forEach(addSubview)
+        commandHistory.onChange = { [weak self] in
+            self?.refreshStickyBar()
+            self?.onHistoryChange?()
+        }
+        blockActions.terminal = self
+        blockActions.isHidden = true
+        blockActions.onKey = { [weak self] in self?.keyDown(with: $0) }
+        blockActions.onKeyUp = { [weak self] in self?.keyUp(with: $0) }
+        blockActions.onCopyOutput = { [weak self] in self?.copyBlockOutput(nil) }
+        blockActions.onReuse = { [weak self] in self?.reuseBlockCommand(nil) }
+        blockActions.onReturnToInput = { [weak self] in self?.leaveCommandBlocks() }
+        blockActions.makeMenu = { [weak self] in self?.commandBlockMenu() ?? NSMenu() }
     }
 
     func attachStickyPromptBar(_ bar: StickyPromptBar) {
@@ -111,6 +133,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
         updateSurfaceMetrics()
+        refreshCommandHeader()
         // Y is live from IME; refresh so a resize cannot leave ghost text stranded.
         if ghostTextAnchor != nil {
             scheduleCompletionRefresh()
@@ -151,6 +174,8 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         let interval = OSSignpostID(log: Self.inputLog)
         os_signpost(.begin, log: Self.inputLog, name: "Terminal keyDown", signpostID: interval)
         defer { os_signpost(.end, log: Self.inputLog, name: "Terminal keyDown", signpostID: interval) }
+        if handleCommandBlockKey(event) { return }
+        if handleCommandHistoryKey(event) { return }
         stickyBar?.resetCaretBlink()
         stickyBar?.clearInputSelection()
         captureGhostTextAnchor()
@@ -310,6 +335,11 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     }
 
     override func selectAll(_ sender: Any?) {
+        acceptCommandHistory()
+        if isBrowsingCommandBlocks {
+            leaveCommandBlocks(focusInput: false)
+            window?.makeFirstResponder(self)
+        }
         performBinding("select_all")
     }
 
@@ -331,8 +361,10 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     }
 
     func pasteFromPasteboard() {
-        guard let surface else { return }
+        guard surface != nil else { return }
         guard let value = GhosttyClipboard.plainText(from: .general), !value.isEmpty else { return }
+        leaveCommandBlocks()
+        acceptCommandHistory()
         captureGhostTextAnchor()
         completion.handlePaste(value)
         if value.contains(where: { $0 == "\n" || $0 == "\r" }) { ghostTextAnchor = nil }
@@ -355,6 +387,9 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     // MARK: - Mouse
 
     override func mouseDown(with event: NSEvent) {
+        outputMouseDragged = false
+        dismissCommandHistory()
+        leaveCommandBlocks(focusInput: false)
         stickyBar?.clearInputSelection()
         window?.makeFirstResponder(self)
         // Focusing a ready prompt must not kill AI routing. Clicks used to
@@ -369,6 +404,8 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     }
 
     func applyStickyBarFocus() {
+        acceptCommandHistory()
+        leaveCommandBlocks()
         window?.makeFirstResponder(self)
         reassertTerminalFocus()
         applyPromptMouseFocus()
@@ -377,6 +414,8 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
 
     func insertDictatedText(_ value: String) {
         guard !value.isEmpty else { return }
+        leaveCommandBlocks()
+        acceptCommandHistory()
         captureGhostTextAnchor()
         completion.handlePaste(value)
         refreshCompletion()
@@ -401,19 +440,34 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     override func mouseUp(with event: NSEvent) {
         sendMousePosition(event)
         sendMouseButton(event, state: GHOSTTY_MOUSE_RELEASE, button: GHOSTTY_MOUSE_LEFT)
+        if !outputMouseDragged, event.clickCount == 1,
+           event.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty {
+            selectCommandBlock(at: event)
+        }
     }
 
     override func rightMouseDown(with event: NSEvent) {
+        handledBlockContextClick = selectCommandBlock(at: event)
+        if handledBlockContextClick {
+            NSMenu.popUpContextMenu(commandBlockMenu(), with: event, for: self)
+            return
+        }
+        leaveCommandBlocks(focusInput: false)
         sendMousePosition(event)
         sendMouseButton(event, state: GHOSTTY_MOUSE_PRESS, button: GHOSTTY_MOUSE_RIGHT)
     }
 
     override func rightMouseUp(with event: NSEvent) {
+        if handledBlockContextClick {
+            handledBlockContextClick = false
+            return
+        }
         sendMousePosition(event)
         sendMouseButton(event, state: GHOSTTY_MOUSE_RELEASE, button: GHOSTTY_MOUSE_RIGHT)
     }
 
     override func mouseDragged(with event: NSEvent) {
+        outputMouseDragged = true
         sendMousePosition(event)
     }
 
@@ -426,8 +480,11 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         var deltaX = event.scrollingDeltaX
         var deltaY = event.scrollingDeltaY
         if event.hasPreciseScrollingDeltas {
-            deltaX *= 2
-            deltaY *= 2
+            // Convert a positive unit size: AppKit standardizes negative sizes,
+            // which would turn downward gestures into upward scrolling.
+            let scale = convertToBacking(NSSize(width: 1, height: 1))
+            deltaX *= scale.width
+            deltaY *= scale.height
         }
         ghostty_surface_mouse_scroll(
             surface,
@@ -444,6 +501,9 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         scrollbarTotal = total
         scrollbarOffset = offset
         scrollbarLen = len
+        if isBrowsingCommandBlocks, let surface, !ghostty_surface_has_selection(surface) {
+            leaveCommandBlocks()
+        }
         refreshCompletion()
     }
 
@@ -481,6 +541,13 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
 
     func historyText() -> String? {
         guard let surface else { return nil }
+        var history = ghostty_text_s()
+        if ghostty_surface_read_command_history(surface, &history) {
+            defer { ghostty_surface_free_text(surface, &history) }
+            guard let bytes = history.text else { return "" }
+            return String(decoding: UnsafeRawBufferPointer(start: bytes, count: Int(history.text_len)), as: UTF8.self)
+        }
+        NSLog("Could not capture command boundaries; falling back to styled terminal history")
         isExportingHistory = true
         exportedHistory = nil
         let action = "write_screen_file:copy,vt"
@@ -564,13 +631,14 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         if active {
             runtime.activeSurface = self
             updateSurfaceMetrics()
-            window?.makeFirstResponder(self)
+            window?.makeFirstResponder(isBrowsingCommandBlocks ? blockActions : self)
             // makeFirstResponder is a no-op when we are already first responder,
             // so always re-assert Ghostty focus after un-occlusion. Leaving the
             // agent overlay clears focus via occlusion; without this the blink
             // shader sees iFocus=0 and custom-shader-animation never runs.
             reassertTerminalFocus()
         } else {
+            dismissCommandHistory()
             ghostText.hide()
             if runtime.activeSurface === self {
                 runtime.activeSurface = nil
@@ -606,7 +674,10 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     }
 
     func applyTitle(_ title: String) {
-        if title == ShellEditLine.commandStartedTitle {
+        if let command = ShellEditLine.startedCommand(title: title) {
+            runningCommand = command.isEmpty ? nil : command
+            dismissCommandHistory()
+            leaveCommandBlocks(focusInput: false)
             isShellPromptReady = false
             shellEditLine = nil
             shellRecognizesCommand = false
@@ -659,16 +730,18 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     }
 
     func recordCommandFinished(exitCode: Int16, durationNanos: UInt64) {
+        dismissCommandHistory()
         onCommandFinished?(exitCode)
         isShellPromptReady = true
         shellEditLine = ""
         let cwd = lastWorkingDirectory ?? currentWorkingDirectory() ?? initialWorkingDirectory
         let run = runtime.recordCommand(
-            command: lastShellTitle,
+            command: runningCommand ?? lastShellTitle,
             cwd: cwd,
             exitCode: exitCode,
             durationNanos: durationNanos
         )
+        runningCommand = nil
         completion.reset()
         ghostTextAnchor = nil
         if let run, run.exitCode == 0 {
@@ -792,6 +865,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     }
 
     func moveShellCursor(to offset: Int) {
+        acceptCommandHistory()
         guard isShellPromptReady, let line = shellEditLine, let surface else { return }
         let target = min(max(0, offset), line.unicodeScalars.count)
         let delta = target - shellCursorOffset
@@ -871,8 +945,6 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
 
     /// Called from libghostty's wakeup after PTY output moves the cursor.
     func scheduleCompletionRefreshFromTerminal() {
-        guard isShellPromptReady,
-              completion.suggestion != nil || !completion.buffer.text.isEmpty else { return }
         scheduleCompletionRefresh()
     }
 
@@ -895,6 +967,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     }
 
     private func refreshCompletion() {
+        refreshCommandHeader()
         guard isShellPromptReady else {
             completion.stopTracking()
             ghostText.hide()
@@ -945,8 +1018,9 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
             promptContextBranch = cwd.flatMap { GitRepository.branchName(containing: $0) }
         }
         let branch = promptContextBranch
-        let suggestion = completion.suggestion
-        let buffer = shellEditLine ?? completion.buffer.text
+        let historyPreview = commandHistory.isPresented ? commandHistory.selected?.command : nil
+        let suggestion = commandHistory.isPresented ? nil : completion.suggestion
+        let buffer = historyPreview ?? shellEditLine ?? completion.buffer.text
         let predicted = isShellPromptReady && buffer.isEmpty && suggestion?.source == .prediction
         let line: String? = isShellPromptReady
             ? StickyPromptBarModel.inputText(buffer: buffer, prediction: predicted ? suggestion?.displayText : nil)
@@ -958,15 +1032,275 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
             line: line,
             predicted: predicted
         )
-        stickyBar.updateCaret(text: buffer, scalarOffset: shellCursorOffset,
-                              visible: isShellPromptReady)
+        stickyBar.updateCaret(text: buffer, scalarOffset: historyPreview == nil ? shellCursorOffset : buffer.unicodeScalars.count,
+                              visible: isShellPromptReady && !isBrowsingCommandBlocks)
         stickyBar.updatePromptReady(isShellPromptReady)
-        stickyBar.updateRoute(promptIntent)
+        stickyBar.updateRoute(historyPreview == nil ? promptIntent : .shell)
         let validSuffix = completion.buffer.isTracking && completion.buffer.text == buffer
             && shellCursorOffset == buffer.unicodeScalars.count && !buffer.isEmpty
             && suggestion?.source != .prediction && promptIntent != .agent
         stickyBar.updateSuggestion(validSuffix ? suggestion?.insertSuffix : nil)
+        stickyBar.updateBlockBrowsing(isBrowsingCommandBlocks)
+        stickyBar.updateHistoryBrowsing(commandHistory.isPresented, hasSelection: historyPreview != nil)
     }
+
+    // MARK: - Command history in the input
+
+    private func handleCommandHistoryKey(_ event: NSEvent) -> Bool {
+        let mods = event.modifierFlags.intersection([.command, .control, .option, .shift])
+        if commandHistory.isPresented {
+            if mods.isEmpty {
+                switch event.keyCode {
+                case PromptEvent.upArrow, PromptEvent.downArrow:
+                    commandHistory.move(older: event.keyCode == PromptEvent.upArrow)
+                case PromptEvent.escape:
+                    dismissCommandHistory()
+                case PromptEvent.tab:
+                    acceptCommandHistory()
+                case PromptEvent.returnKey, PromptEvent.keypadEnter:
+                    // A recalled command is explicitly a shell command. Do not
+                    // route it through the optional conversational classifier.
+                    if commandHistory.selected == nil {
+                        if commandHistory.isLoading {
+                            swallowedKeyCodes.insert(event.keyCode)
+                            return true
+                        }
+                        dismissCommandHistory()
+                        return false
+                    }
+                    acceptCommandHistory()
+                    isShellPromptReady = false
+                    completion.reset()
+                    shellEditLine = ""
+                    refreshStickyBar()
+                    sendUnmodifiedReturn(keyCode: event.keyCode)
+                default:
+                    acceptCommandHistory()
+                    return false
+                }
+                swallowedKeyCodes.insert(event.keyCode)
+                return true
+            }
+            if mods == [.control] && (event.characters == "\u{03}" || event.characters?.lowercased() == "c") {
+                dismissCommandHistory()
+            } else {
+                acceptCommandHistory()
+            }
+            return false
+        }
+        guard window?.firstResponder === self,
+              !isBrowsingCommandBlocks,
+              CommandHistoryInput.opensHistory(
+                keyCode: event.keyCode, modifiers: event.modifierFlags,
+                promptReady: isShellPromptReady, hasShellIntegration: shellEditLine != nil,
+                draft: promptLineForSubmission(), cursorOffset: shellCursorOffset
+              ) else { return false }
+        stickyBar?.clearInputSelection()
+        performBinding("scroll_to_bottom")
+        let store = runtime.history
+        commandHistory.open(draft: promptLineForSubmission()) { try store.recall(prefix: $0) }
+        swallowedKeyCodes.insert(event.keyCode)
+        return true
+    }
+
+    func dismissCommandHistory() { commandHistory.dismiss() }
+
+    func chooseHistoryCommand(at index: Int) {
+        commandHistory.select(index: index)
+        acceptCommandHistory()
+        window?.makeFirstResponder(self)
+    }
+
+    private func acceptCommandHistory() {
+        guard commandHistory.isPresented else { return }
+        let command = commandHistory.selected?.command
+        commandHistory.dismiss()
+        guard isShellPromptReady, let command else { return }
+        stageShellCommand(command)
+    }
+
+    private func stageShellCommand(_ command: String) {
+        // The existing ZLE widget replaces the whole buffer, including newlines.
+        // Paste treats the recalled command as data; only Return can execute it.
+        sendControlKey(keyCode: 7, unshifted: UnicodeScalar("x"))
+        sendControlKey(keyCode: 15, unshifted: UnicodeScalar("r"))
+        completion.reset()
+        completion.handlePaste(command)
+        insertText(command)
+        shellEditLine = command
+        shellCursorOffset = command.unicodeScalars.count
+        shellRecognizesCommand = false
+        refreshStickyBar()
+        scheduleCompletionRefresh()
+    }
+
+    // MARK: - Command block focus and actions
+
+    private func handleCommandBlockKey(_ event: NSEvent) -> Bool {
+        let action = CommandBlockInput.action(
+            keyCode: event.keyCode, modifiers: event.modifierFlags,
+            promptReady: isShellPromptReady, draft: promptLineForSubmission(),
+            browsing: isBrowsingCommandBlocks
+        )
+        switch action {
+        case .terminal: return false
+        case .previous, .next:
+            dismissCommandHistory()
+            guard let surface else { return false }
+            let result = ghostty_surface_navigate_command_block(
+                surface, action == .previous ? -1 : 1, isBrowsingCommandBlocks
+            )
+            if result == 1 { showCommandBlockSelection() }
+            else if isBrowsingCommandBlocks { leaveCommandBlocks() }
+            else { return false }
+        case .input: leaveCommandBlocks()
+        case .reuse: reuseBlockCommand(nil)
+        case .actions: blockActions.showActions()
+        case .typeInInput:
+            leaveCommandBlocks()
+            return false
+        }
+        swallowedKeyCodes.insert(event.keyCode)
+        return true
+    }
+
+    @discardableResult
+    private func selectCommandBlock(at event: NSEvent) -> Bool {
+        guard isShellPromptReady, let surface else { return false }
+        let point = convert(event.locationInWindow, from: nil)
+        guard ghostty_surface_select_command_block_at(surface, point.x, bounds.height - point.y) else { return false }
+        showCommandBlockSelection()
+        return true
+    }
+
+    private func showCommandBlockSelection() {
+        dismissCommandHistory()
+        guard let command = readCommandBlock(command: true) else {
+            leaveCommandBlocks()
+            return
+        }
+        isBrowsingCommandBlocks = true
+        onFocus?()
+        stickyBar?.clearInputSelection()
+        ghostText.hide()
+        blockActions.update(command: command)
+        onBlockSelectionChange?()
+        window?.makeFirstResponder(blockActions)
+        refreshStickyBar()
+    }
+
+    func leaveCommandBlocks(focusInput: Bool = true) {
+        guard isBrowsingCommandBlocks else { return }
+        isBrowsingCommandBlocks = false
+        if let surface { ghostty_surface_clear_command_block(surface) }
+        onBlockSelectionChange?()
+        refreshStickyBar()
+        if focusInput {
+            performBinding("scroll_to_bottom")
+            window?.makeFirstResponder(self)
+            reassertTerminalFocus()
+        }
+    }
+
+    private func refreshCommandHeader() {
+        let pinned = refreshCommandHeader(commandHeaders[0], following: false)
+        if pinned {
+            _ = refreshCommandHeader(commandHeaders[1], following: true)
+        } else {
+            commandHeaders[1].isHidden = true
+        }
+    }
+
+    private func refreshCommandHeader(_ commandHeader: StickyCommandHeaderView, following: Bool) -> Bool {
+        guard let surface else { commandHeader.isHidden = true; return false }
+        var text = ghostty_text_s()
+        var remainingPixels: Double = 0
+        var sourcePixels: Double = 0
+        guard ghostty_surface_read_sticky_command(surface, following, &text, &remainingPixels, &sourcePixels) else {
+            commandHeader.isHidden = true
+            return false
+        }
+        defer { ghostty_surface_free_text(surface, &text) }
+        guard let bytes = text.text else { commandHeader.isHidden = true; return false }
+        let command = String(decoding: UnsafeRawBufferPointer(start: bytes, count: Int(text.text_len)),
+                             as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !command.isEmpty else { commandHeader.isHidden = true; return false }
+        let sourceY = sourcePixels / convertToBacking(NSSize(width: 1, height: 1)).height
+        // At the start of scrollback there is no departing header to replace.
+        // Leave the original command alone until it crosses the pinning point.
+        // Later boundaries retain their two-header handoff in both directions.
+        guard following || scrollbarOffset > 0 || sourceY < 6 else {
+            commandHeader.isHidden = true
+            return false
+        }
+        commandHeader.update(command: command,
+                             remainingHeight: remainingPixels / convertToBacking(NSSize(width: 1, height: 1)).height,
+                             sourceY: sourceY,
+                             viewport: bounds, cellHeight: cellSize.height)
+        return true
+    }
+
+    private func readCommandBlock(command: Bool) -> String? {
+        guard let surface else { return nil }
+        var text = ghostty_text_s()
+        guard ghostty_surface_read_command_block(surface, command, &text) else { return nil }
+        defer { ghostty_surface_free_text(surface, &text) }
+        guard let bytes = text.text else { return "" }
+        let value = String(decoding: UnsafeRawBufferPointer(start: bytes, count: Int(text.text_len)), as: UTF8.self)
+        return command ? value : CommandBlockText.output(value)
+    }
+
+    private func commandBlockMenu() -> NSMenu {
+        let menu = NSMenu(title: "Command Block")
+        menu.autoenablesItems = false
+        let hasCommand = readCommandBlock(command: true) != nil
+        let hasOutput = !(readCommandBlock(command: false)?.isEmpty ?? true)
+        func add(_ title: String, _ selector: Selector, enabled: Bool = true) {
+            let item = NSMenuItem(title: title, action: selector, keyEquivalent: "")
+            item.target = self
+            item.isEnabled = enabled
+            menu.addItem(item)
+        }
+        add("Copy Command", #selector(copyBlockCommand(_:)), enabled: hasCommand)
+        add("Copy Output", #selector(copyBlockOutput(_:)), enabled: hasOutput)
+        add("Copy Entire Block", #selector(copy(_:)), enabled: hasCommand)
+        add("Save Output…", #selector(saveBlockOutput(_:)), enabled: hasOutput)
+        menu.addItem(.separator())
+        add("Use Command in Input", #selector(reuseBlockCommand(_:)),
+            enabled: hasCommand && isShellPromptReady && shellEditLine != nil)
+        add("Return to Input", #selector(returnFromBlock(_:)))
+        return menu
+    }
+
+    @objc private func copyBlockCommand(_ sender: Any?) {
+        guard let text = readCommandBlock(command: true) else { NSSound.beep(); return }
+        GhosttyClipboard.writePlainText(text, to: .general)
+    }
+
+    @objc private func copyBlockOutput(_ sender: Any?) {
+        guard let text = readCommandBlock(command: false) else { NSSound.beep(); return }
+        GhosttyClipboard.writePlainText(text, to: .general)
+    }
+
+    @objc private func saveBlockOutput(_ sender: Any?) {
+        guard let text = readCommandBlock(command: false), let window else { return }
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "command-output.txt"
+        panel.beginSheetModal(for: window) { response in
+            guard response == .OK, let url = panel.url else { return }
+            do { try text.write(to: url, atomically: true, encoding: .utf8) }
+            catch { NSAlert(error: error).beginSheetModal(for: window) }
+        }
+    }
+
+    @objc private func reuseBlockCommand(_ sender: Any?) {
+        guard isShellPromptReady, shellEditLine != nil,
+              let command = readCommandBlock(command: true) else { NSSound.beep(); return }
+        leaveCommandBlocks()
+        stageShellCommand(command)
+    }
+
+    @objc private func returnFromBlock(_ sender: Any?) { leaveCommandBlocks() }
 
     func acceptStickyPrediction() {
         switch completion.handleKeyDown(

@@ -64,6 +64,38 @@ xattr -cr /Applications/Sora.app
 Version 0.1.3 and newer can install subsequent signed updates from inside the
 app. The first Sparkle-capable version must be installed manually.
 
+## Command history and block navigation
+
+With the input focused, press **Up or Down** to open command history above the
+prompt. The newest command is selected first; Up moves older and Down moves
+newer. A typed prefix narrows the list. **Return** runs the selected command;
+**Tab**, clicking a row, or typing keeps it in the input for editing. **Escape**
+or Down beyond the newest entry restores your original draft and cursor.
+History shows up to 200 distinct recent commands recorded by Sora across tabs
+and app launches. It works with Agent disabled. **Control-P/Control-N** retain
+ordinary shell history, and arrows within a multiline draft retain cursor editing.
+
+Press **Cmd+Up** or click a completed block to browse output. **Up/Down** then
+move between blocks; Down after the newest block or **Escape** returns to input.
+Typing or pasting while browsing blocks returns to the unchanged draft.
+
+Click a completed block to select it, or right-click for its actions. The action
+bar offers **Copy Output**, **Use Command in Input**, and a menu for copying the
+command, copying the whole block, or saving output. **Tab** opens that menu from
+a selected block; **Cmd+C** copies the whole block. **Return** places the selected
+command in the input for editing without executing it. Explicitly using a command
+replaces the draft and saves the old draft in zsh's kill buffer.
+
+Block actions use the text displayed in the terminal, including the timing footer
+in output. They work with Agent disabled. Running programs keep their arrow keys.
+Command boundaries are saved with terminal output, so clicking and navigating
+blocks also works after relaunch. Archives saved by older versions may lack
+those boundaries and support text selection only.
+
+Trackpad scrolling moves smoothly between text rows, following macOS momentum.
+Block highlights and text selection stay aligned while scrolling. A sticky header
+keeps the command visible while you read its output, yielding to the next block.
+
 ## Terminal notifications
 
 Background terminal sessions can send native macOS alerts using OSC 9, OSC 777,
