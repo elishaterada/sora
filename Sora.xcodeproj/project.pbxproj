@@ -159,6 +159,15 @@
 		AA00000000000000000000A6 /* HushLoginTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000193 /* HushLoginTests.swift */; };
 		AA00000000000000000000A7 /* SoraZshBootstrapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000194 /* SoraZshBootstrapTests.swift */; };
 		AA00000000000000000000A8 /* ShellHighlightTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000195 /* ShellHighlightTests.swift */; };
+		CB0000000000000000000011 /* CommandBlockInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB0000000000000000000001 /* CommandBlockInput.swift */; };
+		CB0000000000000000000012 /* CommandBlockActionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB0000000000000000000002 /* CommandBlockActionsView.swift */; };
+		CD0000000000000000000012 /* StickyCommandHeaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD0000000000000000000002 /* StickyCommandHeaderView.swift */; };
+		CB0000000000000000000013 /* CommandBlockInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB0000000000000000000001 /* CommandBlockInput.swift */; };
+		CB0000000000000000000014 /* CommandBlockInputTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB0000000000000000000003 /* CommandBlockInputTests.swift */; };
+		CH0000000000000000000011 /* CommandHistorySession.swift in Sources */ = {isa = PBXBuildFile; fileRef = CH0000000000000000000001 /* CommandHistorySession.swift */; };
+		CH0000000000000000000012 /* CommandHistoryPopoverView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CH0000000000000000000002 /* CommandHistoryPopoverView.swift */; };
+		CH0000000000000000000013 /* CommandHistorySession.swift in Sources */ = {isa = PBXBuildFile; fileRef = CH0000000000000000000001 /* CommandHistorySession.swift */; };
+		CH0000000000000000000014 /* CommandHistorySessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CH0000000000000000000003 /* CommandHistorySessionTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -280,6 +289,13 @@
 		AA0000000000000000000182 /* StickyPromptBarTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StickyPromptBarTests.swift; sourceTree = "<group>"; };
 		AA0000000000000000000112 /* Sora.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Sora.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0000000000000000000113 /* SoraTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SoraTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		CB0000000000000000000001 /* CommandBlockInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandBlockInput.swift; sourceTree = "<group>"; };
+		CB0000000000000000000002 /* CommandBlockActionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandBlockActionsView.swift; sourceTree = "<group>"; };
+		CD0000000000000000000002 /* StickyCommandHeaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StickyCommandHeaderView.swift; sourceTree = "<group>"; };
+		CB0000000000000000000003 /* CommandBlockInputTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandBlockInputTests.swift; sourceTree = "<group>"; };
+		CH0000000000000000000001 /* CommandHistorySession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandHistorySession.swift; sourceTree = "<group>"; };
+		CH0000000000000000000002 /* CommandHistoryPopoverView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandHistoryPopoverView.swift; sourceTree = "<group>"; };
+		CH0000000000000000000003 /* CommandHistorySessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandHistorySessionTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -434,6 +450,11 @@
 		AA0000000000000000000507 /* Commands */ = {
 			isa = PBXGroup;
 			children = (
+				CH0000000000000000000001 /* CommandHistorySession.swift */,
+				CH0000000000000000000002 /* CommandHistoryPopoverView.swift */,
+				CB0000000000000000000001 /* CommandBlockInput.swift */,
+				CB0000000000000000000002 /* CommandBlockActionsView.swift */,
+				CD0000000000000000000002 /* StickyCommandHeaderView.swift */,
 				AA0000000000000000000140 /* CommandRun.swift */,
 				AA0000000000000000000141 /* CommandRunFactory.swift */,
 				AA0000000000000000000143 /* CommandHistoryView.swift */,
@@ -478,6 +499,8 @@
 		AA0000000000000000000504 /* SoraTests */ = {
 			isa = PBXGroup;
 			children = (
+				CH0000000000000000000003 /* CommandHistorySessionTests.swift */,
+				CB0000000000000000000003 /* CommandBlockInputTests.swift */,
 				UP000000000000000000000C /* UpdateCheckPolicyTests.swift */,
 				NT0000000000000000000007 /* TerminalNotificationPolicyTests.swift */,
 				CC000000000000000000006A /* AITests.swift */,
@@ -614,6 +637,11 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CH0000000000000000000011 /* CommandHistorySession.swift in Sources */,
+				CH0000000000000000000012 /* CommandHistoryPopoverView.swift in Sources */,
+				CB0000000000000000000011 /* CommandBlockInput.swift in Sources */,
+				CB0000000000000000000012 /* CommandBlockActionsView.swift in Sources */,
+				CD0000000000000000000012 /* StickyCommandHeaderView.swift in Sources */,
 				UP0000000000000000000006 /* UpdateController.swift in Sources */,
 				UP0000000000000000000007 /* UpdateCheckPolicy.swift in Sources */,
 				NT0000000000000000000003 /* TerminalNotificationPolicy.swift in Sources */,
@@ -689,6 +717,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CH0000000000000000000013 /* CommandHistorySession.swift in Sources */,
+				CH0000000000000000000014 /* CommandHistorySessionTests.swift in Sources */,
+				CB0000000000000000000013 /* CommandBlockInput.swift in Sources */,
+				CB0000000000000000000014 /* CommandBlockInputTests.swift in Sources */,
 				UP000000000000000000000A /* UpdateCheckPolicy.swift in Sources */,
 				NT0000000000000000000005 /* TerminalNotificationPolicy.swift in Sources */,
 				UP000000000000000000000B /* UpdateCheckPolicyTests.swift in Sources */,

@@ -66,6 +66,25 @@ final class WorkspaceSnapshotTests: XCTestCase {
         XCTAssertEqual(TerminalHistoryArchive.sanitized("a\u{1b}]8;;https://example.com\u{1b}\\b"), "ab\u{1b}[0m")
     }
 
+    func testHistoryRetainsOnlyPassiveArchiveBoundaries() {
+        let markers = ["133;A;aid=sora-archive", "133;P;k=s;aid=sora-archive",
+                       "133;B;aid=sora-archive", "133;C;aid=sora-archive"]
+        for marker in markers {
+            let canonical = "\u{1b}]\(marker)\u{1b}\\"
+            for ending in ["\u{7}", "\u{1b}\\"] {
+                XCTAssertEqual(TerminalHistoryArchive.sanitized("\u{1b}]\(marker)\(ending)echo café"),
+                               canonical + "echo café\u{1b}[0m")
+            }
+        }
+        for marker in ["133;C", "133;D;0;aid=sora-archive", "133;A;aid=sora-archive;cl=line",
+                       "2;title", "52;c;clipboard", "133;A;aid=sora-archive-spoof"] {
+            XCTAssertEqual(TerminalHistoryArchive.sanitized("before\u{1b}]\(marker)\u{7}after"),
+                           "beforeafter\u{1b}[0m")
+        }
+        XCTAssertEqual(TerminalHistoryArchive.sanitized("\u{1b}P133;A;aid=sora-archive\u{1b}\\"), "\u{1b}[0m")
+        XCTAssertEqual(TerminalHistoryArchive.sanitized("before\u{1b}]133;A;aid=sora-archive"), "before\u{1b}[0m")
+    }
+
     func testShellDraftRestorationIsLiteralAndOneShot() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -97,6 +116,9 @@ final class WorkspaceSnapshotTests: XCTestCase {
         XCTAssertEqual(TerminalHistoryArchive.removingRestoreBanners("echo " + marker), "echo " + marker)
         let styled = "\u{1b}[0m" + marker + "\u{1b}[32m\nresult"
         XCTAssertEqual(TerminalHistoryArchive.removingRestoreBanners(styled), "\u{1b}[0m\u{1b}[32m\nresult")
+        let boundary = "\u{1b}]133;C;aid=sora-archive\u{1b}\\"
+        XCTAssertEqual(TerminalHistoryArchive.removingRestoreBanners(boundary + styled),
+                       boundary + "\u{1b}[0m\u{1b}[32m\nresult")
     }
 
     func testEmptySnapshotAlwaysHasOneDirectory() {

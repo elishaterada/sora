@@ -1,8 +1,243 @@
+diff --git a/include/ghostty.h b/include/ghostty.h
+index 518af3ff2..94159280a 100644
+--- a/include/ghostty.h
++++ b/include/ghostty.h
+@@ -1227,6 +1227,14 @@ GHOSTTY_API void ghostty_surface_deny_clipboard_request(ghostty_surface_t,
+                                                            void*);
+ GHOSTTY_API bool ghostty_surface_has_selection(ghostty_surface_t);
+ GHOSTTY_API bool ghostty_surface_read_selection(ghostty_surface_t, ghostty_text_s*);
++// Sora: semantic command navigation. Returns 1 for a block, 0 for the live
++// prompt, -1 when unavailable. direction is -1 (older) or 1 (newer).
++GHOSTTY_API int ghostty_surface_navigate_command_block(ghostty_surface_t, int direction, bool from_selection);
++GHOSTTY_API bool ghostty_surface_select_command_block_at(ghostty_surface_t, double x, double y);
++GHOSTTY_API bool ghostty_surface_read_command_block(ghostty_surface_t, bool command, ghostty_text_s*);
++GHOSTTY_API bool ghostty_surface_read_sticky_command(ghostty_surface_t, bool following, ghostty_text_s*, double* remaining_px, double* source_px);
++GHOSTTY_API void ghostty_surface_clear_command_block(ghostty_surface_t);
++GHOSTTY_API bool ghostty_surface_read_command_history(ghostty_surface_t, ghostty_text_s*);
+ GHOSTTY_API bool ghostty_surface_read_text(ghostty_surface_t,
+                                               ghostty_selection_s,
+                                               ghostty_text_s*);
+diff --git a/src/Surface.zig b/src/Surface.zig
+index 775292127..b9160e37d 100644
+--- a/src/Surface.zig
++++ b/src/Surface.zig
+@@ -316,6 +316,7 @@ const DerivedConfig = struct {
+     mouse_hide_while_typing: bool,
+     mouse_reporting: bool,
+     mouse_scroll_multiplier: configpkg.MouseScrollMultiplier,
++    smooth_scrolling: bool,
+     mouse_shift_capture: configpkg.MouseShiftCapture,
+     fullscreen: configpkg.Fullscreen,
+     macos_non_native_fullscreen: configpkg.NonNativeFullscreen,
+@@ -396,6 +397,7 @@ const DerivedConfig = struct {
+             .mouse_hide_while_typing = config.@"mouse-hide-while-typing",
+             .mouse_reporting = config.@"mouse-reporting",
+             .mouse_scroll_multiplier = config.@"mouse-scroll-multiplier",
++            .smooth_scrolling = config.@"smooth-scrolling",
+             .mouse_shift_capture = config.@"mouse-shift-capture",
+             .fullscreen = config.fullscreen,
+             .macos_non_native_fullscreen = config.@"macos-non-native-fullscreen",
+@@ -1207,11 +1209,11 @@ fn selectionScrollTick(self: *Surface) !void {
+     }
+
+     const pos = try self.rt_surface.getCursorPos();
+-    const pos_vp = self.posToViewport(pos.x, pos.y);
+
+     // We need our locked state for the remainder
+     self.renderer_state.mutex.lockUncancelable(global.io());
+     defer self.renderer_state.mutex.unlock(global.io());
++    const pos_vp = self.posToViewport(pos.x, pos.y);
+     const t: *terminal.Terminal = self.renderer_state.terminal;
+
+     const selection = self.mouse.selection_gesture.autoscrollTick(t, .{
+@@ -3466,6 +3468,24 @@ pub fn scrollCallback(
+     // Always show the mouse again if it is hidden
+     if (self.mouse.hidden) self.showMouse();
+
++    if (scroll_mods.precision and self.config.smooth_scrolling) {
++        const handled = handled: {
++            self.renderer_state.mutex.lockUncancelable(global.io());
++            defer self.renderer_state.mutex.unlock(global.io());
++            const t = &self.io.terminal;
++            if (t.screens.active_key != .primary or self.isMouseReporting()) break :handled false;
++            const screen = t.screens.active;
++            screen.scroll(.{ .delta_precise = -yoff * self.config.mouse_scroll_multiplier.precision /
++                @as(f64, @floatFromInt(self.size.cell.height)) });
++            self.mouse.pending_scroll_y = 0;
++            break :handled true;
++        };
++        if (handled) {
++            try self.queueRender();
++            return;
++        }
++    }
++
+     const y: ScrollAmount = if (yoff == 0) .{} else y: {
+         // We use cell_size to determine if we have accumulated enough to trigger a scroll
+         const cell_size: f64 = @floatFromInt(self.size.cell.height);
+@@ -4575,9 +4595,6 @@ pub fn cursorPosCallback(
+     // Update our modifiers if they changed
+     if (mods) |v| self.modsChanged(v);
+
+-    // The mouse position in the viewport
+-    const pos_vp = self.posToViewport(pos.x, pos.y);
+-
+     // We always reset the over link status because it will be reprocessed
+     // below. But we need the old value to know if we need to undo mouse
+     // shape changes.
+@@ -4591,6 +4608,7 @@ pub fn cursorPosCallback(
+     // Update our mouse state. We set this to null initially because we only
+     // want to set it when we're not selecting or doing any other mouse
+     // event.
++    const pos_vp = self.posToViewport(pos.x, pos.y);
+     self.renderer_state.mouse.point = null;
+
+     // If we have an inspector, we need to always record position information
+@@ -4742,9 +4760,12 @@ pub fn colorSchemeCallback(self: *Surface, scheme: apprt.ColorScheme) !void {
+ }
+
+ pub fn posToViewport(self: Surface, xpos: f64, ypos: f64) terminal.point.Coordinate {
++    // Requires the renderer mutex: hit testing uses the same sub-row offset
++    // as rendering, including the partially visible row at the bottom.
++    const fraction = self.io.terminal.screens.active.pages.scrollFraction();
+     // Get our grid cell
+     const coord: rendererpkg.Coordinate = .{ .surface = .{ .x = xpos, .y = ypos } };
+-    const grid = coord.convert(.grid, self.size).grid;
++    const grid = coord.viewportGrid(self.size, fraction);
+     return .{ .x = grid.x, .y = grid.y };
+ }
+
+diff --git a/src/apprt/embedded.zig b/src/apprt/embedded.zig
+index 525bc856d..0a0f39453 100644
+--- a/src/apprt/embedded.zig
++++ b/src/apprt/embedded.zig
+@@ -1881,6 +1881,121 @@ pub const CAPI = struct {
+         return readTextLocked(surface, core_sel, result);
+     }
+
++    /// Sora's native block controls use the same tracked selections as mouse
++    /// selection, so scrollback eviction, reflow, and clear retain ownership.
++    export fn ghostty_surface_navigate_command_block(
++        surface: *Surface,
++        direction: c_int,
++        from_selection: bool,
++    ) c_int {
++        const core = &surface.core_surface;
++        core.renderer_state.mutex.lockUncancelable(global.io());
++        defer core.renderer_state.mutex.unlock(global.io());
++        const t = &core.io.terminal;
++        if (t.screens.active_key == .alternate) return -1;
++        const screen = t.screens.active;
++        if (!screen.semantic_prompt.seen) return -1;
++        const from = if (from_selection)
++            (screen.selection orelse return -1).start()
++        else
++            screen.cursor.page_pin.*;
++        if (from.garbage) return -1;
++        const block = screen.adjacentCommandBlock(from, direction < 0) orelse {
++            if (!from_selection) return -1;
++            if (direction < 0) return 1; // Stay on the oldest retained block.
++            screen.clearSelection();
++            t.scrollViewport(.{ .bottom = {} });
++            surface.refresh();
++            return 0;
++        };
++        screen.selectCommandBlock(block) catch return -1;
++        screen.scroll(.{ .pin = terminal.Screen.commandBlockBoundary(block.start()) });
++        surface.refresh();
++        return 1;
++    }
++
++    export fn ghostty_surface_select_command_block_at(surface: *Surface, x: f64, y: f64) bool {
++        const core = &surface.core_surface;
++        core.renderer_state.mutex.lockUncancelable(global.io());
++        defer core.renderer_state.mutex.unlock(global.io());
++        if (core.io.terminal.screens.active_key == .alternate) return false;
++        const screen = core.io.terminal.screens.active;
++        const pixels = surface.cursorPosToPixels(.{ .x = @floatCast(x), .y = @floatCast(y) }) catch return false;
++        const pin = screen.pages.pin(.{ .viewport = core.posToViewport(pixels.x, pixels.y) }) orelse return false;
++        const block = screen.commandBlockAtVisual(pin) orelse return false;
++        screen.selectCommandBlock(block) catch return false;
++        surface.refresh();
++        return true;
++    }
++
++    export fn ghostty_surface_read_command_block(surface: *Surface, command: bool, result: *Text) bool {
++        const core = &surface.core_surface;
++        core.renderer_state.mutex.lockUncancelable(global.io());
++        defer core.renderer_state.mutex.unlock(global.io());
++        if (core.io.terminal.screens.active_key == .alternate) return false;
++        const screen = core.io.terminal.screens.active;
++        const selected = screen.selection orelse return false;
++        if (selected.start().garbage) return false;
++        const block = screen.commandBlockAt(selected.start()) orelse return false;
++        const content = screen.commandBlockContent(block, command) orelse return false;
++        return readTextLocked(surface, content, result);
++    }
++
++    /// Snapshot the command above the viewport without changing selection,
++    /// focus, scroll position, or PTY dimensions. Distance is in backing pixels.
++    export fn ghostty_surface_read_sticky_command(surface: *Surface, following: bool, result: *Text, remaining_px: *f64, source_px: *f64) bool {
++        const core = &surface.core_surface;
++        core.renderer_state.mutex.lockUncancelable(global.io());
++        defer core.renderer_state.mutex.unlock(global.io());
++        if (core.io.terminal.screens.active_key == .alternate) return false;
++        const context = core.io.terminal.screens.active.stickyCommandFollowing(following) orelse return false;
++        source_px.* = context.source_rows * @as(f64, @floatFromInt(core.size.cell.height)) +
++            @as(f64, @floatFromInt(core.size.padding.top));
++        remaining_px.* = context.remaining_rows * @as(f64, @floatFromInt(core.size.cell.height)) +
++            @as(f64, @floatFromInt(core.size.padding.top));
++        return readTextLocked(surface, context.command, result);
++    }
++
++    export fn ghostty_surface_clear_command_block(surface: *Surface) void {
++        const core = &surface.core_surface;
++        core.renderer_state.mutex.lockUncancelable(global.io());
++        defer core.renderer_state.mutex.unlock(global.io());
++        core.io.terminal.screens.active.clearSelection();
++        surface.refresh();
++    }
++
++    /// Styled scrollback with replay-only OSC 133 metadata. Always capture the
++    /// primary screen, including when a fullscreen application is active.
++    export fn ghostty_surface_read_command_history(surface: *Surface, result: *Text) bool {
++        const core = &surface.core_surface;
++        core.renderer_state.mutex.lockUncancelable(global.io());
++        defer core.renderer_state.mutex.unlock(global.io());
++        const t = &core.io.terminal;
++        const screen = t.screens.get(.primary) orelse return false;
++        var writer: std.Io.Writer.Allocating = .init(global.alloc());
++        defer writer.deinit();
++        const formatter: terminal.formatter.ScreenFormatter = .init(screen, .{
++            .emit = .vt,
++            .unwrap = true,
++            .trim = false,
++            .semantic_prompts = true,
++            .palette = &t.colors.palette.current,
++        });
++        formatter.format(&writer.writer) catch return false;
++        // Keep launch chrome and the next shell's prompt out of archived input.
++        writer.writer.writeAll("\x1b]133;C;aid=sora-archive\x1b\\") catch return false;
++        const text = writer.toOwnedSliceSentinel(0) catch return false;
++        result.* = .{
++            .tl_px_x = -1,
++            .tl_px_y = -1,
++            .offset_start = 0,
++            .offset_len = 0,
++            .text = text.ptr,
++            .text_len = text.len,
++        };
++        return true;
++    }
++
+     /// Read some arbitrary text from the surface.
+     ///
+     /// This is an expensive operation so it shouldn't be called too
 diff --git a/src/config/Config.zig b/src/config/Config.zig
-index bf4e75f86..b456c5406 100644
+index bf4e75f86..ee40da7ef 100644
 --- a/src/config/Config.zig
 +++ b/src/config/Config.zig
-@@ -947,6 +947,12 @@ palette: Palette = .{},
+@@ -947,6 +947,16 @@ palette: Palette = .{},
  /// The default is `keystroke, no-output`.
  @"scroll-to-bottom": ScrollToBottom = .default,
 
@@ -12,11 +247,15 @@ index bf4e75f86..b456c5406 100644
 +/// scrolling, and screen clearing.
 +@"semantic-prompt-boundaries": bool = false,
 +
++/// Preserve sub-row trackpad motion when browsing the primary scrollback.
++/// Fullscreen programs and mouse-reporting applications keep normal events.
++@"smooth-scrolling": bool = false,
++
  /// Determines whether running programs can detect the shift key pressed with a
  /// mouse click. Typically, the shift key is used to extend mouse selection.
  ///
 diff --git a/src/renderer/Overlay.zig b/src/renderer/Overlay.zig
-index 46a75be8e..84b4afc8f 100644
+index 46a75be8e..2623d576b 100644
 --- a/src/renderer/Overlay.zig
 +++ b/src/renderer/Overlay.zig
 @@ -70,6 +70,7 @@ cell_size: CellSize,
@@ -27,7 +266,7 @@ index 46a75be8e..84b4afc8f 100644
  };
 
  pub const InitError = Allocator.Error || error{
-@@ -144,9 +145,97 @@ pub fn applyFeatures(
+@@ -144,9 +145,95 @@ pub fn applyFeatures(
              alloc,
              state,
          ),
@@ -69,13 +308,12 @@ index 46a75be8e..84b4afc8f 100644
 +                break;
 +            }
 +        }
-+        // The last visible prompt can be a historical command when the live
-+        // prompt is below the viewport. Only an actual visible input prompt
-+        // gets the flush boundary treatment.
++        // Empty historical prompts are not command blocks. The live prompt
++        // still closes the preceding block, using the same spacer boundary.
 +        const live_input = y == last_prompt and state.shell_input_active and
 +            state.cursor.viewport != null;
 +        if (!has_text and !live_input) continue;
-+        self.drawHorizontalHairline(alloc, y, !live_input, color) catch |err| {
++        self.drawHorizontalHairline(alloc, state.commandBoundaryRow(y), color) catch |err| {
 +            log.warn("Error drawing command boundary: {}", .{err});
 +        };
 +    }
@@ -92,7 +330,6 @@ index 46a75be8e..84b4afc8f 100644
 +    self: *Overlay,
 +    alloc: Allocator,
 +    y: usize,
-+    command_padding: bool,
 +    color: z2d.Pixel,
 +) !void {
 +    const width: f64 = @floatFromInt(self.surface.getWidth());
@@ -104,7 +341,7 @@ index 46a75be8e..84b4afc8f 100644
 +    const padded_y = try std.math.sub(
 +        usize,
 +        row_top,
-+        @min(row_top, if (command_padding) self.cell_size.height + 1 else 1),
++        @min(row_top, 1),
 +    );
 +    const pixel_y: f64 = @floatFromInt(
 +        std.math.cast(i32, padded_y) orelse return error.Overflow,
@@ -125,7 +362,7 @@ index 46a75be8e..84b4afc8f 100644
  /// Add rectangles around contiguous hyperlinks in the render state.
  ///
  /// Note: this currently doesn't take into account unique hyperlink IDs
-@@ -414,3 +503,10 @@ fn highlightPixelRect(
+@@ -414,3 +501,10 @@ fn highlightPixelRect(
      ctx.setSourceToPixel(border_color);
      try ctx.stroke();
  }
@@ -137,7 +374,7 @@ index 46a75be8e..84b4afc8f 100644
 +    try testing.expect(!isCommandBoundary(1, false));
 +}
 diff --git a/src/renderer/generic.zig b/src/renderer/generic.zig
-index 2a81f42b4..e57ce7961 100644
+index 2a81f42b4..a24d62a9a 100644
 --- a/src/renderer/generic.zig
 +++ b/src/renderer/generic.zig
 @@ -233,6 +233,8 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
@@ -195,9 +432,64 @@ index 2a81f42b4..e57ce7961 100644
                  };
 
                  break :critical .{
-@@ -2522,7 +2539,21 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
+@@ -2142,6 +2159,8 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
+         /// Caller must hold the draw mutex.
+         fn updateScreenSizeUniforms(self: *Self) void {
+             const terminal_size = self.size.terminal();
++            const scroll_y: f32 = @floatCast(self.terminal_state.viewport_fraction *
++                @as(f64, @floatFromInt(self.size.cell.height)));
+
+             // Blank space around the grid.
+             const blank: renderer.Padding = self.size.screen.blankPadding(
+@@ -2160,11 +2179,11 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
+             self.uniforms.projection_matrix = math.ortho2d(
+                 -1 * @as(f32, @floatFromInt(self.size.padding.left)),
+                 @floatFromInt(terminal_size.width + self.size.padding.right),
+-                @floatFromInt(terminal_size.height + self.size.padding.bottom),
+-                -1 * @as(f32, @floatFromInt(self.size.padding.top)),
++                @as(f32, @floatFromInt(terminal_size.height + self.size.padding.bottom)) + scroll_y,
++                -1 * @as(f32, @floatFromInt(self.size.padding.top)) + scroll_y,
+             );
+             self.uniforms.grid_padding = .{
+-                @floatFromInt(blank.top),
++                @as(f32, @floatFromInt(blank.top)) - scroll_y,
+                 @floatFromInt(blank.right),
+                 @floatFromInt(blank.bottom),
+                 @floatFromInt(blank.left),
+@@ -2433,6 +2452,9 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
+             features: []const Overlay.Feature,
+         ) Overlay.InitError!void {
+             const alloc = self.alloc;
++            var overlay_size = self.size;
++            if (self.terminal_state.viewport_fraction > 0)
++                overlay_size.screen.height += overlay_size.cell.height;
+
+             // If we have no features enabled, don't build an overlay.
+             // If we had a previous overlay, deallocate it.
+@@ -2454,7 +2476,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
+                     // stores as i32 but we always init with a u32.
+                     const width: u32 = @intCast(v.surface.getWidth());
+                     const height: u32 = @intCast(v.surface.getHeight());
+-                    const term_size = self.size.terminal();
++                    const term_size = overlay_size.terminal();
+                     if (width != term_size.width or
+                         height != term_size.height) break :existing;
+
+@@ -2475,7 +2497,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
+                 }
+
+                 assert(self.overlay == null);
+-                const new: Overlay = try .init(alloc, self.size);
++                const new: Overlay = try .init(alloc, overlay_size);
+                 self.overlay = new;
+                 break :overlay &self.overlay.?;
+             };
+@@ -2521,8 +2543,24 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
+                 // our background cells will be out of place.
                  self.uniforms.grid_size = .{ new_size.columns, new_size.rows };
              }
++            // Shift glyphs, images, dividers, and background sampling together.
++            self.updateScreenSizeUniforms();
 
 -            const rebuild = state.dirty == .full or grid_size_diff;
 +            const command_end: usize = command_end: {
@@ -208,7 +500,7 @@ index 2a81f42b4..e57ce7961 100644
 +                for (state.row_data.items(.raw), 0..) |row, y| {
 +                    if (row.semantic_prompt == .prompt) end = y;
 +                }
-+                break :command_end end;
++                break :command_end if (state.shell_input_active) state.commandBoundaryRow(end) else end;
 +            };
 +            const rebuild = state.dirty == .full or grid_size_diff or
 +                command_end != self.command_background_end or
@@ -218,7 +510,7 @@ index 2a81f42b4..e57ce7961 100644
              if (rebuild) {
                  // If we are doing a full rebuild, then we clear the entire cell buffer.
                  self.cells.reset();
-@@ -2627,6 +2658,20 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
+@@ -2627,6 +2665,20 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                      log.warn("error building row y={} err={}", .{ y, err });
                      self.cells.clear(y);
                  };
@@ -239,7 +531,7 @@ index 2a81f42b4..e57ce7961 100644
              }
 
              // Setup our cursor rendering information.
-@@ -2641,6 +2686,8 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
+@@ -2641,6 +2693,8 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                  // If the cursor isn't visible on the viewport, don't show
                  // a cursor. Otherwise, get our cursor cell, because we may
                  // need it for styling.
@@ -248,11 +540,797 @@ index 2a81f42b4..e57ce7961 100644
                  const cursor_vp = state.cursor.viewport orelse break :cursor;
                  const cursor_style: terminal.Style = cursor_style: {
                      const cells = state.row_data.items(.cells);
+diff --git a/src/renderer/size.zig b/src/renderer/size.zig
+index 6cf05f58a..2b25e4af4 100644
+--- a/src/renderer/size.zig
++++ b/src/renderer/size.zig
+@@ -111,6 +111,16 @@ pub const Coordinate = union(enum) {
+     pub const Terminal = struct { x: f64, y: f64 };
+     pub const Grid = struct { x: GridSize.Unit, y: GridSize.Unit };
+
++    /// Map pointer coordinates to the same fractional viewport drawn by the
++    /// renderer. The extra row is only for hit testing, never for PTY sizing.
++    pub fn viewportGrid(self: Coordinate, size: Size, fraction: f64) Grid {
++        var hit_size = size;
++        if (fraction > 0) hit_size.screen.height += hit_size.cell.height;
++        var surface = self.convertToSurface(size);
++        surface.y += fraction * @as(f64, @floatFromInt(size.cell.height));
++        return (Coordinate{ .surface = surface }).convert(.grid, hit_size).grid;
++    }
++
+     /// Convert a coordinate to a different space within the same Size.
+     pub fn convert(self: Coordinate, to: Tag, size: Size) Coordinate {
+         // Unlikely fast-path but avoid work.
+@@ -456,3 +466,22 @@ test "coordinate conversion" {
+         try testing.expectEqual(expected, actual);
+     }
+ }
++
++test "Sora smooth scroll pointer follows fractional rows at both display scales" {
++    const testing = std.testing;
++    for ([_]u32{ 1, 2 }) |scale| {
++        const size: Size = .{
++            .screen = .{ .width = 110 * scale, .height = 110 * scale },
++            .cell = .{ .width = 10 * scale, .height = 20 * scale },
++            .padding = .{ .top = 5 * scale, .bottom = 5 * scale, .left = 5 * scale, .right = 5 * scale },
++        };
++        const point: Coordinate = .{ .surface = .{ .x = @floatFromInt(18 * scale), .y = @floatFromInt(15 * scale) } };
++        try testing.expectEqual(@as(u16, 0), point.viewportGrid(size, 0).y);
++        try testing.expectEqual(@as(u16, 1), point.viewportGrid(size, 0.75).y);
++        try testing.expectEqual(@as(u16, 1), point.viewportGrid(size, 0.75).x);
++        const bottom: Coordinate = .{ .surface = .{ .x = 10, .y = @floatFromInt(103 * scale) } };
++        try testing.expectEqual(@as(u16, 5), bottom.viewportGrid(size, 0.75).y);
++        try testing.expectEqual(@as(u16, 4), bottom.viewportGrid(size, 0).y);
++        try testing.expectEqual(@as(u16, 5), size.grid().rows);
++    }
++}
+diff --git a/src/terminal/PageList.zig b/src/terminal/PageList.zig
+index 746a6cf8c..31ec0e661 100644
+--- a/src/terminal/PageList.zig
++++ b/src/terminal/PageList.zig
+@@ -468,6 +468,10 @@ tracked_pins: PinSet,
+ ///
+ viewport: Viewport,
+
++/// Fraction of the first visible row clipped above the viewport (0..<1).
++/// Kept separately from the integer grid so precise scrolling never resizes it.
++viewport_fraction: f64 = 0,
++
+ /// The pin used for when the viewport scrolls. This is always pre-allocated
+ /// so that scrolling doesn't have a failable memory allocation. This should
+ /// never be access directly; use `viewport`.
+@@ -1248,6 +1252,7 @@ pub const Resize = struct {
+ /// TODO: docs
+ pub fn resize(self: *PageList, opts: Resize) Allocator.Error!void {
+     defer self.assertIntegrity();
++    self.viewport_fraction = 0;
+
+     // Resizing forces all nodes to be decompressed today so we need to
+     // reschedule compression.
+@@ -1720,6 +1725,10 @@ const ReflowCursor = struct {
+                 try self.cursorScrollOrNewPage(list, cap);
+                 self.copyRowMetadata(src_row);
+                 self.page_row.wrap_continuation = true;
++                // Reflow extends this prompt; it does not create a new
++                // command block at each physical wrap.
++                if (self.page_row.semantic_prompt == .prompt)
++                    self.page_row.semantic_prompt = .prompt_continuation;
+             }
+
+             // Fast path: bulk-copy a run of simple cells directly
+@@ -2747,7 +2756,9 @@ const ReflowCursor = struct {
+     }
+
+     fn copyRowMetadata(self: *ReflowCursor, other: *const Row) void {
+-        self.page_row.semantic_prompt = other.semantic_prompt;
++        // Widening can merge continuation rows into a primary prompt row.
++        // Preserve that row's primary marker while appending cells.
++        if (self.x == 0) self.page_row.semantic_prompt = other.semantic_prompt;
+     }
+ };
+
+@@ -3248,6 +3259,7 @@ pub const Scroll = union(enum) {
+ /// previously allocated pages.
+ pub fn scroll(self: *PageList, behavior: Scroll) void {
+     defer self.assertIntegrity();
++    self.viewport_fraction = 0;
+
+     // Special case no-scrollback mode to never allow scrolling.
+     if (self.limits.bytes.explicit == 0) {
+@@ -3763,6 +3775,25 @@ pub fn split(
+
+ /// This represents the state necessary to render a scrollbar for this
+ /// PageList. It has the total size, the offset, and the size of the viewport.
++/// The active screen has no fractional displacement, including after a reset
++/// or IO operation that moves the viewport directly back to the active area.
++pub fn scrollFraction(self: *const PageList) f64 {
++    return if (self.viewport == .active) 0 else self.viewport_fraction;
++}
++
++/// Positive moves down. Clamp at both ends without storing overscroll, so
++/// reversing the gesture responds immediately. Integer jumps reset this state.
++pub fn scrollPrecise(self: *PageList, delta_rows: f64) void {
++    if (!std.math.isFinite(delta_rows)) return;
++    const bar = self.scrollbar();
++    const current = @as(f64, @floatFromInt(bar.offset)) + self.scrollFraction();
++    const end: f64 = @floatFromInt(bar.total - bar.len);
++    const position = std.math.clamp(current + delta_rows, 0, end);
++    const whole = @floor(position);
++    self.scroll(.{ .row = @intFromFloat(whole) });
++    self.viewport_fraction = if (self.viewport == .active) 0 else position - whole;
++}
++
+ pub const Scrollbar = struct {
+     /// Total size of the scrollable area.
+     total: usize,
+@@ -17349,7 +17380,8 @@ test "PageList resize reflow less cols no reflow preserves semantic prompt" {
+         {
+             const p = s.pin(.{ .active = .{ .y = 2 } }).?;
+             const rac = p.rowAndCell();
+-            try testing.expect(rac.row.semantic_prompt == .prompt);
++            // A wrapped row continues the same command; only row 1 starts it.
++            try testing.expect(rac.row.semantic_prompt == .prompt_continuation);
+         }
+     }
+ }
+diff --git a/src/terminal/Screen.zig b/src/terminal/Screen.zig
+index 208e276a2..9e30822c1 100644
+--- a/src/terminal/Screen.zig
++++ b/src/terminal/Screen.zig
+@@ -61,6 +61,9 @@ saved_cursor: ?SavedCursor = null,
+ /// automatically setup tracking.
+ selection: ?Selection = null,
+
++/// Command actions retain logical bounds; only the highlight includes padding.
++command_block_selected: bool = false,
++
+ /// The charset state
+ charset: CharsetState = .{},
+
+@@ -610,6 +613,7 @@ pub fn clone(
+         .no_scrollback = self.no_scrollback,
+         .cursor = cursor,
+         .selection = sel,
++        .command_block_selected = self.command_block_selected and sel != null,
+         .dirty = self.dirty,
+     };
+     result.assertIntegrity();
+@@ -1619,6 +1623,7 @@ pub const Scroll = union(enum) {
+     pin: Pin,
+     row: usize,
+     delta_row: isize,
++    delta_precise: f64,
+     delta_prompt: isize,
+ };
+
+@@ -1639,6 +1644,7 @@ pub inline fn scroll(self: *Screen, behavior: Scroll) void {
+         .pin => |p| self.pages.scroll(.{ .pin = p }),
+         .row => |v| self.pages.scroll(.{ .row = v }),
+         .delta_row => |v| self.pages.scroll(.{ .delta_row = v }),
++        .delta_precise => |v| self.pages.scrollPrecise(v),
+         .delta_prompt => |v| self.pages.scroll(.{ .delta_prompt = v }),
+     }
+ }
+@@ -2909,6 +2915,7 @@ pub fn select(self: *Screen, sel_: ?Selection) Allocator.Error!void {
+         }
+     }
+     self.selection = tracked_sel;
++    self.command_block_selected = false;
+     self.dirty.selection = true;
+ }
+
+@@ -2919,6 +2926,7 @@ pub fn clearSelection(self: *Screen) void {
+         self.dirty.selection = true;
+     }
+     self.selection = null;
++    self.command_block_selected = false;
+ }
+
+ pub const SelectionString = struct {
+@@ -3410,6 +3418,405 @@ pub fn selectOutput(self: *Screen, pin: Pin) ?Selection {
+     return .init(hl.start, hl.end, false);
+ }
+
++/// A completed command group. All bounds come from OSC 133 metadata, never
++/// text matching. The next primary prompt closes the group; a live draft is
++/// deliberately ineligible. Selection pins are tracked by Screen.select.
++pub fn commandBlockAt(self: *Screen, pin: Pin) ?Selection {
++    if (!self.semantic_prompt.seen) return null;
++    var previous = pin.promptIterator(.left_up, null);
++    const start = previous.next() orelse return null;
++    if (start.rowAndCell().row.semantic_prompt != .prompt) return null;
++    var next = start.promptIterator(.right_down, null);
++    _ = next.next();
++    const after = next.next() orelse return null;
++    const input = self.pages.highlightSemanticContent(start, .input) orelse return null;
++    var cells = input.start.cellIterator(.right_down, input.end);
++    while (cells.next()) |cell| {
++        if (cell.rowAndCell().cell.hasText()) break;
++    } else return null;
++    var end = after.up(1) orelse return null;
++    end.x = end.node.cols() - 1;
++    return .init(start.left(start.x), end, false);
++}
++
++/// Share the blank row before a primary prompt with that prompt's block.
++/// Never borrow a row containing output or part of a wrapped command.
++pub fn commandBlockBoundary(prompt: Pin) Pin {
++    if (prompt.rowAndCell().row.semantic_prompt != .prompt) return prompt;
++    const previous = prompt.up(1) orelse return prompt;
++    if (previous.rowAndCell().row.wrap) return prompt;
++    for (previous.cells(.all)) |cell| {
++        if (cell.codepoint() > 32) return prompt;
++    }
++    return previous.left(previous.x);
++}
++
++/// Hit testing follows the highlight: the leading spacer belongs to the next
++/// block, including the unselectable live input region.
++pub fn commandBlockAtVisual(self: *Screen, pin: Pin) ?Selection {
++    if (pin.down(1)) |next| {
++        if (next.rowAndCell().row.semantic_prompt == .prompt and
++            commandBlockBoundary(next).eql(pin.left(pin.x)))
++        {
++            return self.commandBlockAt(next);
++        }
++    }
++    return self.commandBlockAt(pin);
++}
++
++/// Read-only context for a sticky command header. Signed source coordinates
++/// let the native view pin the original command continuously as it scrolls.
++/// Unlike selectable completed blocks, the last running command is eligible.
++const StickyCommand = struct { command: Selection, remaining_rows: f64, source_rows: f64 };
++
++pub fn stickyCommand(self: *Screen) ?StickyCommand {
++    return self.stickyCommandFollowing(false);
++}
++
++pub fn stickyCommandFollowing(self: *Screen, following: bool) ?StickyCommand {
++    if (!self.semantic_prompt.seen) return null;
++    const top = self.pages.getTopLeft(.viewport);
++    var previous = top.promptIterator(.left_up, null);
++    var start = previous.next() orelse return null;
++    if (start.rowAndCell().row.semantic_prompt != .prompt) return null;
++    var next = start.promptIterator(.right_down, null);
++    _ = next.next();
++    if (following) start = next.next() orelse return null;
++    const after = next.next();
++    if (after == null and self.cursor.semantic_content != .output) return null;
++    var end = if (after) |p| p.up(1) orelse return null else self.cursor.page_pin.*;
++    end.x = end.node.cols() - 1;
++    const command = self.commandBlockContent(.init(start, end, false), true) orelse return null;
++    const source = self.pages.pointFromPin(.screen, command.start()) orelse return null;
++    const viewport = self.pages.pointFromPin(.screen, top) orelse return null;
++    const source_rows = @as(f64, @floatFromInt(source.screen.y)) -
++        @as(f64, @floatFromInt(viewport.screen.y)) - self.pages.scrollFraction();
++    const boundary = after orelse end;
++    const distance = self.pages.pointFromPin(.viewport, boundary) orelse return null;
++    const remaining = @as(f64, @floatFromInt(distance.viewport.y)) - self.pages.scrollFraction();
++    if (remaining <= 0) return null;
++    return .{ .command = command, .remaining_rows = remaining, .source_rows = source_rows };
++}
++
++pub fn selectCommandBlock(self: *Screen, block: Selection) Allocator.Error!void {
++    try self.select(block);
++    self.command_block_selected = true;
++}
++
++/// Rendering can shift the highlight to divider boundaries without changing
++/// the tracked range used to navigate, copy, or reuse the selected command.
++pub fn renderSelection(self: *Screen) ?Selection {
++    const selected = self.selection orelse return null;
++    if (!self.command_block_selected) return selected;
++    const start = selected.start();
++    var end = selected.end();
++    if (start.garbage or end.garbage) return null;
++    if (end.down(1)) |next| {
++        const boundary = commandBlockBoundary(next);
++        if (boundary.eql(end.left(end.x))) {
++            end = boundary.up(1) orelse return selected;
++            end.x = end.node.cols() - 1;
++        }
++    }
++    return .init(commandBlockBoundary(start), end, false);
++}
++
++pub fn adjacentCommandBlock(self: *Screen, from: Pin, older: bool) ?Selection {
++    if (!self.semantic_prompt.seen) return null;
++    var it = from.promptIterator(if (older) .left_up else .right_down, null);
++    _ = it.next(); // Skip the current block or live prompt.
++    while (it.next()) |pin| {
++        if (self.commandBlockAt(pin)) |block| return block;
++    }
++    return null;
++}
++
++/// Untouched cells after a hard newline have the default output semantic
++/// value, even between two input lines. Only written output ends the command.
++pub fn commandBlockContent(self: *Screen, block: Selection, command: bool) ?Selection {
++    _ = self;
++    var start: ?Pin = null;
++    var end: ?Pin = null;
++    var reached_output = false;
++    var cells = block.start().cellIterator(.right_down, block.end());
++    while (cells.next()) |pin| {
++        const cell = pin.rowAndCell().cell;
++        if (!cell.hasText()) continue;
++        switch (cell.semantic_content) {
++            .input => {
++                if (reached_output) continue;
++                if (command) {
++                    if (start == null) start = pin;
++                    end = pin;
++                }
++            },
++            .output => {
++                if (command and start != null) break;
++                reached_output = true;
++                if (!command) {
++                    if (start == null) start = pin;
++                    end = pin;
++                }
++            },
++            .prompt => {},
++        }
++    }
++    return .init(start orelse return null, end orelse return null, false);
++}
++
++test "Screen: sticky command follows viewport without altering selection" {
++    const testing = std.testing;
++    const alloc = testing.allocator;
++    var s = try init(testing.io, alloc, .{ .cols = 20, .rows = 4, .max_scrollback_bytes = null });
++    defer s.deinit();
++    try s.testWriteString("banner\n");
++    s.cursorSetSemanticContent(.{ .prompt = .initial });
++    s.cursorSetSemanticContent(.{ .input = .clear_explicit });
++    try s.testWriteString("echo first\n");
++    s.cursorSetSemanticContent(.output);
++    for (0..12) |_| try s.testWriteString("first output\n");
++    // A running command is eligible before the next prompt exists.
++    const running = s.stickyCommand().?;
++    const text = try s.selectionString(alloc, .{ .sel = running.command });
++    defer alloc.free(text);
++    try testing.expectEqualStrings("echo first", text);
++    try testing.expect(s.selection == null);
++    s.cursorSetSemanticContent(.{ .prompt = .initial });
++    s.cursorSetSemanticContent(.{ .input = .clear_explicit });
++    try s.testWriteString("echo second\n");
++    s.cursorSetSemanticContent(.output);
++    for (0..8) |_| try s.testWriteString("second output\n");
++    s.cursorSetSemanticContent(.{ .prompt = .initial });
++    s.cursorSetSemanticContent(.{ .input = .clear_explicit });
++    const second = s.adjacentCommandBlock(s.cursor.page_pin.*, true).?;
++    try s.selectCommandBlock(second);
++    s.scroll(.{ .top = {} });
++    try testing.expect(s.stickyCommand() == null); // Banner, no command above.
++    s.scroll(.{ .row = 1 });
++    try testing.expectEqual(@as(f64, 0), s.stickyCommand().?.source_rows); // Original position.
++    s.scroll(.{ .row = 2 });
++    try testing.expectEqual(@as(f64, 12), s.stickyCommand().?.remaining_rows);
++    s.scroll(.{ .delta_precise = 0.5 });
++    try testing.expectEqual(@as(f64, 11.5), s.stickyCommand().?.remaining_rows);
++    s.scroll(.{ .row = 13 });
++    try testing.expectEqual(@as(f64, 1), s.stickyCommand().?.remaining_rows);
++    const incoming = s.stickyCommandFollowing(true).?;
++    try testing.expectEqual(@as(f64, 1), incoming.source_rows);
++    const incoming_text = try s.selectionString(alloc, .{ .sel = incoming.command });
++    defer alloc.free(incoming_text);
++    try testing.expectEqualStrings("echo second", incoming_text);
++    s.scroll(.{ .delta_precise = 0.25 });
++    try testing.expectEqual(@as(f64, 0.75), s.stickyCommand().?.remaining_rows);
++    try testing.expectEqual(@as(f64, 0.75), s.stickyCommandFollowing(true).?.source_rows);
++    s.scroll(.{ .row = 14 });
++    try testing.expectEqual(@as(f64, 0), s.stickyCommand().?.source_rows); // Next command enters in place.
++    s.scroll(.{ .row = 15 });
++    const next_text = try s.selectionString(alloc, .{ .sel = s.stickyCommand().?.command });
++    defer alloc.free(next_text);
++    try testing.expectEqualStrings("echo second", next_text);
++    try testing.expect(s.selection.?.eql(second));
++    s.reset();
++    try testing.expect(s.stickyCommand() == null);
++}
++
++test "Screen: sticky command keeps fractional source position for wrapped input" {
++    const testing = std.testing;
++    var s = try init(testing.io, testing.allocator, .{ .cols = 10, .rows = 3, .max_scrollback_bytes = null });
++    defer s.deinit();
++    s.cursorSetSemanticContent(.{ .prompt = .initial });
++    s.cursorSetSemanticContent(.{ .input = .clear_explicit });
++    try s.testWriteString("echo abcdefghijkl\n");
++    s.cursorSetSemanticContent(.output);
++    for (0..8) |_| try s.testWriteString("output\n");
++    s.scroll(.{ .row = 1 });
++    try testing.expectEqual(@as(f64, -1), s.stickyCommand().?.source_rows);
++    s.scroll(.{ .delta_precise = 0.25 });
++    try testing.expectEqual(@as(f64, -1.25), s.stickyCommand().?.source_rows);
++    s.scroll(.{ .row = 2 });
++    const command = try s.selectionString(testing.allocator, .{ .sel = s.stickyCommand().?.command });
++    defer testing.allocator.free(command);
++    try testing.expectEqualStrings("echo abcdefghijkl", command);
++}
++
++test "Screen: command block highlight shares spacer rows without changing content" {
++    const testing = std.testing;
++    const alloc = testing.allocator;
++    var s = try init(testing.io, alloc, .{ .cols = 20, .rows = 12 });
++    defer s.deinit();
++    try s.testWriteString("banner\n\n");
++    s.cursorSetSemanticContent(.{ .prompt = .initial });
++    s.cursorSetSemanticContent(.{ .input = .clear_explicit });
++    try s.testWriteString("echo one\n");
++    s.cursorSetSemanticContent(.output);
++    try s.testWriteString("one\n\n\n");
++    s.cursorSetSemanticContent(.{ .prompt = .initial });
++    s.cursorSetSemanticContent(.{ .input = .clear_explicit });
++    try s.testWriteString("echo two\n");
++    s.cursorSetSemanticContent(.output);
++    try s.testWriteString("two\n\n\n");
++    s.cursorSetSemanticContent(.{ .prompt = .initial });
++    s.cursorSetSemanticContent(.{ .input = .clear_explicit });
++
++    const second = s.adjacentCommandBlock(s.cursor.page_pin.*, true).?;
++    const first = s.adjacentCommandBlock(second.start(), true).?;
++    try s.selectCommandBlock(second);
++    const visual = s.renderSelection().?;
++    try testing.expectEqual(5, s.pages.pointFromPin(.screen, visual.start()).?.screen.y);
++    try testing.expectEqual(8, s.pages.pointFromPin(.screen, visual.end()).?.screen.y);
++    try testing.expect(s.selection.?.eql(second));
++    const command = try s.selectionString(alloc, .{ .sel = s.commandBlockContent(s.selection.?, true).? });
++    defer alloc.free(command);
++    try testing.expectEqualStrings("echo two", command);
++    try testing.expect(s.commandBlockAtVisual(visual.start()).?.eql(second));
++    try testing.expect(s.commandBlockAtVisual(visual.start().up(1).?).?.eql(first));
++    try testing.expect(s.commandBlockAtVisual(visual.end().down(1).?) == null);
++
++    // Ordinary text selection keeps exact text-cell bounds, even when it
++    // replaces a command selection with the very same tracked pins.
++    try s.select(s.selection);
++    try testing.expect(!s.command_block_selected);
++    try testing.expect(s.renderSelection().?.eql(second));
++    try s.selectCommandBlock(first);
++    s.clearSelection();
++    try testing.expect(s.renderSelection() == null);
++    try testing.expect(!s.command_block_selected);
++}
++
++test "Screen: command block highlight never borrows output or wrapped rows" {
++    const testing = std.testing;
++    var s = try init(testing.io, testing.allocator, .{ .cols = 20, .rows = 10 });
++    defer s.deinit();
++    s.cursorSetSemanticContent(.{ .prompt = .initial });
++    s.cursorSetSemanticContent(.{ .input = .clear_explicit });
++    try s.testWriteString("echo one\n");
++    s.cursorSetSemanticContent(.output);
++    try s.testWriteString("one\n");
++    s.cursorSetSemanticContent(.{ .prompt = .initial });
++    s.cursorSetSemanticContent(.{ .input = .clear_explicit });
++    try s.testWriteString("echo two\n");
++    s.cursorSetSemanticContent(.output);
++    try s.testWriteString("two\n");
++    s.cursorSetSemanticContent(.{ .prompt = .initial });
++    s.cursorSetSemanticContent(.{ .input = .clear_explicit });
++    const second = s.adjacentCommandBlock(s.cursor.page_pin.*, true).?;
++    const first = s.adjacentCommandBlock(second.start(), true).?;
++    for ([_]Selection{ first, second }) |block| {
++        try s.selectCommandBlock(block);
++        try testing.expect(s.renderSelection().?.eql(block));
++    }
++    // A blank but soft-wrapped row is still part of its preceding line.
++    const preceding = second.start().up(1).?;
++    @memset(preceding.cells(.all), .{});
++    preceding.rowAndCell().row.wrap = true;
++    try testing.expect(commandBlockBoundary(second.start()).eql(second.start()));
++}
++
++test "Screen: command block multiline input skips unwritten row padding" {
++    const testing = std.testing;
++    var s = try init(testing.io, testing.allocator, .{ .cols = 40, .rows = 10 });
++    defer s.deinit();
++    s.cursorSetSemanticContent(.{ .prompt = .initial });
++    s.cursorSetSemanticContent(.{ .input = .clear_explicit });
++    try s.testWriteString("echo alpha\necho beta\n");
++    s.cursorSetSemanticContent(.output);
++    try s.testWriteString("  alpha\nbeta\n");
++    s.cursorSetSemanticContent(.{ .prompt = .initial });
++    s.cursorSetSemanticContent(.{ .input = .clear_explicit });
++    const block = s.adjacentCommandBlock(s.cursor.page_pin.*, true).?;
++    const command = try s.selectionString(testing.allocator, .{
++        .sel = s.commandBlockContent(block, true).?,
++        .trim = false,
++    });
++    defer testing.allocator.free(command);
++    try testing.expectEqualStrings("echo alpha\necho beta", command);
++    const output = try s.selectionString(testing.allocator, .{
++        .sel = s.commandBlockContent(block, false).?,
++        .trim = false,
++    });
++    defer testing.allocator.free(output);
++    try testing.expectEqualStrings("  alpha\nbeta", output);
++}
++
++test "Screen: command blocks navigate and exclude live input and empty prompts" {
++    const testing = std.testing;
++    var s = try init(testing.io, testing.allocator, .{ .cols = 20, .rows = 12 });
++    defer s.deinit();
++    s.cursorSetSemanticContent(.{ .prompt = .initial });
++    s.cursorSetSemanticContent(.{ .input = .clear_explicit });
++    try s.testWriteString("echo first\n");
++    s.cursorSetSemanticContent(.output);
++    try s.testWriteString("first\n");
++    s.cursorSetSemanticContent(.{ .prompt = .initial });
++    try s.testWriteString("\n"); // Cancelled, empty prompt.
++    s.cursorSetSemanticContent(.{ .prompt = .initial });
++    s.cursorSetSemanticContent(.{ .input = .clear_explicit });
++    try s.testWriteString("echo second\n");
++    s.cursorSetSemanticContent(.output);
++    try s.testWriteString("second\n");
++    s.cursorSetSemanticContent(.{ .prompt = .initial });
++    s.cursorSetSemanticContent(.{ .input = .clear_explicit });
++    try s.testWriteString("draft");
++
++    try testing.expect(s.commandBlockAt(s.cursor.page_pin.*) == null);
++    const second = s.adjacentCommandBlock(s.cursor.page_pin.*, true).?;
++    const first = s.adjacentCommandBlock(second.start(), true).?;
++    try testing.expect(s.adjacentCommandBlock(first.start(), true) == null);
++    try testing.expect(s.adjacentCommandBlock(second.start(), false) == null);
++    try testing.expect(s.adjacentCommandBlock(first.start(), false).?.eql(second));
++    try testing.expect(s.commandBlockAt(second.end()).?.eql(second));
++    const text = try s.selectionString(testing.allocator, .{ .sel = second, .trim = true });
++    defer testing.allocator.free(text);
++    try testing.expectEqualStrings("echo second\nsecond", text);
++}
++
++test "Screen: command block selection and command text survive reflow" {
++    const testing = std.testing;
++    var s = try init(testing.io, testing.allocator, .{ .cols = 24, .rows = 10 });
++    defer s.deinit();
++    try s.testWriteString("\n");
++    s.cursorSetSemanticContent(.{ .prompt = .initial });
++    s.cursorSetSemanticContent(.{ .input = .clear_explicit });
++    try s.testWriteString("echo abcdefghijklmnop\n");
++    s.cursorSetSemanticContent(.output);
++    try s.testWriteString("abcdefghijklmnop\n\n\n");
++    s.cursorSetSemanticContent(.{ .prompt = .initial });
++    s.cursorSetSemanticContent(.{ .input = .clear_explicit });
++    const block = s.adjacentCommandBlock(s.cursor.page_pin.*, true).?;
++    try s.selectCommandBlock(block);
++    for ([_]size.CellCountInt{ 10, 32, 8, 24 }) |cols| {
++        try s.resize(.{ .cols = cols, .rows = 10, .reflow = true });
++        const selected = s.commandBlockAt(s.selection.?.start()).?;
++        const visual = s.renderSelection().?;
++        try testing.expect(visual.start().eql(commandBlockBoundary(selected.start())));
++        const live_boundary = commandBlockBoundary(s.cursor.page_pin.*);
++        try testing.expect(visual.end().down(1).?.left(visual.end().x).eql(live_boundary));
++        const text = try s.selectionString(testing.allocator, .{
++            .sel = s.commandBlockContent(selected, true).?,
++            .trim = true,
++        });
++        defer testing.allocator.free(text);
++        try testing.expectEqualStrings("echo abcdefghijklmnop", text);
++        try testing.expect(s.adjacentCommandBlock(selected.start(), false) == null);
++    }
++    s.clearSelection();
++    try testing.expect(s.selection == null);
++}
++
++test "Screen: command blocks require semantic integration and a closing prompt" {
++    const testing = std.testing;
++    var s = try init(testing.io, testing.allocator, .{ .cols = 20, .rows = 10 });
++    defer s.deinit();
++    try s.testWriteString("restored plain text\n");
++    try testing.expect(s.commandBlockAt(s.cursor.page_pin.*) == null);
++    try testing.expect(s.adjacentCommandBlock(s.cursor.page_pin.*, true) == null);
++    s.cursorSetSemanticContent(.{ .prompt = .initial });
++    s.cursorSetSemanticContent(.{ .input = .clear_explicit });
++    try s.testWriteString("running\n");
++    s.cursorSetSemanticContent(.output);
++    try s.testWriteString("still running");
++    try testing.expect(s.commandBlockAt(s.cursor.page_pin.*) == null);
++}
++
+ pub const LineIterator = struct {
+     screen: *const Screen,
+     current: ?Pin = null,
+diff --git a/src/terminal/formatter.zig b/src/terminal/formatter.zig
+index 4feedda50..b0f48d6b1 100644
+--- a/src/terminal/formatter.zig
++++ b/src/terminal/formatter.zig
+@@ -96,6 +96,10 @@ pub const Options = struct {
+     /// is currently only space characters (0x20).
+     trim: bool = true,
+
++    /// Sora archives retain semantic boundaries for pointer/keyboard navigation.
++    /// Opt-in VT metadata only; ordinary copies and other formats stay unchanged.
++    semantic_prompts: bool = false,
++
+     /// Replace matching Unicode codepoints with some other values.
+     /// This will use the last matching range found in the list.
+     codepoint_map: ?std.MultiArrayList(CodepointMap) = .{},
+@@ -995,6 +999,7 @@ pub const PageFormatter = struct {
+     pub const TrailingState = struct {
+         rows: usize = 0,
+         cells: usize = 0,
++        semantic_content: Cell.SemanticContent = .output,
+
+         pub const empty: TrailingState = .{ .rows = 0, .cells = 0 };
+     };
+@@ -1040,6 +1045,8 @@ pub const PageFormatter = struct {
+     ) std.Io.Writer.Error!TrailingState {
+         var blank_rows: usize = 0;
+         var blank_cells: usize = 0;
++        const semantic_prompts = emit == .vt and self.opts.semantic_prompts;
++        var semantic_content: Cell.SemanticContent = .output;
+
+         // Continue our prior trailing state if we have it, but only if we're
+         // starting from the beginning (start_y and start_x are both 0).
+@@ -1048,6 +1055,7 @@ pub const PageFormatter = struct {
+             if (self.start_y == 0 and self.start_x == 0) {
+                 blank_rows = state.rows;
+                 blank_cells = state.cells;
++                semantic_content = state.semantic_content;
+             }
+         }
+
+@@ -1216,7 +1224,17 @@ pub const PageFormatter = struct {
+             // If this row is blank, accumulate to avoid a bunch of extra
+             // work later. If it isn't blank, make sure we dump all our
+             // blanks.
+-            if (!Cell.hasTextAny(cells_subset)) {
++            const prompt_marker: ?[]const u8 = if (!semantic_prompts or row_start_x != 0)
++                null
++            else switch (row.semantic_prompt) {
++                .prompt => "\x1b]133;A;aid=sora-archive\x1b\\",
++                .prompt_continuation => if (!row.wrap_continuation)
++                    "\x1b]133;P;k=s;aid=sora-archive\x1b\\"
++                else
++                    null,
++                .none => null,
++            };
++            if (!Cell.hasTextAny(cells_subset) and prompt_marker == null) {
+                 blank_rows += 1;
+                 continue;
+             }
+@@ -1288,6 +1306,16 @@ pub const PageFormatter = struct {
+             // our blank cell count.
+             if (!row.wrap_continuation or !self.opts.unwrap) blank_cells = 0;
+
++            if (prompt_marker) |marker| {
++                try writer.writeAll(marker);
++                if (self.point_map) |*map| map.map.appendNTimes(
++                    map.alloc,
++                    .{ .x = row_start_x, .y = y },
++                    marker.len,
++                ) catch return error.WriteFailed;
++                semantic_content = .prompt;
++            }
++
+             // Go through each cell and print it
+             var cell_i: usize = 0;
+             while (cell_i < cells_subset.len) : (cell_i += 1) {
+@@ -1299,7 +1327,7 @@ pub const PageFormatter = struct {
+                 // avoiding all of the per-cell bookkeeping below. This is
+                 // only valid when we have no codepoint map and when our
+                 // current style/hyperlink state is known-stable.
+-                if (cp_map_empty) fast: {
++                if (cp_map_empty and !semantic_prompts) fast: {
+                     if (comptime formatStyled(emit)) {
+                         if (style_id == invalid_style_id) break :fast;
+                     }
+@@ -1335,6 +1363,21 @@ pub const PageFormatter = struct {
+                 // If we have a zero value, then we accumulate a counter. We
+                 // only want to turn zero values into spaces if we have a non-zero
+                 // char sometime later.
++                if (semantic_prompts and cell.hasText() and semantic_content != cell.semantic_content) {
++                    const marker = switch (cell.semantic_content) {
++                        .input => "\x1b]133;B;aid=sora-archive\x1b\\",
++                        .output => "\x1b]133;C;aid=sora-archive\x1b\\",
++                        .prompt => "\x1b]133;P;k=s;aid=sora-archive\x1b\\",
++                    };
++                    try writer.writeAll(marker);
++                    if (self.point_map) |*map| map.map.appendNTimes(
++                        map.alloc,
++                        .{ .x = x, .y = y },
++                        marker.len,
++                    ) catch return error.WriteFailed;
++                    semantic_content = cell.semantic_content;
++                }
++
+                 blank: {
+                     // If we're emitting styled output (not plaintext) and
+                     // the cell has some kind of styling or is not empty
+@@ -1577,7 +1620,7 @@ pub const PageFormatter = struct {
+             if (blank_rows >= 1) blank_rows -= 1;
+         }
+
+-        return .{ .rows = blank_rows, .cells = blank_cells };
++        return .{ .rows = blank_rows, .cells = blank_cells, .semantic_content = semantic_content };
+     }
+
+     /// Fast path for writing runs of simple cells: single-codepoint cells
+@@ -7028,3 +7071,62 @@ test "Page HTML hyperlink point map maps closing to previous cell" {
+         try testing.expectEqual(expected_coord, point_map.items[i]);
+     }
+ }
++
++test "Sora archive restores clickable blocks across wrapping and repeated replay" {
++    const testing = std.testing;
++    const alloc = testing.allocator;
++    var original = try Terminal.init(testing.io, alloc, .{ .cols = 12, .rows = 4 });
++    defer original.deinit(alloc);
++    var input = original.vtStream();
++    defer input.deinit();
++    input.nextSlice("old unmarked output\r\n" ++
++        "\x1b]133;A\x07\x1b]133;B\x07  echo 日本語 abcdefghijklmnop\r\n" ++
++        "\x1b]133;P;k=s\x07\x1b]133;B\x07echo two\r\n" ++
++        "\x1b]133;C\x07\x1b[32mfirst output\x1b[0m\r\n\r\n\r\n" ++
++        "\x1b]133;A\x07\x1b]133;B\x07pwd\r\n" ++
++        "\x1b]133;C\x07/tmp\r\n\r\n\r\n\x1b]133;A\x07\x1b]133;B\x07");
++    for ([_]size.CellCountInt{ 8, 80 }) |width| {
++        var archive: std.Io.Writer.Allocating = .init(alloc);
++        defer archive.deinit();
++        var exporter: ScreenFormatter = .init(original.screens.active, .{
++            .emit = .vt,
++            .unwrap = true,
++            .trim = false,
++            .semantic_prompts = true,
++        });
++        var map: PinMap.Map = .empty;
++        defer map.deinit(alloc);
++        exporter.pin_map = .{ .alloc = alloc, .map = &map };
++        try exporter.format(&archive.writer);
++        try testing.expectEqual(archive.writer.buffered().len, map.count());
++        var restored = try Terminal.init(testing.io, alloc, .{ .cols = width, .rows = 4 });
++        defer restored.deinit(alloc);
++        var replay = restored.vtStream();
++        defer replay.deinit();
++        for (0..2) |_| {
++            replay.nextSlice(archive.writer.buffered());
++            const screen = restored.screens.active;
++            const latest = screen.adjacentCommandBlock(screen.cursor.page_pin.*, true).?;
++            const latest_command = try screen.selectionString(alloc, .{ .sel = screen.commandBlockContent(latest, true).?, .trim = false });
++            defer alloc.free(latest_command);
++            try testing.expectEqualStrings("pwd", latest_command);
++            const older = screen.adjacentCommandBlock(latest.start(), true).?;
++            const command = try screen.selectionString(alloc, .{ .sel = screen.commandBlockContent(older, true).?, .trim = false });
++            defer alloc.free(command);
++            try testing.expectEqualStrings("  echo 日本語 abcdefghijklmnop\necho two", command);
++            try testing.expect(screen.commandBlockAtVisual(older.end()) != null);
++            try testing.expect(screen.adjacentCommandBlock(older.start(), true) == null);
++            try screen.selectCommandBlock(older);
++            try testing.expect(screen.command_block_selected);
++            archive.clearRetainingCapacity();
++            const again: ScreenFormatter = .init(screen, .{
++                .emit = .vt,
++                .unwrap = true,
++                .trim = false,
++                .semantic_prompts = true,
++            });
++            try again.format(&archive.writer);
++            restored.fullReset();
++        }
++    }
++}
 diff --git a/src/terminal/render.zig b/src/terminal/render.zig
-index 6bcddb2c2..7787a2108 100644
+index 6bcddb2c2..2b9a9f109 100644
 --- a/src/terminal/render.zig
 +++ b/src/terminal/render.zig
-@@ -104,6 +104,7 @@ pub const RenderState = struct {
+@@ -77,10 +77,11 @@ pub const RenderState = struct {
+     /// This can lead to a one or two frame mismatch a renderer needs to
+     /// handle.
+     ///
+-    /// The viewport is always exactly equal to the active area size so this
+-    /// is also the viewport size.
++    /// Fractional scroll snapshots include one extra, partially visible row.
++    /// The terminal's active dimensions are unchanged.
+     rows: size.CellCountInt,
+     cols: size.CellCountInt,
++    viewport_fraction: f64 = 0,
+
+     /// The color state for the terminal.
+     colors: Colors,
+@@ -104,6 +105,7 @@ pub const RenderState = struct {
      /// The screen type that this state represents. This is used primarily
      /// to detect changes.
      screen: ScreenSet.Key,
@@ -260,7 +1338,57 @@ index 6bcddb2c2..7787a2108 100644
 
      /// The last viewport pin used to generate this state. This is NOT
      /// a tracked pin and is generally NOT safe to read other than the direct
-@@ -419,6 +420,7 @@ pub const RenderState = struct {
+@@ -277,6 +279,19 @@ pub const RenderState = struct {
+         style: Style,
+     };
+
++    /// The same boundary used by Screen.renderSelection, read from the
++    /// renderer-owned snapshot so drawing never follows live terminal pins.
++    pub fn commandBoundaryRow(self: *const RenderState, prompt_row: usize) usize {
++        if (prompt_row == 0) return 0;
++        const rows = self.row_data.items(.raw);
++        if (rows[prompt_row].semantic_prompt != .prompt or rows[prompt_row - 1].wrap)
++            return prompt_row;
++        for (self.row_data.items(.cells)[prompt_row - 1].items(.raw)) |cell| {
++            if (cell.codepoint() > 32) return prompt_row;
++        }
++        return prompt_row - 1;
++    }
++
+     // Dirty state.
+     pub const Dirty = lib.Enum(lib.target, &.{
+         // Not dirty at all. Can skip rendering if prior state was
+@@ -377,6 +392,13 @@ pub const RenderState = struct {
+     ) Allocator.Error!void {
+         const s: *Screen = t.screens.active;
+         const viewport_pin = s.pages.getTopLeft(.viewport);
++        const fraction = s.pages.scrollFraction();
++        const fraction_changed = self.viewport_fraction != fraction;
++        // Include the partially visible bottom row without changing PTY size.
++        const render_rows = s.pages.rows + @as(size.CellCountInt, @intFromBool(
++            fraction > 0 and s.pages.rows < std.math.maxInt(size.CellCountInt) and
++                viewport_pin.down(s.pages.rows) != null,
++        ));
+         const redraw = redraw: {
+             // If our screen key changed, we need to do a full rebuild
+             // because our render state is viewport-specific.
+@@ -399,7 +421,7 @@ pub const RenderState = struct {
+             }
+
+             // If our dimensions changed, we do a full rebuild.
+-            if (self.rows != s.pages.rows or
++            if (self.rows != render_rows or
+                 self.cols != s.pages.cols)
+             {
+                 break :redraw true;
+@@ -414,11 +436,13 @@ pub const RenderState = struct {
+         };
+
+         // Always set our cheap fields, its more expensive to compare
+-        self.rows = s.pages.rows;
++        self.rows = render_rows;
+         self.cols = s.pages.cols;
++        self.viewport_fraction = fraction;
          self.viewport_pin = viewport_pin;
          self.cursor.active = .{ .x = s.cursor.x, .y = s.cursor.y };
          self.cursor.cell = s.cursor.page_cell.*;
@@ -268,3 +1396,163 @@ index 6bcddb2c2..7787a2108 100644
          self.cursor.style = s.cursor.style;
          self.cursor.visual_style = s.cursor.cursor_style;
          self.cursor.password_input = t.flags.password_input;
+@@ -663,7 +687,8 @@ pub const RenderState = struct {
+         // There are performance improvements that can be made here, though.
+         // For example, `containedRow` recalculates a bunch of information
+         // we can cache.
+-        if (s.selection) |*sel| selection: {
++        var visual_selection = s.renderSelection();
++        if (visual_selection) |*sel| selection: {
+             @branchHint(.unlikely);
+
+             // Populate our selection cache to avoid some expensive
+@@ -735,7 +760,7 @@ pub const RenderState = struct {
+
+             // Note: we don't clear any row_data here because our rebuild
+             // above did this.
+-        } else if (any_dirty and self.dirty == .false) {
++        } else if ((any_dirty or fraction_changed) and self.dirty == .false) {
+             self.dirty = .partial;
+         }
+
+@@ -2045,6 +2070,55 @@ test "colors" {
+     try testing.expectEqual(0xFF, p0.b);
+ }
+
++test "command block selection aligns with dividers and resets to text selection" {
++    const testing = std.testing;
++    const alloc = testing.allocator;
++    var t: Terminal = try .init(testing.io, alloc, .{ .cols = 20, .rows = 12 });
++    defer t.deinit(alloc);
++    const screen = t.screens.active;
++    try screen.testWriteString("banner\n\n");
++    screen.cursorSetSemanticContent(.{ .prompt = .initial });
++    screen.cursorSetSemanticContent(.{ .input = .clear_explicit });
++    try screen.testWriteString("echo one\n");
++    screen.cursorSetSemanticContent(.output);
++    try screen.testWriteString("one\n\n\n");
++    screen.cursorSetSemanticContent(.{ .prompt = .initial });
++    screen.cursorSetSemanticContent(.{ .input = .clear_explicit });
++    try screen.testWriteString("echo two\n");
++    screen.cursorSetSemanticContent(.output);
++    try screen.testWriteString("two\n\n\n");
++    screen.cursorSetSemanticContent(.{ .prompt = .initial });
++    screen.cursorSetSemanticContent(.{ .input = .clear_explicit });
++    const block = screen.adjacentCommandBlock(screen.cursor.page_pin.*, true).?;
++    try screen.selectCommandBlock(block);
++
++    var state: RenderState = .empty;
++    defer state.deinit(alloc);
++    try state.update(alloc, &t);
++    try testing.expectEqual(0, state.commandBoundaryRow(0));
++    try testing.expectEqual(1, state.commandBoundaryRow(2));
++    try testing.expectEqual(5, state.commandBoundaryRow(6));
++    try testing.expectEqual(9, state.commandBoundaryRow(10));
++    try testing.expect(state.shell_input_active);
++    for (state.row_data.items(.selection), 0..) |selected, y| {
++        try testing.expectEqual(y >= 5 and y < 9, selected != null);
++        if (selected) |bounds| try testing.expectEqualSlices(size.CellCountInt, &.{ 0, 19 }, &bounds);
++    }
++
++    // Reuse the cache, then replace with ordinary selection and clear it.
++    state.clean();
++    try state.update(alloc, &t);
++    try testing.expect(state.row_data.items(.selection)[5] != null);
++    try screen.select(screen.selection);
++    try state.update(alloc, &t);
++    for (state.row_data.items(.selection), 0..) |selected, y| {
++        try testing.expectEqual(y >= 6 and y < 10, selected != null);
++    }
++    screen.clearSelection();
++    try state.update(alloc, &t);
++    for (state.row_data.items(.selection)) |selected| try testing.expectEqual(null, selected);
++}
++
+ test "selection single line" {
+     const testing = std.testing;
+     const alloc = testing.allocator;
+@@ -2395,3 +2469,67 @@ test "dirty row resets highlights" {
+         try testing.expectEqual(0, row_highlights[0].items.len);
+     }
+ }
++
++test "Sora smooth scroll preserves pixel fractions and renders the guard row" {
++    const testing = std.testing;
++    const alloc = testing.allocator;
++    var t = try Terminal.init(testing.io, alloc, .{ .cols = 20, .rows = 5 });
++    defer t.deinit(alloc);
++    var stream = t.vtStream();
++    defer stream.deinit();
++    for (0..30) |_| stream.nextSlice("row\r\n");
++    const screen = t.screens.active;
++    const pages = &screen.pages;
++    const end = pages.scrollbar().offset;
++    var state: RenderState = .empty;
++    defer state.deinit(alloc);
++    try state.update(alloc, &t);
++    try testing.expectEqual(@as(usize, 5), state.rows);
++
++    pages.scrollPrecise(-0.25);
++    try state.update(alloc, &t);
++    try testing.expectEqual(end - 1, pages.scrollbar().offset);
++    try testing.expectEqual(@as(f64, 0.75), state.viewport_fraction);
++    try testing.expectEqual(@as(usize, 6), state.rows);
++    try testing.expectEqual(@as(usize, 5), pages.rows);
++    const guard_row = pages.getTopLeft(.viewport).down(5).?;
++    try testing.expect(state.row_data.items(.pin)[5].eql(guard_row));
++
++    state.dirty = .false;
++    for (state.row_data.items(.dirty)) |*dirty| dirty.* = false;
++    pages.scrollPrecise(-0.125);
++    try state.update(alloc, &t);
++    try testing.expectEqual(@as(f64, 0.625), state.viewport_fraction);
++    try testing.expectEqual(RenderState.Dirty.partial, state.dirty);
++    for (state.row_data.items(.dirty)) |dirty| try testing.expect(!dirty);
++
++    // Reverse by the exact gesture amount; there is no row-sized dead zone.
++    pages.scrollPrecise(0.375);
++    try state.update(alloc, &t);
++    try testing.expectEqual(end, pages.scrollbar().offset);
++    try testing.expectEqual(@as(f64, 0), state.viewport_fraction);
++    try testing.expectEqual(@as(usize, 5), state.rows);
++
++    // No overscroll debt: the next movement responds immediately at both ends.
++    pages.scrollPrecise(-100_000);
++    pages.scrollPrecise(0.125);
++    try testing.expectEqual(@as(usize, 0), pages.scrollbar().offset);
++    try testing.expectEqual(@as(f64, 0.125), pages.scrollFraction());
++    pages.scrollPrecise(100_000);
++    pages.scrollPrecise(-0.125);
++    try testing.expectEqual(end - 1, pages.scrollbar().offset);
++    try testing.expectEqual(@as(f64, 0.875), pages.scrollFraction());
++
++    // Keyboard/block jumps and reset return to a complete, aligned viewport.
++    screen.scroll(.active);
++    try testing.expectEqual(@as(f64, 0), pages.scrollFraction());
++    pages.scrollPrecise(-0.5);
++    pages.scrollPrecise(std.math.nan(f64));
++    try testing.expectEqual(@as(f64, 0.5), pages.scrollFraction());
++    t.fullReset();
++    try state.update(alloc, &t);
++    try testing.expectEqual(@as(f64, 0), state.viewport_fraction);
++    try testing.expectEqual(@as(usize, 5), state.rows);
++    pages.scrollPrecise(-0.5);
++    try testing.expectEqual(@as(f64, 0), pages.scrollFraction());
++}
+diff --git a/src/termio/stream_handler.zig b/src/termio/stream_handler.zig
+index 27e06dcb7..e452a8395 100644
+--- a/src/termio/stream_handler.zig
++++ b/src/termio/stream_handler.zig
+@@ -1427,6 +1427,12 @@ pub const StreamHandler = struct {
+         self: *StreamHandler,
+         cmd: Stream.Action.SemanticPrompt,
+     ) !void {
++        // Archive replay restores grid metadata without reporting old commands
++        // as newly running/finished commands to the embedding application.
++        if (std.mem.eql(u8, cmd.readOption(.aid) orelse "", "sora-archive")) {
++            try self.terminal.semanticPrompt(cmd);
++            return;
++        }
+         switch (cmd.action) {
+             .end_input_start_output => {
+                 self.surfaceMessageWriter(.start_command);

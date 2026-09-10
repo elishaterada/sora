@@ -143,6 +143,22 @@ final class CommandBlocksTests: XCTestCase {
         XCTAssertEqual(result, "accepted:pwd\naccepted: \naccepted:\n")
     }
 
+    func testReuseClearsMultilineDraftWithoutExecutingAndKeepsItInKillBuffer() throws {
+        let script = resourceRoot().appendingPathComponent("Sora/Resources/zsh/command-blocks.zsh")
+        let result = try runZsh(
+            """
+            source "$1"
+            zle() { print -r -- 'unexpected execution'; }
+            BUFFER=$'echo draft\\necho second line' CURSOR=8
+            _sora_prepare_reuse
+            print -r -- "buffer:$BUFFER cursor:$CURSOR"
+            print -r -- "saved:$CUTBUFFER"
+            """,
+            argument: script.path
+        )
+        XCTAssertEqual(result, "buffer: cursor:0\nsaved:echo draft\necho second line\n")
+    }
+
     private func stripANSI(_ value: String) -> String {
         value
             .replacingOccurrences(

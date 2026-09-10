@@ -1,6 +1,29 @@
 import XCTest
 
 final class CommandHistoryStoreTests: XCTestCase {
+    func testRecallUsesLatestDistinctCommandsAndLiteralPrefix() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("history-recall-\(UUID()).sqlite")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let store = try CommandHistoryStore(url: url)
+        for (index, command) in ["git status", "git diff", "git status", "echo 100%_done", "echo 日本語\nprintf ok", "false"].enumerated() {
+            try store.insert(XCTUnwrap(CommandRunFactory.make(
+                command: command, cwd: URL(fileURLWithPath: index % 2 == 0 ? "/tmp" : "/usr"),
+                exitCode: command == "false" ? 1 : 0, durationNanos: 1,
+                now: Date(timeIntervalSince1970: Double(index + 1))
+            )))
+        }
+        XCTAssertEqual(try store.recall(prefix: "").map(\.command),
+                       ["false", "echo 日本語\nprintf ok", "echo 100%_done", "git status", "git diff"])
+        let git = try store.recall(prefix: "git ")
+        XCTAssertEqual(git.map(\.command), ["git status", "git diff"])
+        XCTAssertEqual(git.first?.lastUsed, Date(timeIntervalSince1970: 3))
+        XCTAssertEqual(try store.recall(prefix: "echo 100%_").map(\.command), ["echo 100%_done"])
+        XCTAssertEqual(try store.recall(prefix: "echo 100X"), [])
+        XCTAssertEqual(try store.recall(prefix: "", limit: 1).map(\.command), ["false"])
+        XCTAssertEqual(try store.recall(prefix: "", limit: 0), [])
+        XCTAssertEqual(try CommandHistoryStore(url: url).recall(prefix: "git "), git)
+    }
+
     func testInsertAndRecentOrder() throws {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("sora-history-\(UUID().uuidString).sqlite")

@@ -2,6 +2,18 @@
 
 ## Status
 
+The tracked Sora patch also exposes `ghostty_surface_read_command_history`.
+It captures styled primary-screen output plus replay-only semantic metadata
+using Ghostty's formatter and existing text ownership contract. Archive markers
+restore block hit testing and navigation without replaying command lifecycle
+callbacks. This is opt-in; normal text copying does not include the markers.
+
+The `smooth-scrolling` option retains fractional viewport rows for precise
+scrollback gestures. Render snapshots include one additional edge row and use
+the same displacement for projection, background colors, overlays, and pointer
+coordinates. The PTY grid stays unchanged. Integer viewport operations clear the
+fraction; fullscreen and mouse-reporting applications bypass this path.
+
 Phase 0 research complete against Ghostty `main` at commit
 [`c81f0b26871c7fbbe2fc35549fdad1f64ed29094`](https://github.com/ghostty-org/ghostty/commit/c81f0b26871c7fbbe2fc35549fdad1f64ed29094)
 (2026-09-03) and Ghostling
@@ -270,6 +282,26 @@ Minimum:
 
 IME can be incomplete in V0 if ASCII input works. Record it as a known issue
 rather than porting Ghostty's full `NSTextInputClient` implementation on day one.
+
+## Native command block interoperability
+
+`patches/ghostty-semantic-prompt-boundaries.patch` also exposes block navigation,
+pointer selection, command/output reads, a read-only viewport command snapshot,
+and selection clearing through the
+existing embedded `ghostty.h` API. These operate under the renderer mutex and
+use `Screen` selections with tracked pins. No application-owned emulator or
+separate FFI layer is introduced. AppKit owns focus and actions; Ghostty owns
+semantic ranges, selection rendering, reflow, scrolling, and alternate-screen
+exclusion. Rebuild the framework with `Scripts/build-ghosttykit.sh` whenever
+the patch changes; the build stamp includes the entire patch hash.
+
+The patch's terminal tests cover empty/live/running prompt exclusion, navigation
+boundaries, clicks within output and spacer rows, and repeated narrow/wide
+reflow. Block highlight bounds are distinct from the tracked semantic selection:
+they align with the divider and live-input background boundaries, sharing the
+two blank separator rows evenly. Render-state tests cover these bounds, cache
+reuse, and returning to ordinary text selection. Related PageList
+prompt/highlight/resize and Screen resize tests are run alongside them.
 
 ## Distribution and signing
 

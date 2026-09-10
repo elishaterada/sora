@@ -2,7 +2,7 @@ import Foundation
 
 enum CommandRunFactory {
     /// Builds a `CommandRun` from Ghostty OSC 133 D (`command_finished`) plus
-    /// the OSC 2 title Ghostty's zsh integration writes in preexec.
+    /// Sora's encoded preexec command (ordinary OSC 2 title as a fallback).
     ///
     /// Returns nil for the initial unmatched OSC 133 D (`exit_code < 0`) and
     /// for empty command text so we do not store prompt-only events.

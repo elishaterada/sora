@@ -22,16 +22,19 @@ struct WorkspaceSnapshot: Codable, Equatable, Sendable {
     }
 }
 
-/// Plain-text scrollback only: never interpreted as shell input.
+/// Styled scrollback and passive block metadata, never interpreted as shell input.
 enum TerminalHistoryArchive {
+    private static let boundaryPayloads = ["133;A;aid=sora-archive", "133;P;k=s;aid=sora-archive",
+                                           "133;B;aid=sora-archive", "133;C;aid=sora-archive"]
+
     static func url(for id: UUID) -> URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Sora/TerminalHistory", isDirectory: true)
             .appendingPathComponent(id.uuidString + ".txt")
     }
 
-    /// Preserve SGR appearance only. Discard OSC, cursor movement, and other
-    /// terminal commands so restoring a transcript cannot invoke side effects.
+    /// Preserve SGR and the exact replay-only boundary markers from Ghostty.
+    /// Discard other OSC, cursor movement, and terminal commands.
     static func sanitized(_ text: String) -> String {
         let chars = Array(text.unicodeScalars)
         var result: [Unicode.Scalar] = []
@@ -56,10 +59,22 @@ enum TerminalHistoryArchive {
                         if index < chars.count { index += 1 }
                     }
                 } else if chars[index] == "]" || chars[index] == "P" || chars[index] == "_" || chars[index] == "^" {
+                    let isOSC = chars[index] == "]"
                     index += 1
+                    let start = index
                     while index < chars.count {
-                        if chars[index].value == 7 { index += 1; break }
-                        if chars[index].value == 27, index + 1 < chars.count, chars[index + 1] == "\\" { index += 2; break }
+                        let terminatorLength = chars[index].value == 7 ? 1
+                            : (chars[index].value == 27 && index + 1 < chars.count && chars[index + 1] == "\\" ? 2 : 0)
+                        if terminatorLength > 0 {
+                            if isOSC, index - start <= 32 {
+                                let payload = String(String.UnicodeScalarView(chars[start..<index]))
+                                if boundaryPayloads.contains(payload) {
+                                    result.append(contentsOf: "\u{1b}]\(payload)\u{1b}\\".unicodeScalars)
+                                }
+                            }
+                            index += terminatorLength
+                            break
+                        }
                         index += 1
                     }
                 } else {
@@ -82,7 +97,10 @@ enum TerminalHistoryArchive {
         guard text.contains(marker) else { return text }
         var lines: [String] = []
         for line in text.components(separatedBy: "\n") {
-            let plain = line.replacingOccurrences(of: "\u{1b}\\[[0-9;:]*m", with: "", options: .regularExpression)
+            let styled = line.replacingOccurrences(of: "\u{1b}\\[[0-9;:]*m", with: "", options: .regularExpression)
+            let plain = boundaryPayloads.reduce(styled) {
+                $0.replacingOccurrences(of: "\u{1b}]\($1)\u{1b}\\", with: "")
+            }
             if plain.trimmingCharacters(in: .whitespacesAndNewlines) == marker {
                 // Retain SGR changes on the banner so subsequent output keeps
                 // its appearance, but remove the launch-only spacer and text.

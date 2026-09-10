@@ -8,6 +8,7 @@ _sora_report_line() {
   local buf=$BUFFER
   buf=${buf//\%/\%25}
   buf=${buf//$'\n'/\%0A}
+  buf=${buf//$'\t'/\%09}
   buf=${buf//$'\r'/\%0D}
   buf=${buf//$'\e'/\%1B}
   buf=${buf//$'\a'/\%07}
@@ -41,10 +42,17 @@ _sora_restore_draft() {
   unset _SORA_RESTORE_DRAFT
 }
 
+_sora_begin_line() {
+  _sora_restore_draft
+  # A fresh empty ZLE line need not redraw after Control-C. Publish it here
+  # so the native input and keyboard routing cannot retain a stale draft.
+  _sora_report_line
+}
+
 _sora_install_draft_restore() {
   emulate -L zsh
   autoload -Uz add-zle-hook-widget
-  add-zle-hook-widget line-init _sora_restore_draft
+  add-zle-hook-widget line-init _sora_begin_line
   precmd_functions=(${precmd_functions:#_sora_install_draft_restore})
 }
 typeset -ag precmd_functions
@@ -53,7 +61,17 @@ precmd_functions+=(_sora_install_draft_restore)
 # A final ZLE redraw can arrive after Return. Explicitly end prompt mode after
 # that redraw so fullscreen clients never inherit shell completion/routing.
 _sora_report_command_started() {
-  builtin printf '\e]2;%s\a' $'\u2400sora-command-started\u2400'
+  emulate -L zsh
+  # Ghostty's ordinary window title strips control characters, including
+  # newlines. Preserve the preexec command as encoded data for native history.
+  local cmd=$1
+  cmd=${cmd//\%/\%25}
+  cmd=${cmd//$'\n'/\%0A}
+  cmd=${cmd//$'\t'/\%09}
+  cmd=${cmd//$'\r'/\%0D}
+  cmd=${cmd//$'\e'/\%1B}
+  cmd=${cmd//$'\a'/\%07}
+  builtin printf '\e]2;%s%s\a' $'\u2400sora-command-started\u2400' "$cmd"
 }
 typeset -ag preexec_functions
 preexec_functions+=(_sora_report_command_started)

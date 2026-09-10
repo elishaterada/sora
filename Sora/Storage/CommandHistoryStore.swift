@@ -1,6 +1,11 @@
 import Foundation
 import SQLite3
 
+struct CommandHistoryEntry: Equatable {
+    let command: String
+    let lastUsed: Date
+}
+
 enum CommandHistoryStoreError: Error, LocalizedError {
     case openFailed(String)
     case executeFailed(String)
@@ -124,6 +129,36 @@ final class CommandHistoryStore: ObservableObject {
 
     func reload() throws {
         recent = try recent(limit: 200)
+    }
+
+    /// One row per command, ordered by its latest use across terminal sessions.
+    /// Prefix metacharacters are literal; failed commands remain recallable.
+    func recall(prefix: String, limit: Int = 200) throws -> [CommandHistoryEntry] {
+        guard limit > 0 else { return [] }
+        let statement = try prepare("""
+            SELECT command, MAX(finished_at) AS last_used
+            FROM command_runs
+            WHERE command LIKE ? ESCAPE '\\'
+            GROUP BY command
+            ORDER BY last_used DESC, command ASC
+            LIMIT ?;
+            """)
+        defer { sqlite3_finalize(statement) }
+        try bindText(statement, index: 1, Self.likePrefix(prefix))
+        sqlite3_bind_int(statement, 2, Int32(clamping: limit))
+        var entries: [CommandHistoryEntry] = []
+        while true {
+            switch sqlite3_step(statement) {
+            case SQLITE_ROW:
+                guard let command = sqlite3_column_text(statement, 0) else { continue }
+                entries.append(CommandHistoryEntry(
+                    command: String(cString: command),
+                    lastUsed: Date(timeIntervalSince1970: sqlite3_column_double(statement, 1))
+                ))
+            case SQLITE_DONE: return entries
+            default: throw CommandHistoryStoreError.executeFailed(message)
+            }
+        }
     }
 
     func prefixStats(prefix: String, cwd: URL, limit: Int = 80) throws -> [HistoryCommandStat] {
