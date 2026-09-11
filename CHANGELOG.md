@@ -4,6 +4,17 @@ Human-readable highlights for each Sora release live here. Add the newest
 version before creating its `vX.Y.Z` tag; the release workflow requires a
 matching section and publishes it to GitHub.
 
+## 0.1.14 — 2026-09-11
+
+### What’s new
+
+- Spot failed commands more easily: command blocks with a nonzero exit status now have a subtle red background, including their pinned headers while scrolling.
+
+### Fixes
+
+- Preserve shell syntax colors in pinned command headers and keep their backgrounds opaque as output scrolls underneath.
+- Keep failed block highlights when resizing the terminal or restoring saved scrollback.
+
 ## 0.1.13 — 2026-09-10
 
 ### What’s new
