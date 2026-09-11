@@ -41,7 +41,7 @@ final class CompletionSessionTests: XCTestCase {
         defer { sqlite3_close(database) }
         let sql = """
             WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<100000)
-            INSERT INTO command_runs
+            INSERT INTO command_runs (id, command, cwd, started_at, finished_at, exit_code, duration_ns)
             SELECT CAST(x AS TEXT), 'git command-' || (x % 1000), '/tmp',
                    unixepoch(), unixepoch(), 0, 1 FROM n;
             """

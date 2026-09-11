@@ -251,7 +251,12 @@ Hint messages settle for 150 ms before replacing the visible hint, avoiding flas
 `CommandHistorySession` owns a transient history preview for a focused, ready
 input with Sora's ZLE integration. `CommandHistoryStore.recall` queries SQLite
 on a worker queue for the latest 200 distinct commands matching a literal prefix,
-ordered by last use across tabs and app launches. Failed commands remain
+ordered by last use within the current tab. Runs carry the workspace tab's stable
+UUID, so restored and reopened tabs retain their own picker history. New tabs
+start empty, even in the same directory. A nullable SQLite column migrates old
+records without guessing their original tab; these remain in the global History
+window. Completion suggestions continue to use the global history statistics.
+Failed commands remain
 recallable. This uses Sora's recorded history; it does not import shell history
 files. Request identities discard late results after dismissal or a new query.
 Loading, empty, and failure states are explicit, and arrows remain responsive

@@ -85,6 +85,20 @@ final class CommandHistoryStore: ObservableObject {
                 ON command_transitions(previous, finished_at DESC);
             """
         )
+        // Older rows have no reliable tab identity. Preserve them in the global
+        // archive without assigning them to an arbitrary tab.
+        let columns = try prepare("PRAGMA table_info(command_runs);")
+        var hasTabID = false
+        while sqlite3_step(columns) == SQLITE_ROW {
+            if let name = sqlite3_column_text(columns, 1), String(cString: name) == "tab_id" {
+                hasTabID = true
+            }
+        }
+        sqlite3_finalize(columns)
+        if !hasTabID {
+            try execute("ALTER TABLE command_runs ADD COLUMN tab_id TEXT;")
+        }
+        try execute("CREATE INDEX IF NOT EXISTS idx_command_runs_tab ON command_runs(tab_id, finished_at DESC);")
         try reload()
     }
 
@@ -94,16 +108,16 @@ final class CommandHistoryStore: ObservableObject {
         }
     }
 
-    func record(_ run: CommandRun) throws {
-        try insert(run)
+    func record(_ run: CommandRun, tabID: UUID? = nil) throws {
+        try insert(run, tabID: tabID)
         try reload()
     }
 
-    func insert(_ run: CommandRun) throws {
+    func insert(_ run: CommandRun, tabID: UUID? = nil) throws {
         let sql = """
             INSERT INTO command_runs
-                (id, command, cwd, started_at, finished_at, exit_code, duration_ns)
-            VALUES (?, ?, ?, ?, ?, ?, ?);
+                (id, command, cwd, started_at, finished_at, exit_code, duration_ns, tab_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?);
             """
         let statement = try prepare(sql)
         defer { sqlite3_finalize(statement) }
@@ -122,6 +136,7 @@ final class CommandHistoryStore: ObservableObject {
         guard sqlite3_bind_int64(statement, 7, Int64(bitPattern: run.durationNanos)) == SQLITE_OK else {
             throw CommandHistoryStoreError.executeFailed(message)
         }
+        if let tabID { try bindText(statement, index: 8, tabID.uuidString) }
         guard sqlite3_step(statement) == SQLITE_DONE else {
             throw CommandHistoryStoreError.executeFailed(message)
         }
@@ -131,21 +146,26 @@ final class CommandHistoryStore: ObservableObject {
         recent = try recent(limit: 200)
     }
 
-    /// One row per command, ordered by its latest use across terminal sessions.
+    /// One row per command, optionally restricted to a stable workspace tab.
     /// Prefix metacharacters are literal; failed commands remain recallable.
-    func recall(prefix: String, limit: Int = 200) throws -> [CommandHistoryEntry] {
+    func recall(prefix: String, tabID: UUID? = nil, limit: Int = 200) throws -> [CommandHistoryEntry] {
         guard limit > 0 else { return [] }
         let statement = try prepare("""
             SELECT command, MAX(finished_at) AS last_used
             FROM command_runs
             WHERE command LIKE ? ESCAPE '\\'
+                AND (? IS NULL OR tab_id = ?)
             GROUP BY command
             ORDER BY last_used DESC, command ASC
             LIMIT ?;
             """)
         defer { sqlite3_finalize(statement) }
         try bindText(statement, index: 1, Self.likePrefix(prefix))
-        sqlite3_bind_int(statement, 2, Int32(clamping: limit))
+        if let tabID {
+            try bindText(statement, index: 2, tabID.uuidString)
+            try bindText(statement, index: 3, tabID.uuidString)
+        }
+        sqlite3_bind_int(statement, 4, Int32(clamping: limit))
         var entries: [CommandHistoryEntry] = []
         while true {
             switch sqlite3_step(statement) {

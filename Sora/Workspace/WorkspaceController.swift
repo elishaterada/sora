@@ -80,7 +80,7 @@ final class WorkspaceController: ObservableObject {
         guard let tab = model.tabs.first(where: { $0.id == id }) else {
             preconditionFailure("unknown tab \(id)")
         }
-        let view = GhosttySurfaceView(runtime: runtime, workingDirectory: tab.workingDirectory)
+        let view = GhosttySurfaceView(runtime: runtime, tabID: tab.id, workingDirectory: tab.workingDirectory)
         view.historyArchiveURL = TerminalHistoryArchive.url(for: id)
         view.onFocus = { [weak self] in
             guard let self, self.selectedID != id else { return }

@@ -4,6 +4,17 @@ Human-readable highlights for each Sora release live here. Add the newest
 version before creating its `vX.Y.Z` tag; the release workflow requires a
 matching section and publishes it to GitHub.
 
+## 0.1.17 — 2026-09-11
+
+### Fixes
+
+- Browse each tab’s own command history with Up and Down. Commands from other tabs no longer appear in the picker, even when both tabs use the same folder.
+- Keep a tab’s history when reopening it or restoring your workspace after restarting Sora. New tabs start with an empty history picker.
+
+### History notes
+
+- Commands recorded before this update remain available in the global History window. Completion suggestions still use shared history.
+
 ## 0.1.16 — 2026-09-11
 
 ### Fixes

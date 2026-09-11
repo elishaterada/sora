@@ -1,6 +1,58 @@
 import XCTest
+import SQLite3
 
 final class CommandHistoryStoreTests: XCTestCase {
+    func testTabRecallIsIsolatedAndSurvivesReopeningStore() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("tab-history-\(UUID()).sqlite")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let first = UUID(), second = UUID()
+        do {
+            let store = try CommandHistoryStore(url: url)
+            for (index, item) in [(first, "git status"), (second, "git diff"),
+                                   (first, "false"), (second, "git status"),
+                                   (first, "echo 100%_done")].enumerated() {
+                let run = try XCTUnwrap(CommandRunFactory.make(
+                    command: item.1, cwd: URL(fileURLWithPath: "/tmp"),
+                    exitCode: item.1 == "false" ? 1 : 0, durationNanos: 1,
+                    now: Date(timeIntervalSince1970: Double(index + 1))))
+                try store.record(run, tabID: item.0)
+            }
+            XCTAssertEqual(try store.recall(prefix: "", tabID: first).map(\.command),
+                           ["echo 100%_done", "false", "git status"])
+            XCTAssertEqual(try store.recall(prefix: "", tabID: second).map(\.command), ["git status", "git diff"])
+            XCTAssertEqual(try store.recall(prefix: "git", tabID: first).first?.lastUsed,
+                           Date(timeIntervalSince1970: 1))
+            XCTAssertEqual(try store.recall(prefix: "echo 100%_", tabID: first).map(\.command), ["echo 100%_done"])
+            XCTAssertEqual(try store.recall(prefix: "", tabID: UUID()), [])
+            XCTAssertEqual(try store.recall(prefix: "", tabID: first, limit: 1).map(\.command), ["echo 100%_done"])
+            XCTAssertEqual(store.recent.count, 5)
+        }
+        let reopened = try CommandHistoryStore(url: url)
+        XCTAssertEqual(try reopened.recall(prefix: "", tabID: first).map(\.command),
+                       ["echo 100%_done", "false", "git status"])
+    }
+
+    func testLegacyHistoryRemainsGlobalAfterMigration() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("legacy-history-\(UUID()).sqlite")
+        defer { try? FileManager.default.removeItem(at: url) }
+        var database: OpaquePointer?
+        XCTAssertEqual(sqlite3_open(url.path, &database), SQLITE_OK)
+        let sql = """
+            CREATE TABLE command_runs (
+                id TEXT PRIMARY KEY NOT NULL, command TEXT NOT NULL, cwd TEXT NOT NULL,
+                started_at REAL NOT NULL, finished_at REAL NOT NULL,
+                exit_code INTEGER NOT NULL, duration_ns INTEGER NOT NULL
+            );
+            INSERT INTO command_runs VALUES ('\(UUID().uuidString)', 'echo legacy', '/tmp', 1, 2, 0, 1);
+            """
+        XCTAssertEqual(sqlite3_exec(database, sql, nil, nil, nil), SQLITE_OK)
+        sqlite3_close(database)
+        let store = try CommandHistoryStore(url: url)
+        XCTAssertEqual(try store.recall(prefix: "").map(\.command), ["echo legacy"])
+        XCTAssertEqual(try store.recall(prefix: "", tabID: UUID()), [])
+        XCTAssertEqual(store.recent.map(\.command), ["echo legacy"])
+    }
+
     func testRecallUsesLatestDistinctCommandsAndLiteralPrefix() throws {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("history-recall-\(UUID()).sqlite")
         defer { try? FileManager.default.removeItem(at: url) }

@@ -66,7 +66,7 @@ app. The first Sparkle-capable version must be installed manually.
 
 ## Command history and block navigation
 
-With the input focused, press **Up or Down** to open command history above the
+With the input focused, press **Up or Down** to open that tab’s command history above the
 prompt. The newest command is selected first; Up moves older and Down moves
 newer. A typed prefix narrows the list. **Return** runs the selected command;
 **Tab**, clicking a row, or typing keeps it in the input for editing. **Escape**

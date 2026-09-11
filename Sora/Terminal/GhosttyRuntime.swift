@@ -189,6 +189,7 @@ final class GhosttyRuntime: ObservableObject {
     }
 
     func recordCommand(
+        tabID: UUID,
         command: String,
         cwd: URL?,
         exitCode: Int16,
@@ -203,7 +204,7 @@ final class GhosttyRuntime: ObservableObject {
             return nil
         }
         do {
-            try history.record(run)
+            try history.record(run, tabID: tabID)
         } catch {
             Self.logger.error("failed to persist command history: \(error.localizedDescription, privacy: .public)")
         }
