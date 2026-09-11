@@ -1,6 +1,16 @@
-import Foundation
+import AppKit
 
 enum StickyPromptBarModel {
+    static func selectionReplacement(keyCode: UInt16, text: String, modifiers: NSEvent.ModifierFlags) -> String? {
+        let mods = modifiers.intersection([.command, .control, .option, .shift])
+        if [UInt16(51), 117].contains(keyCode), mods.isEmpty { return "" }
+        if [UInt16(36), 76].contains(keyCode), mods == [.shift] { return "\n" }
+        guard !mods.contains(.command), !mods.contains(.control), !text.isEmpty,
+              ![UInt16(123), 124, 125, 126].contains(keyCode),
+              text.unicodeScalars.allSatisfy({ !CharacterSet.controlCharacters.contains($0) }) else { return nil }
+        return text
+    }
+
     static func visibleLineCount(total: Int, maximumHeight: CGFloat, baseHeight: CGFloat = 112) -> Int {
         min(max(1, total), max(1, Int((maximumHeight - baseHeight) / 24) + 1))
     }

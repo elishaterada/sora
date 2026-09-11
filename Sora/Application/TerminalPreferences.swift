@@ -2,6 +2,11 @@ import Foundation
 
 /// User preferences that affect terminal and agent chrome.
 enum TerminalPreferences {
+    static var showsSessionWelcome: Bool {
+        get { UserDefaults.standard.object(forKey: "terminal.showsSessionWelcome") as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: "terminal.showsSessionWelcome") }
+    }
+
     static var automaticAgentRouting: Bool {
         get { UserDefaults.standard.object(forKey: "terminal.automaticAgentRouting") as? Bool ?? true }
         set { UserDefaults.standard.set(newValue, forKey: "terminal.automaticAgentRouting") }

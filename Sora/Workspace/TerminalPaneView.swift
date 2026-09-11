@@ -11,6 +11,8 @@ final class TerminalPaneView: NSView {
     let surface: GhosttySurfaceView
     let stickyBar = StickyPromptBar()
     private let historyPopover = CommandHistoryPopoverView()
+    private var welcomeHost: NSHostingView<SessionWelcomeView>!
+    private var welcomeDismissed = false
     private var agentHost: NSHostingView<AnyView>!
     private var resumeHost: NSHostingView<AgentResumeStripView>!
     private(set) var isShowingAgent = false
@@ -43,6 +45,16 @@ final class TerminalPaneView: NSView {
                                         blue: 26.0 / 255, alpha: 1).cgColor
         addSubview(surface)
         addSubview(stickyBar)
+        welcomeDismissed = surface.historyArchiveURL.map { FileManager.default.fileExists(atPath: $0.path) } == true
+            || !TerminalPreferences.showsSessionWelcome
+        welcomeHost = NSHostingView(rootView: SessionWelcomeView(onDismiss: { [weak self] in
+            TerminalPreferences.showsSessionWelcome = false
+            self?.dismissWelcome()
+            self?.window?.makeFirstResponder(self?.surface)
+        }))
+        welcomeHost.sizingOptions = []
+        addSubview(welcomeHost)
+        surface.onSessionUsed = { [weak self] in self?.dismissWelcome() }
 
         resumeHost = NSHostingView(rootView: AgentResumeStripView(
             summary: AgentResumeSummary(title: "", latestFollowUp: nil),
@@ -209,7 +221,15 @@ final class TerminalPaneView: NSView {
         surface.setActive(active && !isShowingAgent, visible: (visible ?? active) && !isShowingAgent)
     }
 
+    private func dismissWelcome() {
+        guard !welcomeDismissed else { return }
+        welcomeDismissed = true
+        welcomeHost.isHidden = true
+        needsLayout = true
+    }
+
     func showAgent() {
+        dismissWelcome()
         surface.dismissCommandHistory()
         surface.leaveCommandBlocks(focusInput: false)
         ask?.bindTab(tabID)
@@ -308,6 +328,11 @@ final class TerminalPaneView: NSView {
         stickyBar.maximumHeight = max(StickyPromptBar.height, bounds.height * 0.5)
         let barH = min(stickyBar.preferredHeight, stickyBar.maximumHeight)
         let resumeSlot = Self.resumeSlotHeight
+        let welcomeHeight: CGFloat = !welcomeDismissed && !isShowingAgent
+            && TerminalPreferences.showsSessionWelcome && bounds.height - barH - resumeSlot >= 280
+            ? 228 : 0
+        welcomeHost.isHidden = welcomeHeight == 0
+        welcomeHost.frame = NSRect(x: 0, y: barH + resumeSlot, width: bounds.width, height: welcomeHeight)
         // Surface height is always bounds - sticky - resume slot, whether or
         // not a thread is resumable — PTY rows never change on Escape.
         stickyBar.frame = isShowingAgent
@@ -321,13 +346,59 @@ final class TerminalPaneView: NSView {
             ? bounds
             : NSRect(
                 x: 0,
-                y: barH + resumeSlot,
+                y: barH + resumeSlot + welcomeHeight,
                 width: bounds.width,
-                height: max(0, bounds.height - barH - resumeSlot)
+                height: max(0, bounds.height - barH - resumeSlot - welcomeHeight)
             )
         historyPopover.frame = NSRect(x: 0, y: barH, width: bounds.width,
                                       height: CommandHistoryLayout.panelHeight(
                                         preferred: historyPopover.preferredHeight, pane: bounds.height, input: barH))
         if agentHost.frame != bounds { agentHost.frame = bounds }
+    }
+}
+
+/// Native session guidance lives outside the PTY and never enters scrollback.
+private struct SessionWelcomeView: View {
+    let onDismiss: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Label("New terminal session", systemImage: "terminal")
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(.primary)
+            Text("Your shell is ready. Start with a command below.")
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 9) {
+                shortcut("↑ ↓", "Browse command history")
+                shortcut("⇧↵", "Add a new line")
+                shortcut("⌘⇧A", "Open Agent")
+                shortcut("⌘↵", "Run input as a shell command")
+            }
+            HStack {
+                Spacer(minLength: 0)
+                Button("Don’t show again", action: onDismiss)
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .font(.system(size: 12))
+            }
+        }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 18)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .background(Color(nsColor: NSColor(srgbRed: 20.0 / 255, green: 22.0 / 255, blue: 26.0 / 255, alpha: 1)))
+        .overlay(alignment: .top) { Rectangle().fill(.white.opacity(0.08)).frame(height: 1) }
+    }
+
+    private func shortcut(_ keys: String, _ title: String) -> some View {
+        HStack(spacing: 12) {
+            Text(keys)
+                .font(.system(size: 12, weight: .medium, design: .monospaced))
+                .frame(width: 60, height: 22)
+                .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 4))
+            Text(title)
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+        }
     }
 }

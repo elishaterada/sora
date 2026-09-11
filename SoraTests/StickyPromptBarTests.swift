@@ -1,6 +1,16 @@
 import XCTest
 
 final class StickyPromptBarTests: XCTestCase {
+    func testSelectedInputReplacementPreservesEditingShortcuts() {
+        XCTAssertEqual(StickyPromptBarModel.selectionReplacement(keyCode: 0, text: "é", modifiers: [.option]), "é")
+        XCTAssertEqual(StickyPromptBarModel.selectionReplacement(keyCode: 51, text: "", modifiers: []), "")
+        XCTAssertEqual(StickyPromptBarModel.selectionReplacement(keyCode: 36, text: "\r", modifiers: [.shift]), "\n")
+        XCTAssertNil(StickyPromptBarModel.selectionReplacement(keyCode: 36, text: "\r", modifiers: []))
+        XCTAssertNil(StickyPromptBarModel.selectionReplacement(keyCode: 123, text: "\u{f702}", modifiers: []))
+        XCTAssertNil(StickyPromptBarModel.selectionReplacement(keyCode: 8, text: "c", modifiers: [.command]))
+        XCTAssertNil(StickyPromptBarModel.selectionReplacement(keyCode: 48, text: "\t", modifiers: []))
+    }
+
     func testInputGrowsToHalfPaneThenKeepsOverflowScrollable() {
         XCTAssertEqual(StickyPromptBarModel.visibleLineCount(total: 3, maximumHeight: 400), 3)
         XCTAssertEqual(StickyPromptBarModel.visibleLineCount(total: 100, maximumHeight: 400), 13)

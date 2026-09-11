@@ -479,6 +479,17 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
         }
     }
 
+    var hasAllInputSelected: Bool {
+        !caretText.isEmpty && selectionRange == 0..<caretText.unicodeScalars.count
+    }
+
+    func selectAllInput() {
+        guard promptReady, !showingPrediction, !caretText.isEmpty else { return }
+        selectionAnchor = nil
+        selectionRange = 0..<caretText.unicodeScalars.count
+        needsLayout = true
+    }
+
     var selectedInputText: String? {
         guard let selectionRange, !selectionRange.isEmpty else { return nil }
         return StickyPromptBarModel.selectedText(caretText, range: selectionRange)

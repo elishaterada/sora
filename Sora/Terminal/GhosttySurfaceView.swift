@@ -45,6 +45,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     private var runningCommand: String?
     private var shellCursorOffset = 0
     private var promptIntent: PromptIntent?
+    var onSessionUsed: (() -> Void)?
     var onFocus: (() -> Void)?
     var onCommandFinished: ((Int16) -> Void)?
     let notificationID = UUID()
@@ -176,6 +177,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         let interval = OSSignpostID(log: Self.inputLog)
         os_signpost(.begin, log: Self.inputLog, name: "Terminal keyDown", signpostID: interval)
         defer { os_signpost(.end, log: Self.inputLog, name: "Terminal keyDown", signpostID: interval) }
+        if replaceSelectedInputIfNeeded(event) { return }
         if handleCommandBlockKey(event) { return }
         if handleCommandHistoryKey(event) { return }
         stickyBar?.resetCaretBlink()
@@ -197,6 +199,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
             return
         }
         if isReturn {
+            onSessionUsed?()
             let forceShell = event.modifierFlags.contains(.command)
             let promptReady = isShellPromptReady || foregroundProcessIsShell()
             // Keystroke tracking clears on arrows / Option-meta / Tab. ZLE still
@@ -305,6 +308,9 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
             case "c":
                 copySelectionToPasteboard()
                 return true
+            case "x" where isShellPromptReady && stickyBar?.hasAllInputSelected == true:
+                cut(nil)
+                return true
             case "v":
                 pasteFromPasteboard()
                 return true
@@ -342,7 +348,32 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
             leaveCommandBlocks(focusInput: false)
             window?.makeFirstResponder(self)
         }
+        if isShellPromptReady {
+            refreshStickyBar()
+            stickyBar?.selectAllInput()
+            window?.makeFirstResponder(self)
+            return
+        }
         performBinding("select_all")
+    }
+
+    @objc func cut(_ sender: Any?) {
+        guard isShellPromptReady, stickyBar?.hasAllInputSelected == true else { return }
+        copySelectionToPasteboard()
+        stickyBar?.clearInputSelection()
+        stageShellCommand("")
+    }
+
+    /// The preview owns selection; ZLE still owns editing and execution.
+    private func replaceSelectedInputIfNeeded(_ event: NSEvent) -> Bool {
+        guard isShellPromptReady, stickyBar?.hasAllInputSelected == true else { return false }
+        guard let replacement = StickyPromptBarModel.selectionReplacement(
+            keyCode: event.keyCode, text: event.characters ?? "", modifiers: event.modifierFlags
+        ) else { return false }
+        stickyBar?.clearInputSelection()
+        stageShellCommand(replacement)
+        swallowedKeyCodes.insert(event.keyCode)
+        return true
     }
 
     func copySelectionToPasteboard() {
@@ -396,6 +427,11 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         guard let value = GhosttyClipboard.plainText(from: .general), !value.isEmpty else { return }
         leaveCommandBlocks()
         acceptCommandHistory()
+        if isShellPromptReady, stickyBar?.hasAllInputSelected == true {
+            stickyBar?.clearInputSelection()
+            stageShellCommand(value)
+            return
+        }
         captureGhostTextAnchor()
         completion.handlePaste(value)
         if value.contains(where: { $0 == "\n" || $0 == "\r" }) { ghostTextAnchor = nil }
@@ -415,6 +451,8 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         switch menuItem.action {
+        case #selector(cut(_:)):
+            return isShellPromptReady && stickyBar?.hasAllInputSelected == true
         case #selector(copy(_:)):
             if stickyBar?.selectedInputText != nil { return true }
             guard let surface else { return false }
@@ -718,6 +756,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     func applyTitle(_ title: String) {
         guard let title = titleAssembler.consume(title) else { return }
         if let command = ShellEditLine.startedCommand(title: title) {
+            onSessionUsed?()
             runningCommand = command.isEmpty ? nil : command
             dismissCommandHistory()
             leaveCommandBlocks(focusInput: false)
