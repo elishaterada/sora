@@ -1,6 +1,14 @@
 import XCTest
 
 final class StickyPromptBarTests: XCTestCase {
+    func testInputGrowsToHalfPaneThenKeepsOverflowScrollable() {
+        XCTAssertEqual(StickyPromptBarModel.visibleLineCount(total: 3, maximumHeight: 400), 3)
+        XCTAssertEqual(StickyPromptBarModel.visibleLineCount(total: 100, maximumHeight: 400), 13)
+        XCTAssertEqual(StickyPromptBarModel.visibleLineCount(total: 100, maximumHeight: 200), 4)
+        XCTAssertEqual(StickyPromptBarModel.visibleLineCount(total: 1, maximumHeight: 400), 1)
+        XCTAssertEqual(StickyPromptBarModel.visibleLineCount(total: 100, maximumHeight: 112), 1)
+    }
+
     func testSelectionCopiesOriginalBufferWithoutVisualWraps() {
         XCTAssertEqual(StickyPromptBarModel.selectedText("abcdef", range: 1..<5), "bcde")
         XCTAssertEqual(StickyPromptBarModel.selectedText("ab\n😀cd", range: 1..<5), "b\n😀c")

@@ -305,7 +305,8 @@ final class TerminalPaneView: NSView {
 
     override func layout() {
         super.layout()
-        let barH = stickyBar.preferredHeight
+        stickyBar.maximumHeight = max(StickyPromptBar.height, bounds.height * 0.5)
+        let barH = min(stickyBar.preferredHeight, stickyBar.maximumHeight)
         let resumeSlot = Self.resumeSlotHeight
         // Surface height is always bounds - sticky - resume slot, whether or
         // not a thread is resumable — PTY rows never change on Escape.

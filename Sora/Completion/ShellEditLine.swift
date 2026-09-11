@@ -80,3 +80,29 @@ enum ShellEditLine {
         title.hasPrefix(sentinel) || cursorOffset(title: title) != nil
     }
 }
+
+/// Reassembles ordered, bounded title messages before exposing a shell snapshot.
+struct ShellTitleAssembler {
+    private var parts: [String] = []
+    private var expected = 0
+
+    mutating func consume(_ title: String) -> String? {
+        guard title.hasPrefix("sora-chunk;") else { return title }
+        let fields = title.split(separator: ";", maxSplits: 3, omittingEmptySubsequences: false)
+        guard fields.count == 4, let index = Int(fields[1]), let total = Int(fields[2]),
+              total > 0, total <= 100_000, index >= 0, index < total else {
+            parts = []; expected = 0
+            return nil
+        }
+        if index == 0 { parts = []; expected = total }
+        guard total == expected, index == parts.count else {
+            parts = []; expected = 0
+            return nil
+        }
+        parts.append(String(fields[3]))
+        guard parts.count == total else { return nil }
+        let result = parts.joined()
+        parts = []; expected = 0
+        return result
+    }
+}

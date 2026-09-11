@@ -713,7 +713,10 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         return ["zsh", "bash", "fish", "sh"].contains(name)
     }
 
+    private var titleAssembler = ShellTitleAssembler()
+
     func applyTitle(_ title: String) {
+        guard let title = titleAssembler.consume(title) else { return }
         if let command = ShellEditLine.startedCommand(title: title) {
             runningCommand = command.isEmpty ? nil : command
             dismissCommandHistory()

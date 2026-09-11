@@ -3,6 +3,22 @@
 # Screen scraping cannot work here: PS1 is empty, so nothing on screen marks
 # where input begins. Sora consumes this title and never displays it.
 
+# Keep every title below Ghostty's 256-byte delivery buffer (including UTF-8).
+_sora_send_title() {
+  emulate -L zsh
+  local payload=$1
+  if (( ${#payload} <= 40 )); then
+    builtin printf '\e]2;%s\a' "$payload"
+    return 0
+  fi
+  local -i start=1 index=0 total=$(( (${#payload} + 39) / 40 ))
+  while (( index < total )); do
+    builtin printf '\e]2;sora-chunk;%d;%d;%s\a' "$index" "$total" "${payload[start,start+39]}"
+    (( start += 40, index++ ))
+  done
+  return 0
+}
+
 _sora_report_line() {
   emulate -L zsh
   local buf=$BUFFER
@@ -18,7 +34,7 @@ _sora_report_line() {
   if (( ${#words} )) && builtin whence -w -- "${(Q)words[1]}" >/dev/null 2>&1; then
     known=1
   fi
-  builtin printf '\e]2;%s%d;%d;%s\a' "$_SORA_CURSOR_SENTINEL" "$CURSOR" "$known" "$buf"
+  _sora_send_title "${_SORA_CURSOR_SENTINEL}${CURSOR};${known};${buf}"
 }
 
 typeset -g _SORA_CURSOR_SENTINEL=$'\u2400sora-multiline\u2400'
@@ -71,7 +87,7 @@ _sora_report_command_started() {
   cmd=${cmd//$'\r'/\%0D}
   cmd=${cmd//$'\e'/\%1B}
   cmd=${cmd//$'\a'/\%07}
-  builtin printf '\e]2;%s%s\a' $'\u2400sora-command-started\u2400' "$cmd"
+  _sora_send_title $'\u2400sora-command-started\u2400'"${cmd}"
 }
 typeset -ag preexec_functions
 preexec_functions+=(_sora_report_command_started)

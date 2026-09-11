@@ -1,6 +1,34 @@
 import XCTest
 
 final class ShellEditLineTests: XCTestCase {
+    func testChunkedLongMultilineReport() {
+        let text = String(repeating: "export DEMO='😀value'\n", count: 500)
+        let report = ShellEditLine.multilineSentinel + "0;1;" + text.replacingOccurrences(of: "\n", with: "%0A")
+        let scalars = Array(report.unicodeScalars)
+        let chunks = stride(from: 0, to: scalars.count, by: 40).map {
+            String(String.UnicodeScalarView(scalars[$0..<min($0 + 40, scalars.count)]))
+        }
+        var assembler = ShellTitleAssembler()
+        for (index, chunk) in chunks.enumerated() {
+            let title = "sora-chunk;\(index);\(chunks.count);\(chunk)"
+            XCTAssertLessThan(title.utf8.count, 256)
+            let result = assembler.consume(title)
+            if index == chunks.count - 1 {
+                XCTAssertEqual(result.flatMap { ShellEditLine.parse(title: $0) }, text)
+            } else {
+                XCTAssertNil(result)
+            }
+        }
+    }
+
+    func testIncompleteChunksNeverBecomeInputAndNextReportRecovers() {
+        var assembler = ShellTitleAssembler()
+        XCTAssertNil(assembler.consume("sora-chunk;0;3;first"))
+        XCTAssertNil(assembler.consume("sora-chunk;2;3;missing"))
+        XCTAssertEqual(assembler.consume("sora-chunk;0;1;fresh"), "fresh")
+        XCTAssertEqual(assembler.consume("ordinary title"), "ordinary title")
+    }
+
     func testStartedCommandTransportPreservesMultilineTextAndLiteralEscapes() throws {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
         let command = "printf '日本語\n\tline two\n%0A %09 %25\r\u{1b}\u{07}'"
@@ -18,7 +46,11 @@ final class ShellEditLineTests: XCTestCase {
         let output = try XCTUnwrap(String(data: data, encoding: .utf8))
         XCTAssertTrue(output.hasPrefix("\u{1b}]2;"))
         XCTAssertTrue(output.hasSuffix("\u{07}"))
-        let title = String(output.dropFirst(4).dropLast())
+        var assembler = ShellTitleAssembler()
+        let titles = output.components(separatedBy: "\u{1b}]2;").dropFirst().compactMap {
+            assembler.consume(String($0.dropLast()))
+        }
+        let title = try XCTUnwrap(titles.last)
         XCTAssertEqual(ShellEditLine.startedCommand(title: title), command)
         XCTAssertNil(ShellEditLine.parse(title: title))
         XCTAssertFalse(ShellEditLine.isMirror(title: title))
