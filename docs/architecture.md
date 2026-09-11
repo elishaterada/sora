@@ -422,6 +422,10 @@ commands, hides on the alternate screen, and never changes the current selection
 Long/multiline commands use a single truncated line with the full command in a
 tooltip and accessibility value. Older archives without semantic markers cannot
 supply sticky headers.
+The snapshot exports Ghostty’s cell styling with palette colors resolved to RGB.
+Native headers retain those colors and font traits, use the surface font, and
+match the completed-command background. A bounded cache avoids parsing the same
+style runs during scrolling and is cleared when the terminal font changes.
 
 Trackpad scrollback uses Ghostty's opt-in `smooth-scrolling` path. AppKit precise
 deltas are converted from points to backing pixels at the view's actual scale.
@@ -532,3 +536,15 @@ Binary image paste requires a local program supporting Control-V image paste;
 this does not transfer image data over SSH. Shell paths likewise refer to local files.
 
 Agent images are optional binary PNG attachments on AIMessage, preserving compatibility with older saved messages. Responses, Anthropic, chat-completions, and Codex app-server requests encode the actual image data rather than local paths. Conversation image context is capped at 20 MB; drafts are not submitted by a drop. Local terminal programs receive PNG/TIFF on the native clipboard plus Ctrl-V, while shell prompts retain quoted file-path insertion.
+
+### Failed command backgrounds
+
+OSC 133 command completion with a positive exit status marks the command's rows
+in Ghostty's primary screen. A muted red fill replaces only the default block
+background; explicit application backgrounds and selection remain intact. The
+native pinned header reads the same failure metadata. Success, missing status,
+and running commands retain the neutral fill. No AI service is involved.
+
+Failure metadata follows rows through scrollback and reflow. Sora's VT archive
+preserves it with an internal `OSC 133;D;1;aid=sora-archive-row` marker, replayed
+without command-completion notifications. The packed row remains 64 bits.

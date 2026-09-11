@@ -26,6 +26,8 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     private(set) var cellSize = NSSize(width: 8, height: 16)
     private let completion = CompletionSession()
     private let ghostText = GhostTextView()
+    private var commandHeaderStyles: [String: NSAttributedString] = [:]
+    private var commandHeaderFont: NSFont?
     private let commandHeaders = [StickyCommandHeaderView(), StickyCommandHeaderView()]
     private var ghostTextAnchor: GhostTextAnchor?
     private weak var stickyBar: StickyPromptBar?
@@ -1254,15 +1256,28 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         var text = ghostty_text_s()
         var remainingPixels: Double = 0
         var sourcePixels: Double = 0
-        guard ghostty_surface_read_sticky_command(surface, following, &text, &remainingPixels, &sourcePixels) else {
+        var failed = false
+        guard ghostty_surface_read_sticky_command(surface, following, &text, &remainingPixels, &sourcePixels, &failed) else {
             commandHeader.isHidden = true
             return false
         }
         defer { ghostty_surface_free_text(surface, &text) }
         guard let bytes = text.text else { commandHeader.isHidden = true; return false }
-        let command = String(decoding: UnsafeRawBufferPointer(start: bytes, count: Int(text.text_len)),
-                             as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !command.isEmpty else { commandHeader.isHidden = true; return false }
+        let snapshot = String(decoding: UnsafeRawBufferPointer(start: bytes, count: Int(text.text_len)), as: UTF8.self)
+        let font = quicklookFont().map { $0 as NSFont } ?? SoraTheme.terminalFont
+        if commandHeaderFont != font {
+            commandHeaderStyles.removeAll()
+            commandHeaderFont = font
+        }
+        let command: NSAttributedString
+        if let cached = commandHeaderStyles[snapshot] {
+            command = cached
+        } else {
+            command = CommandHeaderStyle.attributedCommand(snapshot, font: font)
+            if commandHeaderStyles.count >= 8 { commandHeaderStyles.removeAll() }
+            commandHeaderStyles[snapshot] = command
+        }
+        guard command.length > 0 else { commandHeader.isHidden = true; return false }
         let sourceY = sourcePixels / convertToBacking(NSSize(width: 1, height: 1)).height
         // At the start of scrollback there is no departing header to replace.
         // Leave the original command alone until it crosses the pinning point.
@@ -1271,7 +1286,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
             commandHeader.isHidden = true
             return false
         }
-        commandHeader.update(command: command,
+        commandHeader.update(command: command, font: font, failed: failed,
                              remainingHeight: remainingPixels / convertToBacking(NSSize(width: 1, height: 1)).height,
                              sourceY: sourceY,
                              viewport: bounds, cellHeight: cellSize.height)

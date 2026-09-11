@@ -1,5 +1,5 @@
 diff --git a/include/ghostty.h b/include/ghostty.h
-index 518af3ff2..94159280a 100644
+index 518af3ff2..37c82b558 100644
 --- a/include/ghostty.h
 +++ b/include/ghostty.h
 @@ -1227,6 +1227,14 @@ GHOSTTY_API void ghostty_surface_deny_clipboard_request(ghostty_surface_t,
@@ -11,7 +11,7 @@ index 518af3ff2..94159280a 100644
 +GHOSTTY_API int ghostty_surface_navigate_command_block(ghostty_surface_t, int direction, bool from_selection);
 +GHOSTTY_API bool ghostty_surface_select_command_block_at(ghostty_surface_t, double x, double y);
 +GHOSTTY_API bool ghostty_surface_read_command_block(ghostty_surface_t, bool command, ghostty_text_s*);
-+GHOSTTY_API bool ghostty_surface_read_sticky_command(ghostty_surface_t, bool following, ghostty_text_s*, double* remaining_px, double* source_px);
++GHOSTTY_API bool ghostty_surface_read_sticky_command(ghostty_surface_t, bool following, ghostty_text_s*, double* remaining_px, double* source_px, bool* failed);
 +GHOSTTY_API void ghostty_surface_clear_command_block(ghostty_surface_t);
 +GHOSTTY_API bool ghostty_surface_read_command_history(ghostty_surface_t, ghostty_text_s*);
  GHOSTTY_API bool ghostty_surface_read_text(ghostty_surface_t,
@@ -108,10 +108,10 @@ index 775292127..b9160e37d 100644
  }
 
 diff --git a/src/apprt/embedded.zig b/src/apprt/embedded.zig
-index 525bc856d..0a0f39453 100644
+index 525bc856d..2e208a2ec 100644
 --- a/src/apprt/embedded.zig
 +++ b/src/apprt/embedded.zig
-@@ -1881,6 +1881,121 @@ pub const CAPI = struct {
+@@ -1881,6 +1881,143 @@ pub const CAPI = struct {
          return readTextLocked(surface, core_sel, result);
      }
 
@@ -177,17 +177,39 @@ index 525bc856d..0a0f39453 100644
 +
 +    /// Snapshot the command above the viewport without changing selection,
 +    /// focus, scroll position, or PTY dimensions. Distance is in backing pixels.
-+    export fn ghostty_surface_read_sticky_command(surface: *Surface, following: bool, result: *Text, remaining_px: *f64, source_px: *f64) bool {
++    export fn ghostty_surface_read_sticky_command(surface: *Surface, following: bool, result: *Text, remaining_px: *f64, source_px: *f64, failed: *bool) bool {
 +        const core = &surface.core_surface;
 +        core.renderer_state.mutex.lockUncancelable(global.io());
 +        defer core.renderer_state.mutex.unlock(global.io());
 +        if (core.io.terminal.screens.active_key == .alternate) return false;
 +        const context = core.io.terminal.screens.active.stickyCommandFollowing(following) orelse return false;
++        failed.* = context.command.start().rowAndCell().row.command_failed;
 +        source_px.* = context.source_rows * @as(f64, @floatFromInt(core.size.cell.height)) +
 +            @as(f64, @floatFromInt(core.size.padding.top));
 +        remaining_px.* = context.remaining_rows * @as(f64, @floatFromInt(core.size.cell.height)) +
 +            @as(f64, @floatFromInt(core.size.padding.top));
-+        return readTextLocked(surface, context.command, result);
++        // Preserve the terminal's actual cell styling, resolving palette colors.
++        const t = &core.io.terminal;
++        var writer: std.Io.Writer.Allocating = .init(global.alloc());
++        defer writer.deinit();
++        var formatter: terminal.formatter.ScreenFormatter = .init(t.screens.active, .{
++            .emit = .vt,
++            .unwrap = true,
++            .foreground = t.colors.foreground.get(),
++            .palette = &t.colors.palette.current,
++        });
++        formatter.content = .{ .selection = context.command };
++        formatter.format(&writer.writer) catch return false;
++        const text = writer.toOwnedSliceSentinel(0) catch return false;
++        result.* = .{
++            .tl_px_x = -1,
++            .tl_px_y = -1,
++            .offset_start = 0,
++            .offset_len = 0,
++            .text = text.ptr,
++            .text_len = text.len,
++        };
++        return true;
 +    }
 +
 +    export fn ghostty_surface_clear_command_block(surface: *Surface) void {
@@ -374,7 +396,7 @@ index 46a75be8e..2623d576b 100644
 +    try testing.expect(!isCommandBoundary(1, false));
 +}
 diff --git a/src/renderer/generic.zig b/src/renderer/generic.zig
-index 2a81f42b4..a24d62a9a 100644
+index 2a81f42b4..5f73f6819 100644
 --- a/src/renderer/generic.zig
 +++ b/src/renderer/generic.zig
 @@ -233,6 +233,8 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
@@ -523,7 +545,7 @@ index 2a81f42b4..a24d62a9a 100644
 +                        // Preserve application colors and selection highlights.
 +                        if (bg.*[3] != 0) continue;
 +                        bg.* = if (y_usize < command_end)
-+                            .{ 35, 38, 43, 240 }
++                            if (row.command_failed) .{ 53, 32, 36, 240 } else .{ 35, 38, 43, 240 }
 +                        else
 +                            .{ 20, 22, 26, 240 };
 +                    }
@@ -585,7 +607,7 @@ index 6cf05f58a..2b25e4af4 100644
 +    }
 +}
 diff --git a/src/terminal/PageList.zig b/src/terminal/PageList.zig
-index 746a6cf8c..31ec0e661 100644
+index 746a6cf8c..1fe6dbb49 100644
 --- a/src/terminal/PageList.zig
 +++ b/src/terminal/PageList.zig
 @@ -468,6 +468,10 @@ tracked_pins: PinSet,
@@ -607,6 +629,15 @@ index 746a6cf8c..31ec0e661 100644
 
      // Resizing forces all nodes to be decompressed today so we need to
      // reschedule compression.
+@@ -1638,7 +1643,7 @@ const ReflowCursor = struct {
+
+             // If the row has a semantic prompt then the blank row is meaningful
+             // so we just consider pretend the first cell of the row isn't empty.
+-            if (cols_len == 0 and src_row.semantic_prompt != .none) cols_len = 1;
++            if (cols_len == 0 and (src_row.semantic_prompt != .none or src_row.command_failed)) cols_len = 1;
+         }
+
+         // Handle tracked pin adjustments. We also note whether any
 @@ -1720,6 +1725,10 @@ const ReflowCursor = struct {
                  try self.cursorScrollOrNewPage(list, cap);
                  self.copyRowMetadata(src_row);
@@ -618,7 +649,7 @@ index 746a6cf8c..31ec0e661 100644
              }
 
              // Fast path: bulk-copy a run of simple cells directly
-@@ -2747,7 +2756,9 @@ const ReflowCursor = struct {
+@@ -2747,7 +2756,10 @@ const ReflowCursor = struct {
      }
 
      fn copyRowMetadata(self: *ReflowCursor, other: *const Row) void {
@@ -626,10 +657,11 @@ index 746a6cf8c..31ec0e661 100644
 +        // Widening can merge continuation rows into a primary prompt row.
 +        // Preserve that row's primary marker while appending cells.
 +        if (self.x == 0) self.page_row.semantic_prompt = other.semantic_prompt;
++        self.page_row.command_failed = other.command_failed;
      }
  };
 
-@@ -3248,6 +3259,7 @@ pub const Scroll = union(enum) {
+@@ -3248,6 +3260,7 @@ pub const Scroll = union(enum) {
  /// previously allocated pages.
  pub fn scroll(self: *PageList, behavior: Scroll) void {
      defer self.assertIntegrity();
@@ -637,7 +669,7 @@ index 746a6cf8c..31ec0e661 100644
 
      // Special case no-scrollback mode to never allow scrolling.
      if (self.limits.bytes.explicit == 0) {
-@@ -3763,6 +3775,25 @@ pub fn split(
+@@ -3763,6 +3776,25 @@ pub fn split(
 
  /// This represents the state necessary to render a scrollbar for this
  /// PageList. It has the total size, the offset, and the size of the viewport.
@@ -663,7 +695,7 @@ index 746a6cf8c..31ec0e661 100644
  pub const Scrollbar = struct {
      /// Total size of the scrollable area.
      total: usize,
-@@ -17349,7 +17380,8 @@ test "PageList resize reflow less cols no reflow preserves semantic prompt" {
+@@ -17349,7 +17381,8 @@ test "PageList resize reflow less cols no reflow preserves semantic prompt" {
          {
              const p = s.pin(.{ .active = .{ .y = 2 } }).?;
              const rac = p.rowAndCell();
@@ -674,7 +706,7 @@ index 746a6cf8c..31ec0e661 100644
      }
  }
 diff --git a/src/terminal/Screen.zig b/src/terminal/Screen.zig
-index 208e276a2..9e30822c1 100644
+index 208e276a2..2e06b16ad 100644
 --- a/src/terminal/Screen.zig
 +++ b/src/terminal/Screen.zig
 @@ -61,6 +61,9 @@ saved_cursor: ?SavedCursor = null,
@@ -711,7 +743,21 @@ index 208e276a2..9e30822c1 100644
          .delta_prompt => |v| self.pages.scroll(.{ .delta_prompt = v }),
      }
  }
-@@ -2909,6 +2915,7 @@ pub fn select(self: *Screen, sel_: ?Selection) Allocator.Error!void {
+@@ -2862,6 +2868,13 @@ pub fn cursorSetSemanticContent(self: *Screen, t: union(enum) {
+                 .initial, .right => .prompt,
+                 .continuation, .secondary => .prompt_continuation,
+             };
++            if (kind == .initial) {
++                cursor.page_row.command_failed = false;
++                cursor.page_row.dirty = true;
++                const boundary = commandBlockBoundary(cursor.page_pin.*);
++                boundary.rowAndCell().row.command_failed = false;
++                boundary.rowAndCell().row.dirty = true;
++            }
+         },
+     }
+ }
+@@ -2909,6 +2922,7 @@ pub fn select(self: *Screen, sel_: ?Selection) Allocator.Error!void {
          }
      }
      self.selection = tracked_sel;
@@ -719,7 +765,7 @@ index 208e276a2..9e30822c1 100644
      self.dirty.selection = true;
  }
 
-@@ -2919,6 +2926,7 @@ pub fn clearSelection(self: *Screen) void {
+@@ -2919,6 +2933,7 @@ pub fn clearSelection(self: *Screen) void {
          self.dirty.selection = true;
      }
      self.selection = null;
@@ -727,7 +773,7 @@ index 208e276a2..9e30822c1 100644
  }
 
  pub const SelectionString = struct {
-@@ -3410,6 +3418,405 @@ pub fn selectOutput(self: *Screen, pin: Pin) ?Selection {
+@@ -3410,6 +3425,405 @@ pub fn selectOutput(self: *Screen, pin: Pin) ?Selection {
      return .init(hl.start, hl.end, false);
  }
 
@@ -1133,8 +1179,105 @@ index 208e276a2..9e30822c1 100644
  pub const LineIterator = struct {
      screen: *const Screen,
      current: ?Pin = null,
+diff --git a/src/terminal/Terminal.zig b/src/terminal/Terminal.zig
+index e9cc3b8e6..6839bd61f 100644
+--- a/src/terminal/Terminal.zig
++++ b/src/terminal/Terminal.zig
+@@ -1766,6 +1766,7 @@ fn printWrap(self: *Terminal) !void {
+     // Get the old semantic prompt so we can extend it to the next
+     // line. We need to do this before we index() because we may
+     // modify memory.
++    const old_failed = cursor.page_row.command_failed;
+     const old_semantic = cursor.semantic_content;
+     const old_semantic_clear = cursor.semantic_content_clear_eol;
+
+@@ -1788,6 +1789,7 @@ fn printWrap(self: *Terminal) !void {
+         const row = self.screens.active.cursor.page_row;
+         // Always mark the row as a continuation
+         row.wrap_continuation = true;
++        row.command_failed = old_failed;
+     }
+
+     // Assure that our screen is consistent
+@@ -2192,6 +2194,31 @@ pub fn semanticPrompt(
+         },
+
+         .end_command => {
++            const screen = self.screens.active;
++            if (std.mem.eql(u8, cmd.readOption(.aid) orelse "", "sora-archive-row")) {
++                screen.cursor.page_row.command_failed = true;
++                screen.cursor.page_row.dirty = true;
++                return;
++            }
++            if (self.screens.active_key == .primary and
++                screen.cursor.semantic_content == .output and
++                (cmd.readOption(.exit_code) orelse 0) > 0)
++            {
++                // Paint the completed block, including its leading spacer.
++                // Row metadata survives scrolling without external row indexes.
++                var pin = screen.cursor.page_pin.*;
++                var previous = pin.promptIterator(.left_up, null);
++                if (previous.next()) |prompt| {
++                    const start = Screen.commandBlockBoundary(prompt);
++                    while (true) {
++                        const row = pin.rowAndCell().row;
++                        row.command_failed = true;
++                        row.dirty = true;
++                        if (pin.left(pin.x).eql(start.left(start.x))) break;
++                        pin = pin.up(1) orelse break;
++                    }
++                }
++            }
+             // From a terminal state perspective, this doesn't really do
+             // anything. Other terminals appear to do nothing here. I think
+             // its reasonable at this point to reset our semantic content
+@@ -16504,3 +16531,44 @@ test "Terminal: eraseDisplay complete ignores stale prompt on recycled row" {
+
+     try testing.expectEqual(t.screens.active.pages.rows, t.screens.active.pages.total_rows);
+ }
++
++test "Sora failed command rows survive reflow and stop at next prompt" {
++    const alloc = testing.allocator;
++    var t = try init(testing.io, alloc, .{ .cols = 20, .rows = 10 });
++    defer t.deinit(alloc);
++    try t.semanticPrompt(.init(.prompt_start));
++    try t.semanticPrompt(.init(.end_prompt_start_input));
++    try t.printString("false");
++    try t.semanticPrompt(.init(.end_input_start_output));
++    t.carriageReturn();
++    try t.index();
++    try t.printString("failure output");
++    try t.semanticPrompt(.{ .action = .end_command, .options_unvalidated = "1" });
++    try testing.expect(t.screens.active.cursor.page_row.command_failed);
++    try testing.expect(t.screens.active.cursor.page_pin.up(1).?.rowAndCell().row.command_failed);
++    t.carriageReturn();
++    try t.index();
++    try t.semanticPrompt(.init(.prompt_start));
++    try testing.expect(!t.screens.active.cursor.page_row.command_failed);
++    try t.semanticPrompt(.init(.end_prompt_start_input));
++    try t.printString("true");
++    try t.semanticPrompt(.init(.end_input_start_output));
++    try t.semanticPrompt(.{ .action = .end_command, .options_unvalidated = "0" });
++    try testing.expect(!t.screens.active.cursor.page_row.command_failed);
++    try t.resize(alloc, .{ .cols = 10, .rows = 10 });
++    try testing.expect(t.screens.active.cursor.page_pin.up(1).?.rowAndCell().row.command_failed);
++}
++
++test "Sora missing or negative exit status does not mark failure" {
++    const alloc = testing.allocator;
++    var t = try init(testing.io, alloc, .{ .cols = 20, .rows = 5 });
++    defer t.deinit(alloc);
++    try t.semanticPrompt(.init(.prompt_start));
++    try t.semanticPrompt(.init(.end_prompt_start_input));
++    try t.printString("command");
++    try t.semanticPrompt(.init(.end_input_start_output));
++    try t.semanticPrompt(.init(.end_command));
++    try testing.expect(!t.screens.active.cursor.page_row.command_failed);
++    try t.semanticPrompt(.{ .action = .end_command, .options_unvalidated = "-1" });
++    try testing.expect(!t.screens.active.cursor.page_row.command_failed);
++}
 diff --git a/src/terminal/formatter.zig b/src/terminal/formatter.zig
-index 4feedda50..b0f48d6b1 100644
+index 4feedda50..04f062552 100644
 --- a/src/terminal/formatter.zig
 +++ b/src/terminal/formatter.zig
 @@ -96,6 +96,10 @@ pub const Options = struct {
@@ -1188,11 +1331,11 @@ index 4feedda50..b0f48d6b1 100644
 +                    null,
 +                .none => null,
 +            };
-+            if (!Cell.hasTextAny(cells_subset) and prompt_marker == null) {
++            if (!Cell.hasTextAny(cells_subset) and prompt_marker == null and !(semantic_prompts and row.command_failed)) {
                  blank_rows += 1;
                  continue;
              }
-@@ -1288,6 +1306,16 @@ pub const PageFormatter = struct {
+@@ -1288,6 +1306,26 @@ pub const PageFormatter = struct {
              // our blank cell count.
              if (!row.wrap_continuation or !self.opts.unwrap) blank_cells = 0;
 
@@ -1206,10 +1349,20 @@ index 4feedda50..b0f48d6b1 100644
 +                semantic_content = .prompt;
 +            }
 +
++            if (semantic_prompts and row.command_failed) {
++                const marker = "\x1b]133;D;1;aid=sora-archive-row\x1b\\";
++                try writer.writeAll(marker);
++                if (self.point_map) |*map| map.map.appendNTimes(
++                    map.alloc,
++                    .{ .x = row_start_x, .y = y },
++                    marker.len,
++                ) catch return error.WriteFailed;
++            }
++
              // Go through each cell and print it
              var cell_i: usize = 0;
              while (cell_i < cells_subset.len) : (cell_i += 1) {
-@@ -1299,7 +1327,7 @@ pub const PageFormatter = struct {
+@@ -1299,7 +1337,7 @@ pub const PageFormatter = struct {
                  // avoiding all of the per-cell bookkeeping below. This is
                  // only valid when we have no codepoint map and when our
                  // current style/hyperlink state is known-stable.
@@ -1218,7 +1371,7 @@ index 4feedda50..b0f48d6b1 100644
                      if (comptime formatStyled(emit)) {
                          if (style_id == invalid_style_id) break :fast;
                      }
-@@ -1335,6 +1363,21 @@ pub const PageFormatter = struct {
+@@ -1335,6 +1373,21 @@ pub const PageFormatter = struct {
                  // If we have a zero value, then we accumulate a counter. We
                  // only want to turn zero values into spaces if we have a non-zero
                  // char sometime later.
@@ -1240,7 +1393,7 @@ index 4feedda50..b0f48d6b1 100644
                  blank: {
                      // If we're emitting styled output (not plaintext) and
                      // the cell has some kind of styling or is not empty
-@@ -1577,7 +1620,7 @@ pub const PageFormatter = struct {
+@@ -1577,7 +1630,7 @@ pub const PageFormatter = struct {
              if (blank_rows >= 1) blank_rows -= 1;
          }
 
@@ -1249,7 +1402,7 @@ index 4feedda50..b0f48d6b1 100644
      }
 
      /// Fast path for writing runs of simple cells: single-codepoint cells
-@@ -7028,3 +7071,62 @@ test "Page HTML hyperlink point map maps closing to previous cell" {
+@@ -7028,3 +7081,72 @@ test "Page HTML hyperlink point map maps closing to previous cell" {
          try testing.expectEqual(expected_coord, point_map.items[i]);
      }
  }
@@ -1264,7 +1417,7 @@ index 4feedda50..b0f48d6b1 100644
 +    input.nextSlice("old unmarked output\r\n" ++
 +        "\x1b]133;A\x07\x1b]133;B\x07  echo 日本語 abcdefghijklmnop\r\n" ++
 +        "\x1b]133;P;k=s\x07\x1b]133;B\x07echo two\r\n" ++
-+        "\x1b]133;C\x07\x1b[32mfirst output\x1b[0m\r\n\r\n\r\n" ++
++        "\x1b]133;C\x07\x1b[32mfirst output\x1b[0m\r\n\x1b]133;D;1\x07\r\n\r\n" ++
 +        "\x1b]133;A\x07\x1b]133;B\x07pwd\r\n" ++
 +        "\x1b]133;C\x07/tmp\r\n\r\n\r\n\x1b]133;A\x07\x1b]133;B\x07");
 +    for ([_]size.CellCountInt{ 8, 80 }) |width| {
@@ -1297,6 +1450,16 @@ index 4feedda50..b0f48d6b1 100644
 +            defer alloc.free(command);
 +            try testing.expectEqualStrings("  echo 日本語 abcdefghijklmnop\necho two", command);
 +            try testing.expect(screen.commandBlockAtVisual(older.end()) != null);
++            try testing.expect(older.start().rowAndCell().row.command_failed);
++            var failed_row = older.start();
++            // Every wrapped command row must retain its tint after replay.
++            const failed_command = screen.commandBlockContent(older, true).?;
++            while (true) {
++                try testing.expect(failed_row.rowAndCell().row.command_failed);
++                if (failed_row.left(failed_row.x).eql(failed_command.end().left(failed_command.end().x))) break;
++                failed_row = failed_row.down(1).?;
++            }
++            try testing.expect(!latest.start().rowAndCell().row.command_failed);
 +            try testing.expect(screen.adjacentCommandBlock(older.start(), true) == null);
 +            try screen.selectCommandBlock(older);
 +            try testing.expect(screen.command_block_selected);
@@ -1312,6 +1475,22 @@ index 4feedda50..b0f48d6b1 100644
 +        }
 +    }
 +}
+diff --git a/src/terminal/page.zig b/src/terminal/page.zig
+index ad2b1a7e5..f5e701843 100644
+--- a/src/terminal/page.zig
++++ b/src/terminal/page.zig
+@@ -2077,7 +2077,10 @@ pub const Row = packed struct(u64) {
+     /// screen.
+     dirty: bool = false,
+
+-    _padding: u23 = 0,
++    /// Completed command failed; retained with its rows in scrollback.
++    command_failed: bool = false,
++
++    _padding: u22 = 0,
+
+     /// The semantic prompt state of the row. See `semantic_prompt`.
+     pub const SemanticPrompt = enum(u2) {
 diff --git a/src/terminal/render.zig b/src/terminal/render.zig
 index 6bcddb2c2..2b9a9f109 100644
 --- a/src/terminal/render.zig
@@ -1540,16 +1719,18 @@ index 6bcddb2c2..2b9a9f109 100644
 +    try testing.expectEqual(@as(f64, 0), pages.scrollFraction());
 +}
 diff --git a/src/termio/stream_handler.zig b/src/termio/stream_handler.zig
-index 27e06dcb7..e452a8395 100644
+index 27e06dcb7..9c57352d3 100644
 --- a/src/termio/stream_handler.zig
 +++ b/src/termio/stream_handler.zig
-@@ -1427,6 +1427,12 @@ pub const StreamHandler = struct {
+@@ -1427,6 +1427,14 @@ pub const StreamHandler = struct {
          self: *StreamHandler,
          cmd: Stream.Action.SemanticPrompt,
      ) !void {
 +        // Archive replay restores grid metadata without reporting old commands
 +        // as newly running/finished commands to the embedding application.
-+        if (std.mem.eql(u8, cmd.readOption(.aid) orelse "", "sora-archive")) {
++        if (std.mem.eql(u8, cmd.readOption(.aid) orelse "", "sora-archive") or
++            std.mem.eql(u8, cmd.readOption(.aid) orelse "", "sora-archive-row"))
++        {
 +            try self.terminal.semanticPrompt(cmd);
 +            return;
 +        }
