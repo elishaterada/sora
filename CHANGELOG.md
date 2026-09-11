@@ -4,6 +4,19 @@ Human-readable highlights for each Sora release live here. Add the newest
 version before creating its `vX.Y.Z` tag; the release workflow requires a
 matching section and publishes it to GitHub.
 
+## 0.1.15 — 2026-09-11
+
+### What’s new
+
+- New terminal sessions show a welcome panel with useful shortcuts and a “Don’t show again” option.
+- Multiline input grows up to half the terminal height, with scrolling for longer drafts.
+
+### Fixes
+
+- Keep long pasted commands visible before running them, including multiline export statements.
+- Use Command-A to select current input, then copy, cut, delete, or replace it by typing or pasting.
+- Select partial text with the mouse in terminal input, command output, and the Agent composer without dragging the window.
+
 ## 0.1.14 — 2026-09-11
 
 ### What’s new

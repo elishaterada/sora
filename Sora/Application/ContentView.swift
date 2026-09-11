@@ -237,7 +237,9 @@ private final class WindowChromeView: NSView {
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.titlebarSeparatorStyle = .none
-        window.isMovableByWindowBackground = true
+        // Content drags belong to terminal selection and native Agent editors.
+        // Keep window movement on the title bar.
+        window.isMovableByWindowBackground = false
         window.isOpaque = false
         window.backgroundColor = SoraTheme.nsWindowFill
         clearHostingSafeArea(in: window.contentView)
