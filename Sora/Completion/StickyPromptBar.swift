@@ -6,6 +6,12 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
     /// Context, live shell input preview, and keyboard hints.
     static let height: CGFloat = 112
 
+    var maximumHeight: CGFloat = height {
+        didSet { if maximumHeight != oldValue { needsLayout = true } }
+    }
+    private var firstVisibleLine = 0
+    private var scrollRemainder: CGFloat = 0
+    private var followCaret = true
     var onHeightChange: (() -> Void)?
     private(set) var preferredHeight: CGFloat = height
     private var historyPreviewHeight: CGFloat?
@@ -206,14 +212,19 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
             wrappedInput = wrapped
         }
         let lines = wrapped.lines
-        let maximumLines = historyPreviewHeight.map { max(1, Int(($0 - Self.height) / 24) + 1) } ?? 6
-        let visibleLines = min(maximumLines, max(1, lines.count))
+        let visibleLines = StickyPromptBarModel.visibleLineCount(
+            total: lines.count, maximumHeight: historyPreviewHeight ?? maximumHeight)
         let height = historyPreviewHeight ?? (Self.height + CGFloat(visibleLines - 1) * 24)
         if preferredHeight != height {
             preferredHeight = height
             onHeightChange?()
         }
-        let firstLine = max(0, wrapped.cursorRow + 1 - visibleLines)
+        if followCaret {
+            firstVisibleLine = max(0, wrapped.cursorRow + 1 - visibleLines)
+            followCaret = false
+        }
+        firstVisibleLine = min(max(0, firstVisibleLine), max(0, lines.count - visibleLines))
+        let firstLine = firstVisibleLine
         hitRows = Array(zip(lines, wrapped.starts).dropFirst(firstLine).prefix(visibleLines)).map { (text: $0.0, start: $0.1) }
         let visibleText = lines.dropFirst(firstLine).prefix(visibleLines).joined(separator: "\n")
         let paragraph = NSMutableParagraphStyle()
@@ -258,11 +269,26 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
         inputSymbol.frame = NSRect(x: inset, y: inputClip.frame.minY + firstBaseline,
                                    width: 12, height: symbolHeight)
         caret.isHidden = !caretVisible || window?.isKeyWindow != true
+            || wrapped.cursorRow < firstLine || wrapped.cursorRow >= firstLine + visibleLines
         hintLabel.frame = NSRect(x: inset, y: 12, width: max(0, bounds.width - 160), height: 16)
         hintLabel.alignment = .left
         routeLabel.frame = NSRect(x: max(inset, bounds.width - 130), y: 12, width: 76, height: 16)
         routeLabel.alignment = .right
         microphoneButton.frame = NSRect(x: bounds.width - inset - 24, y: 7, width: 24, height: 26)
+    }
+
+    override func scrollWheel(with event: NSEvent) {
+        guard inputClip.frame.contains(convert(event.locationInWindow, from: nil)),
+              let wrappedInput, wrappedInput.lines.count > hitRows.count else {
+            super.scrollWheel(with: event)
+            return
+        }
+        scrollRemainder -= event.scrollingDeltaY * (event.hasPreciseScrollingDeltas ? 1 : 24)
+        let rows = Int(scrollRemainder / 24)
+        scrollRemainder -= CGFloat(rows) * 24
+        firstVisibleLine = min(max(0, firstVisibleLine + rows), wrappedInput.lines.count - hitRows.count)
+        followCaret = false
+        needsLayout = true
     }
 
     func update(
@@ -342,6 +368,7 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
         let offset = min(max(0, scalarOffset), text.unicodeScalars.count)
         guard caretText != text || caretScalarOffset != offset || caretVisible != visible else { return }
         if caretText != text { clearInputSelection() }
+        followCaret = true
         resetCaretBlink()
         caretText = text
         caretScalarOffset = min(max(0, scalarOffset), text.unicodeScalars.count)

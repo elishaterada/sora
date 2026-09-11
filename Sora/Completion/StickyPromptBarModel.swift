@@ -1,6 +1,10 @@
 import Foundation
 
 enum StickyPromptBarModel {
+    static func visibleLineCount(total: Int, maximumHeight: CGFloat, baseHeight: CGFloat = 112) -> Int {
+        min(max(1, total), max(1, Int((maximumHeight - baseHeight) / 24) + 1))
+    }
+
     struct WrappedInput {
         var lines: [String]
         var starts: [Int]
