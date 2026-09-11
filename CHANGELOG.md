@@ -4,6 +4,17 @@ Human-readable highlights for each Sora release live here. Add the newest
 version before creating its `vX.Y.Z` tag; the release workflow requires a
 matching section and publishes it to GitHub.
 
+## 0.1.16 — 2026-09-11
+
+### Fixes
+
+- Start typing immediately after opening a terminal without leaving stray characters above the prompt. Early typing and pasted text are preserved until the shell is ready.
+- Use Control-C to cancel a stalled shell startup and discard any queued draft.
+
+### Known limitations
+
+- Startup scripts that use zsh’s interactive `read` before the first prompt need to be cancelled with Control-C before typing can continue.
+
 ## 0.1.15 — 2026-09-11
 
 ### What’s new
