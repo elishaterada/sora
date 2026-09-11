@@ -131,3 +131,27 @@ struct GhostTextAnchor {
         return x
     }
 }
+
+/// Holds input until the first shell prompt, without changing input to later
+/// commands or fullscreen applications. Drain before replay to allow reentry.
+struct ShellStartupInputBuffer<Input> {
+    private(set) var isWaiting = true
+    private var pending: [Input] = []
+
+    mutating func enqueue(_ input: Input) -> Bool {
+        guard isWaiting else { return false }
+        pending.append(input)
+        return true
+    }
+
+    mutating func discardPending() {
+        pending.removeAll()
+    }
+
+    mutating func finish() -> [Input] {
+        isWaiting = false
+        let result = pending
+        pending.removeAll()
+        return result
+    }
+}

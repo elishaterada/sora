@@ -35,6 +35,12 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     private var scrollbarOffset: UInt64 = 0
     private var scrollbarLen: UInt64 = 0
     private var swallowedKeyCodes: Set<UInt16> = []
+    private enum StartupInput {
+        case keyDown(NSEvent)
+        case keyUp(NSEvent)
+        case text(String)
+    }
+    private var startupInput = ShellStartupInputBuffer<StartupInput>()
     private var isShellPromptReady = false
     /// Live ZLE buffer mirrored by the shell. Nil until the first report.
     private var promptContextDirectory: URL?
@@ -177,6 +183,18 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         let interval = OSSignpostID(log: Self.inputLog)
         os_signpost(.begin, log: Self.inputLog, name: "Terminal keyDown", signpostID: interval)
         defer { os_signpost(.end, log: Self.inputLog, name: "Terminal keyDown", signpostID: interval) }
+        if startupInput.isWaiting,
+           event.modifierFlags.intersection([.control, .command, .option]) == [.control],
+           event.charactersIgnoringModifiers?.lowercased() == "c" {
+            // Cancellation must remain available even if a startup script hangs.
+            startupInput.discardPending()
+            swallowedKeyCodes.insert(event.keyCode)
+            sendKey(event, action: GHOSTTY_ACTION_PRESS)
+            sendKey(event, action: GHOSTTY_ACTION_RELEASE)
+            return
+        }
+        finishStartupForOtherProcessIfNeeded()
+        if startupInput.enqueue(.keyDown(event)) { return }
         if replaceSelectedInputIfNeeded(event) { return }
         if handleCommandBlockKey(event) { return }
         if handleCommandHistoryKey(event) { return }
@@ -265,6 +283,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         if swallowedKeyCodes.remove(event.keyCode) != nil {
             return
         }
+        if startupInput.enqueue(.keyUp(event)) { return }
         sendKey(event, action: GHOSTTY_ACTION_RELEASE)
     }
 
@@ -692,10 +711,9 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
             return
         }
         surface = created
-        // A user cannot type until the created surface has presented its first
-        // prompt. Later submissions set this false until OSC 133 D reports the
-        // foreground command finished, so REPL/program input is never routed.
-        isShellPromptReady = true
+        // Surface creation starts the shell asynchronously. Until its first
+        // edit-line report, PTY echo can print input above the real prompt.
+        isShellPromptReady = false
         runtime.activeSurface = self
         runtime.tick()
         updateSurfaceMetrics()
@@ -781,6 +799,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
             // Arrives on every redraw; avoid the history/path work in a full refresh.
             refreshPromptRoute()
             refreshStickyBar()
+            finishStartupInput()
             return
         }
         lastShellTitle = title
@@ -808,6 +827,9 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         } else {
             refreshStickyBar()
         }
+        // Other shells do not emit Sora's ZLE edit-line report. Their shell
+        // integration's prompt directory report is the readiness signal.
+        finishStartupForOtherProcessIfNeeded()
         delegate?.surface(self, didChangeWorkingDirectory: url)
     }
 
@@ -914,8 +936,32 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         }
     }
 
+    private func finishStartupForOtherProcessIfNeeded() {
+        guard startupInput.isWaiting, let surface else { return }
+        let pid = ghostty_surface_foreground_pid(surface)
+        guard pid > 0, pid <= UInt64(pid_t.max),
+              let name = ForegroundWorkingDirectory.executableName(pid: pid_t(pid)),
+              name != "zsh", name != "login" else { return }
+        // Do not require ZLE from another shell or an interactive program
+        // launched by a startup file (for example, an authentication prompt).
+        finishStartupInput()
+    }
+
+    private func finishStartupInput() {
+        for input in startupInput.finish() {
+            switch input {
+            case .keyDown(let event): keyDown(with: event)
+            case .keyUp(let event): keyUp(with: event)
+            case .text(let value): insertText(value)
+            }
+        }
+    }
+
     private func insertText(_ value: String) {
-        guard let surface, !value.isEmpty else { return }
+        guard !value.isEmpty else { return }
+        finishStartupForOtherProcessIfNeeded()
+        if startupInput.enqueue(.text(value)) { return }
+        guard let surface else { return }
         value.withCString { pointer in
             ghostty_surface_text(surface, pointer, UInt(value.utf8.count))
         }

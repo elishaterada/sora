@@ -149,3 +149,24 @@ worker receiving superseded snapshots, including final flush and background
 execution. All 227 Release tests pass. Remaining measurement: actual display
 latency on the reported M5 with the user's Docker Compose workload, including
 the still-main-thread Ghostty history export.
+
+## Input during shell startup
+
+Creating a libghostty surface does not mean zsh is ready for input. Before ZLE
+starts, the PTY can echo early typing into an ordinary output row; zsh then
+preserves that row with its partial-line `%` marker. Sora now queues initial key
+presses, releases, and pasted text until the first Sora edit-line title proves
+ZLE is active. OSC 7 alone is too early for zsh. The queue drains once, in order,
+and does not intercept input to subsequent commands or fullscreen applications.
+Control-C discards the queued draft and interrupts startup immediately. Other
+shells and foreground programs launched by startup files bypass the ZLE wait.
+
+The queue has no timer: a slow startup must not reintroduce the echo race.
+Startup files using zsh's own interactive `read` before ZLE are a limitation:
+input remains queued until that read is cancelled with Control-C. Supporting
+that case requires an explicit startup-input handoff signal.
+
+Regression coverage lives in `GhosttyInputTests`: ordered one-time replay,
+cancellation, and pass-through after startup. Manual verification used a fresh
+tab followed immediately by typing, checking both the complete prompt draft
+and the absence of an echoed row in the output area.

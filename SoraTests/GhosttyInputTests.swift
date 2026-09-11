@@ -3,6 +3,34 @@ import CoreText
 import XCTest
 
 final class GhosttyInputTests: XCTestCase {
+    func testStartupInputWaitsForPromptAndReplaysInOrderOnce() {
+        var buffer = ShellStartupInputBuffer<String>()
+        for input in ["press e", "release e", "paste st", "backspace", "return"] {
+            XCTAssertTrue(buffer.enqueue(input))
+        }
+        XCTAssertTrue(buffer.isWaiting)
+        XCTAssertEqual(buffer.finish(), ["press e", "release e", "paste st", "backspace", "return"])
+        XCTAssertFalse(buffer.isWaiting)
+        XCTAssertTrue(buffer.finish().isEmpty)
+    }
+
+    func testStartupCancellationDiscardsDraftButStillWaitsForPrompt() {
+        var buffer = ShellStartupInputBuffer<String>()
+        XCTAssertTrue(buffer.enqueue("abandoned draft"))
+        buffer.discardPending()
+        XCTAssertTrue(buffer.isWaiting)
+        XCTAssertTrue(buffer.enqueue("replacement draft"))
+        XCTAssertEqual(buffer.finish(), ["replacement draft"])
+    }
+
+    func testStartupBufferDoesNotInterceptLaterCommandInput() {
+        var buffer = ShellStartupInputBuffer<String>()
+        _ = buffer.finish()
+        XCTAssertFalse(buffer.enqueue("editor input"))
+        XCTAssertFalse(buffer.enqueue("next prompt input"))
+        XCTAssertTrue(buffer.finish().isEmpty)
+    }
+
     func testModsMapShiftControlOptionCommand() {
         let flags: NSEvent.ModifierFlags = [.shift, .control, .option, .command]
         let mods = GhosttyInput.modBits(from: flags)
