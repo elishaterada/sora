@@ -55,6 +55,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     var onFocus: (() -> Void)?
     var onCommandFinished: ((Int16) -> Void)?
     let notificationID = UUID()
+    let tabID: UUID
     var onNotificationActivate: (() -> Void)?
     var onBell: (() -> Void)?
     var draftText: String { isShellPromptReady ? promptLineForSubmission() : "" }
@@ -72,8 +73,9 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     override var acceptsFirstResponder: Bool { true }
     override var isFlipped: Bool { false }
 
-    init(runtime: GhosttyRuntime, workingDirectory: URL? = nil) {
+    init(runtime: GhosttyRuntime, tabID: UUID = UUID(), workingDirectory: URL? = nil) {
         self.runtime = runtime
+        self.tabID = tabID
         self.initialWorkingDirectory = workingDirectory
         super.init(frame: NSRect(x: 0, y: 0, width: 800, height: 600))
         // Do not set wantsLayer or install a CAMetalLayer. libghostty assigns the layer.
@@ -840,6 +842,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         shellEditLine = ""
         let cwd = lastWorkingDirectory ?? currentWorkingDirectory() ?? initialWorkingDirectory
         let run = runtime.recordCommand(
+            tabID: tabID,
             command: runningCommand ?? lastShellTitle,
             cwd: cwd,
             exitCode: exitCode,
@@ -1226,7 +1229,8 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         stickyBar?.clearInputSelection()
         performBinding("scroll_to_bottom")
         let store = runtime.history
-        commandHistory.open(draft: promptLineForSubmission()) { try store.recall(prefix: $0) }
+        let tabID = self.tabID
+        commandHistory.open(draft: promptLineForSubmission()) { try store.recall(prefix: $0, tabID: tabID) }
         swallowedKeyCodes.insert(event.keyCode)
         return true
     }
