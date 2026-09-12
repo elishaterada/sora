@@ -5,6 +5,7 @@ struct ContentView: View {
     @AppStorage(TerminalPreferences.appearanceKey) private var appearanceName = "dark"
     @Environment(\.openWindow) private var openWindow
     @ObservedObject var runtime: GhosttyRuntime
+    @ObservedObject var skins: SkinLibrary
     @StateObject private var agents: AgentWorkspace
     @StateObject private var workspace: WorkspaceController
     @State private var sidebarVisible = true
@@ -12,9 +13,10 @@ struct ContentView: View {
     @State private var trafficLightWidth: CGFloat = 78
     @State private var agentTrigger = 0
 
-    init(runtime: GhosttyRuntime, windowID: UUID) {
+    init(runtime: GhosttyRuntime, windowID: UUID, skins: SkinLibrary) {
+        self.skins = skins
         self.runtime = runtime
-        _agents = StateObject(wrappedValue: AgentWorkspace(windowID: windowID))
+        _agents = StateObject(wrappedValue: AgentWorkspace(windowID: windowID, skins: skins))
         _workspace = StateObject(
             wrappedValue: WorkspaceController(
                 runtime: runtime,
@@ -62,12 +64,16 @@ struct ContentView: View {
                     Text(error).font(.caption).padding(8).background(.regularMaterial)
                 }
                 WorkspacePersistenceNotice(store: runtime.windowStore)
+                if let error = skins.errorMessage { Text(error).font(.caption).padding(8).background(.regularMaterial) }
             }
         }
         .animation(SoraTheme.motionSidebar, value: sidebarVisible)
         .tint(SoraTheme.accent)
         .background(TerminalEffectsRepresentable().ignoresSafeArea())
-        .background(WindowFrostRepresentable().ignoresSafeArea())
+        .background {
+            if skins.configuration.enabled { SkinBackground(library: skins).ignoresSafeArea() }
+            else { WindowFrostRepresentable().ignoresSafeArea() }
+        }
         .background(
             WindowChromeRepresentable(
                 sidebarWidth: sidebarWidth,

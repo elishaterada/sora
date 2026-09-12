@@ -4,13 +4,14 @@ import UserNotifications
 
 struct SoraSettingsView: View {
     enum Page: String, CaseIterable, Identifiable {
-        case terminal = "Terminal", agent = "Agent", voice = "Voice"
+        case terminal = "Terminal", agent = "Agent", voice = "Voice", skins = "Skins"
         var id: String { rawValue }
         var symbol: String {
             switch self {
             case .terminal: return "terminal"
             case .agent: return "sparkles"
             case .voice: return "waveform"
+            case .skins: return "photo.on.rectangle"
             }
         }
     }
@@ -19,6 +20,7 @@ struct SoraSettingsView: View {
     @ObservedObject var session: AskSession
     @ObservedObject var globalShortcut: GlobalShortcutController
     @ObservedObject var shortcuts: AppShortcutStore
+    @ObservedObject var skins: SkinLibrary
     @State private var selection: Page? = .terminal
 
     var body: some View {
@@ -32,6 +34,7 @@ struct SoraSettingsView: View {
             case .terminal: TerminalSettingsView(globalShortcut: globalShortcut, shortcuts: shortcuts)
             case .agent: AgentSettingsView(session: session)
             case .voice: VoiceSettingsView(session: session)
+            case .skins: SkinSettingsView(library: skins, session: session)
             }
         }
         .preferredColorScheme(TerminalPreferences.Appearance(rawValue: appearanceName)?.colorScheme)

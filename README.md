@@ -106,6 +106,12 @@ saved under Sora's Application Support folder. Dropping never submits a command.
 
 Agent also accepts dropped images or **Attach image**. Thumbnails stay in the draft until Send. Image bytes are saved with the conversation and sent to the selected service; a vision-capable model is required. Up to four images can be attached per message (5 MB as PNG and 8192 pixels per side).
 
+Personalize the terminal in **Settings → Skins** with retained copies of your
+photos or videos, adjustable readability, optional sound, and timed rotation.
+Local skins work without Agent; the optional clip Agent can prepare a segment
+from a video link with approval for downloads and changes. See
+[Terminal skins](docs/terminal-skins.md) for controls and limits.
+
 ## Terminal notifications
 
 Background terminal sessions can send native macOS alerts using OSC 9, OSC 777,

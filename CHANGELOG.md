@@ -4,6 +4,21 @@ Human-readable highlights for each Sora release live here. Add the newest
 version before creating its `vX.Y.Z` tag; the release workflow requires a
 matching section and publishes it to GitHub.
 
+## 0.4.0 — 2026-09-12
+
+### What’s new
+
+- Make your terminal your own with photo and video backgrounds in Settings → Skins. Sora keeps its own copy, so your favorites stay available even after you move or delete the original file.
+- Switch between saved skins or rotate them automatically, from every minute to every day. All terminal windows share your selection.
+- Blend your background with native glass and adjust the readability slider to keep text comfortable. Preserve the whole photo with softened edges, or add subtle pointer-driven perspective.
+- Enjoy looping video backgrounds with optional sound for each video. New videos start muted, and sound plays only in the active terminal window.
+- Prepare a video clip with Agent by entering a link and the seconds to keep. Review download and file-change approvals, then let Agent add the finished clip directly to your skins.
+
+### Notes
+
+- Local skins work with AI disabled. Reduce Motion pauses video and perspective; Reduce Transparency restores a solid backdrop.
+- Agent clip preparation requires an enabled provider and may need optional tools such as yt-dlp and ffmpeg. Clips can be up to five minutes; online sources depend on availability and tool support.
+
 ## 0.3.0 — 2026-09-12
 
 ### What’s new

@@ -4,6 +4,10 @@ import Foundation
 
 @MainActor
 final class AskSession: ObservableObject {
+    weak var skinLibrary: SkinLibrary?
+    /// Clip preparation keeps downloads and file changes reviewable even if the global mode is Full access.
+    var requiresCommandApproval = false
+    var commandPermissionMode: AgentPermissionMode { requiresCommandApproval && permissionMode == .fullAccess ? .approveForMe : permissionMode }
     @Published var draft = ""
     @Published private(set) var goal: AgentGoal?
     private var goals: [String: AgentGoal] = [:]
@@ -626,6 +630,9 @@ final class AskSession: ObservableObject {
             guard try context.reduce(0, { $0 + (try $1.contentForProvider()).utf8.count }) <= 100_000 else {
                 throw AIError.contextTooLarge
             }
+            if requiresCommandApproval {
+                context[context.count - 1].text += "\nThis clip-preparation session requires approval for downloads, installations, webpage fetches and file changes, regardless of the global permission mode. Routine read-only commands can run automatically."
+            }
             let response = AIMessage(role: .assistant, text: "", status: .streaming, commandDirectory: agentDirectory?.path)
             var updated = messages + [user, response]
             updated[updated.count - 1].goalSnapshot = outgoingGoal
@@ -933,10 +940,10 @@ final class AskSession: ObservableObject {
             runTool(messageID: responseID)
         } else if agentDirectory != nil,
            let proposal = message?.commandProposal,
-           AgentCommandPermission.shouldAutoRunCommand(proposal.command, mode: permissionMode) {
+           AgentCommandPermission.shouldAutoRunCommand(proposal.command, mode: commandPermissionMode) {
             runCommand(messageID: responseID)
         } else if message?.webpageProposal != nil,
-                  AgentCommandPermission.shouldAutoFetchWebpage(mode: permissionMode) {
+                  AgentCommandPermission.shouldAutoFetchWebpage(mode: commandPermissionMode) {
             fetchWebpage(messageID: responseID)
         }
         persist()
@@ -1073,7 +1080,16 @@ final class AskSession: ObservableObject {
         beginBudgetWork()
         commandTask = Task { [weak self] in
             let result: AgentToolResult
-            do { result = try await AgentToolRegistry.run(call, directory: directory) }
+            do {
+                if call.tool == .importSkin {
+                    guard let library = self?.skinLibrary else { throw SkinLibrary.failure("The skin library is unavailable in this session.") }
+                    let target = call.resolvedURL(directory: directory)
+                    guard target.path == call.approvedPath else { throw SkinLibrary.failure("The file path changed after approval.") }
+                    let skin = try await library.add(target)
+                    result = AgentToolResult(tool: call.tool, path: target.path,
+                        output: "Imported and selected \(skin.name). Sora retained its own copy. Video starts muted.", failed: false, truncated: false)
+                } else { result = try await AgentToolRegistry.run(call, directory: directory) }
+            }
             catch { result = AgentToolResult(tool: call.tool, path: call.approvedPath ?? call.path,
                 output: error is CancellationError ? "Inspection canceled." : error.localizedDescription,
                 failed: true, truncated: false) }

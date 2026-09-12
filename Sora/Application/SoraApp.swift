@@ -3,6 +3,7 @@ import SwiftUI
 @main
 struct SoraApp: App {
     @NSApplicationDelegateAdaptor(TerminalAppDelegate.self) private var appDelegate
+    @StateObject private var skins = SkinLibrary()
     @StateObject private var runtime: GhosttyRuntime
     @StateObject private var ask = AskSession(backends: AIBackend.live())
     private let updates = UpdateController()
@@ -27,7 +28,7 @@ struct SoraApp: App {
 
     var body: some Scene {
         WindowGroup("Sora", id: "terminal", for: UUID.self) { $windowID in
-            ContentView(runtime: runtime, windowID: windowID ?? runtime.initialWindowID)
+            ContentView(runtime: runtime, windowID: windowID ?? runtime.initialWindowID, skins: skins)
                 .task {
                     updates.checkAtLaunch()
                     #if DEBUG
@@ -65,7 +66,7 @@ struct SoraApp: App {
             .windowResizability(.contentMinSize)
 
         Settings {
-            SoraSettingsView(session: ask, globalShortcut: runtime.globalShortcut, shortcuts: runtime.shortcuts)
+            SoraSettingsView(session: ask, globalShortcut: runtime.globalShortcut, shortcuts: runtime.shortcuts, skins: skins)
         }
     }
 }

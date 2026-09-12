@@ -2,6 +2,14 @@
 
 The terminal shares the existing full-window native glass material (NSGlassEffectView on macOS 26, NSVisualEffectView on older macOS). Both dark and light themes use an 18% terminal background, a clear pane backing, and a 20% input wash. macOS Reduce Transparency supplies an opaque backing beneath the same content and updates live.
 
+Settings → Skins can add a retained photo or looping video beneath the terminal,
+with native glass and a theme-adaptive readability tint (25–95%, default 65%).
+Photo edge extension uses a blurred enlargement, not generated scene content.
+Optional pointer perspective and per-video sound start off; the Settings preview
+is always muted. Reduce Motion pauses video and perspective; Reduce Transparency
+hides the media behind a solid background. See [Terminal skins](terminal-skins.md)
+for imports, shared rotation, and the optional approved Agent clip workflow.
+
 The existing Ghostty semantic-block patch now draws low-alpha neutral and pink error washes; empty rows no longer paint a second background. Explicit ANSI backgrounds use 82% opacity, retaining their color with a little glass showing through. Selections, inverse-video cells, and block dividers keep their existing rendering. Pinned command headers use a native behind-window material with the same translucent neutral/error washes as blocks, so desktop frost remains visible without scrolled glyphs colliding with the header label. This change requires rebuilding GhosttyKit with `scripts/build-ghosttykit.sh`; changing SwiftUI alone does not update block fills.
 
 Settings → Terminal → Playful effects offers four independently saved, initially disabled options:

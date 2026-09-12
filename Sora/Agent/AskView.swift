@@ -705,14 +705,14 @@ struct AskView: View {
             if let query = call.query { Text("Find: " + query).font(.caption) }
             if call.tool == .readFile { Text("Byte offset \(call.offset), up to \(call.maxBytes) bytes").font(.caption) }
             if call.status == .pending {
-                Text("Read-only inspection. Results are sent to the selected AI provider.").font(.caption).foregroundStyle(.secondary)
+                Text(call.tool == .importSkin ? "Copies this file into Skins and selects it. Videos start muted. The result is sent to your AI provider." : "Read-only inspection. Results are sent to the selected AI provider.").font(.caption).foregroundStyle(.secondary)
                 HStack {
                     Button("Dismiss") { session.dismissTool(messageID: message.id) }
                     Button("Allow Once") { session.runTool(messageID: message.id) }
-                    Button("Allow Same Read for Task") { session.runTool(messageID: message.id, remember: true) }
+                    if call.tool != .importSkin { Button("Allow Same Read for Task") { session.runTool(messageID: message.id, remember: true) } }
                 }.disabled(session.isSending || session.isRunningCommand)
             } else if let result = message.toolResult {
-                DisclosureGroup(result.failed ? "Inspection failed" : (result.truncated ? "Result — excerpt" : "Inspection result")) {
+                DisclosureGroup(result.failed ? "Action failed" : (result.truncated ? "Result — excerpt" : "Result")) {
                     Text(result.output.isEmpty ? "No output." : result.output)
                         .font(.system(.caption, design: .monospaced)).textSelection(.enabled)
                 }

@@ -7,6 +7,13 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+        AB9300000000000000000000 = {isa = PBXBuildFile; fileRef = AB9400000000000000000000; };
+        AB9100000000000000000003 = {isa = PBXBuildFile; fileRef = AB9000000000000000000003; };
+        AB9200000000000000000003 = {isa = PBXBuildFile; fileRef = AB9000000000000000000003; };
+        AB9100000000000000000002 = {isa = PBXBuildFile; fileRef = AB9000000000000000000002; };
+        AB9100000000000000000001 = {isa = PBXBuildFile; fileRef = AB9000000000000000000001; };
+        AB9100000000000000000000 = {isa = PBXBuildFile; fileRef = AB9000000000000000000000; };
+        AB9200000000000000000000 = {isa = PBXBuildFile; fileRef = AB9000000000000000000000; };
         FE3000000000000000000001 = {isa = PBXBuildFile; fileRef = FE3000000000000000000003; };
         FE3000000000000000000002 = {isa = PBXBuildFile; fileRef = FE3000000000000000000003; };
         FE2000000000000000000001 = {isa = PBXBuildFile; fileRef = FE2000000000000000000003; };
@@ -233,6 +240,11 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+        AB9400000000000000000000 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkinLibraryTests.swift; sourceTree = "<group>"; };
+        AB9000000000000000000003 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../Skins/SkinClipRequest.swift; sourceTree = "<group>"; };
+        AB9000000000000000000002 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../Skins/SkinSettingsView.swift; sourceTree = "<group>"; };
+        AB9000000000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../Skins/SkinBackground.swift; sourceTree = "<group>"; };
+        AB9000000000000000000000 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../Skins/SkinLibrary.swift; sourceTree = "<group>"; };
         FE3000000000000000000003 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TypingSound.swift; sourceTree = "<group>"; };
         FE2000000000000000000003 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TypingImpact.swift; sourceTree = "<group>"; };
 		FE1000000000000000000002 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalEffects.swift; sourceTree = "<group>"; };
@@ -487,6 +499,10 @@
 				AA0000000000000000000105 /* SoraTheme.swift */,
 				AA00000000000000000001D1 /* TerminalPreferences.swift */,
 				FE1000000000000000000002 /* TerminalEffects.swift */,
+                AB9000000000000000000003,
+                AB9000000000000000000002,
+                AB9000000000000000000001,
+                AB9000000000000000000000,
                 FE2000000000000000000003 /* TypingImpact.swift */,
                 FE3000000000000000000003 /* TypingSound.swift */,
 				FA0310000000000000000003 /* AppShortcuts.swift */,
@@ -645,6 +661,7 @@
 				AA0000000000000000000174 /* CompletionSessionTests.swift */,
 				AA0000000000000000000181 /* NextCommandEngineTests.swift */,
 				AA0000000000000000000182 /* StickyPromptBarTests.swift */,
+                AB9400000000000000000000,
 				AA0000000000000000000193 /* HushLoginTests.swift */,
 				AA0000000000000000000194 /* SoraZshBootstrapTests.swift */,
 				AA0000000000000000000195 /* ShellHighlightTests.swift */,
@@ -805,6 +822,10 @@
 				AA0000000000000000000005 /* SoraTheme.swift in Sources */,
 				AA00000000000000000000D1 /* TerminalPreferences.swift in Sources */,
 				FE1000000000000000000001 /* TerminalEffects.swift in Sources */,
+                AB9100000000000000000003,
+                AB9100000000000000000002,
+                AB9100000000000000000001,
+                AB9100000000000000000000,
                 FE2000000000000000000001 /* TypingImpact.swift in Sources */,
                 FE3000000000000000000001 /* TypingSound.swift in Sources */,
 				FA0310000000000000000001 /* AppShortcuts.swift in Sources */,
@@ -913,6 +934,8 @@
 				AA00000000000000000000B2 /* SoraTheme.swift in Sources */,
 				AA00000000000000000000E1 /* TerminalPreferences.swift in Sources */,
                 FE2000000000000000000002 /* TypingImpact.swift in Sources */,
+                AB9200000000000000000003,
+                AB9200000000000000000000,
                 FE3000000000000000000002 /* TypingSound.swift in Sources */,
 				FA0310000000000000000002 /* AppShortcuts.swift in Sources */,
 				AA0000000000000000000010 /* GhosttyInputTests.swift in Sources */,
@@ -959,6 +982,7 @@
 				AA0000000000000000000091 /* NextCommandEngine.swift in Sources */,
 				AA0000000000000000000092 /* NextCommandEngineTests.swift in Sources */,
 				AA0000000000000000000094 /* StickyPromptBarTests.swift in Sources */,
+                AB9300000000000000000000,
 				AA0000000000000000000087 /* StickyPromptBarModel.swift in Sources */,
 				AA00000000000000000000A4 /* HushLogin.swift in Sources */,
 				AA00000000000000000000A5 /* SoraZshBootstrap.swift in Sources */,
@@ -1043,7 +1067,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 21;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = NO;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -1057,7 +1081,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.3.0;
+				MARKETING_VERSION = 0.4.0;
 				OTHER_LDFLAGS = (
 					"-lstdc++",
 					"-lsqlite3",
@@ -1090,7 +1114,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 21;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = NO;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -1104,7 +1128,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.3.0;
+				MARKETING_VERSION = 0.4.0;
 				OTHER_LDFLAGS = (
 					"-lstdc++",
 					"-lsqlite3",
@@ -1135,10 +1159,10 @@
 			buildSettings = {
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 21;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.3.0;
+				MARKETING_VERSION = 0.4.0;
 				OTHER_LDFLAGS = (
 					"-lsqlite3",
 				);
@@ -1153,10 +1177,10 @@
 			buildSettings = {
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 21;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.3.0;
+				MARKETING_VERSION = 0.4.0;
 				OTHER_LDFLAGS = (
 					"-lsqlite3",
 				);
