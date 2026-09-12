@@ -2,7 +2,8 @@ import AppKit
 
 /// Overlays the existing terminal viewport, so appearing never resizes the PTY.
 final class StickyCommandHeaderView: NSView {
-    private let content = NSView()
+    private let content = NSVisualEffectView()
+    private let tint = NSView()
     private let commandLabel = TerminalCommandLabel(labelWithString: "")
     private let divider = NSView()
     private var fullHeight: CGFloat = 48
@@ -11,8 +12,14 @@ final class StickyCommandHeaderView: NSView {
         super.init(frame: .zero)
         wantsLayer = true
         layer?.masksToBounds = true
-        content.wantsLayer = true
-        content.layer?.backgroundColor = CommandHeaderStyle.background.cgColor
+        // Sample behind the window, not the scrolling glyphs beneath the header.
+        // This keeps the desktop frost without letting two commands overlap.
+        content.material = .underWindowBackground
+        content.blendingMode = .behindWindow
+        content.state = .active
+        tint.wantsLayer = true
+        tint.layer?.backgroundColor = CommandHeaderStyle.background.cgColor
+        content.addSubview(tint)
         commandLabel.textColor = .labelColor
         commandLabel.lineBreakMode = .byTruncatingTail
         commandLabel.maximumNumberOfLines = 1
@@ -44,7 +51,7 @@ final class StickyCommandHeaderView: NSView {
         setAccessibilityValue(command.string)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        content.layer?.backgroundColor = (failed ? CommandHeaderStyle.errorBackground : CommandHeaderStyle.background).cgColor
+        tint.layer?.backgroundColor = (failed ? CommandHeaderStyle.errorBackground : CommandHeaderStyle.background).cgColor
         // Include the complete incoming header below the pinned band so its
         // text cannot be clipped halfway over the original terminal command.
         frame = NSRect(x: 0, y: viewport.height - fullHeight * 2, width: viewport.width, height: fullHeight * 2)
@@ -57,6 +64,7 @@ final class StickyCommandHeaderView: NSView {
 
     override func layout() {
         super.layout()
+        tint.frame = content.bounds
         let labelHeight = ceil(commandLabel.font?.boundingRectForFont.height ?? 20)
         // Keep the label anchored to the bottom while the next boundary pushes
         // the header upward. The layer clips the departing command at the top.

@@ -4,6 +4,24 @@ Human-readable highlights for each Sora release live here. Add the newest
 version before creating its `vX.Y.Z` tag; the release workflow requires a
 matching section and publishes it to GitHub.
 
+## 0.3.0 — 2026-09-12
+
+### What’s new
+
+- Make typing your own with ten mechanical-keyboard-inspired sounds, from soft taps and deep thocks to crisp clacks and springy clicks. Preview each sound, adjust its volume, and enjoy a deeper sound on Return.
+- Add optional ambient glow, a Return-key light pulse, and eight varied typing-impact patterns. Adjust impact strength from 25% to 200%, preview the stronger Return hit, or turn all effects off with one button.
+
+### Fixes
+
+- Bring glass translucency back across the terminal, input area, and sticky command headers in both light and dark themes, while keeping command blocks and errors easy to distinguish.
+- Soften ANSI background colors so they blend with the glass. Text selection and inverse-video highlights stay clear and solid.
+- Keep typing impacts in place with springy rotation and recoil, without shifting the window across your desktop.
+
+### Notes
+
+- Playful effects are off by default and available in Settings → Terminal → Playful effects. Reduce Motion disables animated effects; Reduce Transparency keeps a solid window backdrop.
+- Typing impacts animate the app’s content; the native macOS window border and shadow stay stationary.
+
 ## 0.2.0 — 2026-09-12
 
 ### What’s new

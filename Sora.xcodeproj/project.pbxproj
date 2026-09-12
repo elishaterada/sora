@@ -7,6 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+        FE3000000000000000000001 = {isa = PBXBuildFile; fileRef = FE3000000000000000000003; };
+        FE3000000000000000000002 = {isa = PBXBuildFile; fileRef = FE3000000000000000000003; };
+        FE2000000000000000000001 = {isa = PBXBuildFile; fileRef = FE2000000000000000000003; };
+        FE2000000000000000000002 = {isa = PBXBuildFile; fileRef = FE2000000000000000000003; };
+		FE1000000000000000000001 = {isa = PBXBuildFile; fileRef = FE1000000000000000000002; };
 		FA0290000000000000000001 /* CommandCompletion.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0290000000000000000003 /* CommandCompletion.swift */; };
 		FA0290000000000000000002 /* CommandCompletion.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0290000000000000000003 /* CommandCompletion.swift */; };
 		FA0300000000000000000001 /* CommandCompletionMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0300000000000000000002 /* CommandCompletionMenu.swift */; };
@@ -228,6 +233,9 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+        FE3000000000000000000003 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TypingSound.swift; sourceTree = "<group>"; };
+        FE2000000000000000000003 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TypingImpact.swift; sourceTree = "<group>"; };
+		FE1000000000000000000002 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalEffects.swift; sourceTree = "<group>"; };
 		FA0290000000000000000003 /* CommandCompletion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandCompletion.swift; sourceTree = "<group>"; };
 		FA0300000000000000000002 /* CommandCompletionMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandCompletionMenu.swift; sourceTree = "<group>"; };
 		FA0280000000000000000002 /* SavedCommandEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedCommandEditor.swift; sourceTree = "<group>"; };
@@ -478,6 +486,9 @@
 				AA0000000000000000000102 /* ContentView.swift */,
 				AA0000000000000000000105 /* SoraTheme.swift */,
 				AA00000000000000000001D1 /* TerminalPreferences.swift */,
+				FE1000000000000000000002 /* TerminalEffects.swift */,
+                FE2000000000000000000003 /* TypingImpact.swift */,
+                FE3000000000000000000003 /* TypingSound.swift */,
 				FA0310000000000000000003 /* AppShortcuts.swift */,
 				FA0320000000000000000002 /* ShortcutSettingsView.swift */,
 				B10000000000000000000001 /* GlobalShortcutController.swift */,
@@ -793,6 +804,9 @@
 				AA0000000000000000000002 /* ContentView.swift in Sources */,
 				AA0000000000000000000005 /* SoraTheme.swift in Sources */,
 				AA00000000000000000000D1 /* TerminalPreferences.swift in Sources */,
+				FE1000000000000000000001 /* TerminalEffects.swift in Sources */,
+                FE2000000000000000000001 /* TypingImpact.swift in Sources */,
+                FE3000000000000000000001 /* TypingSound.swift in Sources */,
 				FA0310000000000000000001 /* AppShortcuts.swift in Sources */,
 				FA0320000000000000000001 /* ShortcutSettingsView.swift in Sources */,
 				B10000000000000000000002 /* GlobalShortcutController.swift in Sources */,
@@ -898,6 +912,8 @@
 				AA00000000000000000000B1 /* GhostTextView.swift in Sources */,
 				AA00000000000000000000B2 /* SoraTheme.swift in Sources */,
 				AA00000000000000000000E1 /* TerminalPreferences.swift in Sources */,
+                FE2000000000000000000002 /* TypingImpact.swift in Sources */,
+                FE3000000000000000000002 /* TypingSound.swift in Sources */,
 				FA0310000000000000000002 /* AppShortcuts.swift in Sources */,
 				AA0000000000000000000010 /* GhosttyInputTests.swift in Sources */,
 				DD0000000000000000000010 /* TerminalImageDropTests.swift in Sources */,
@@ -1027,7 +1043,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 19;
+				CURRENT_PROJECT_VERSION = 20;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = NO;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -1041,7 +1057,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.2.0;
+				MARKETING_VERSION = 0.3.0;
 				OTHER_LDFLAGS = (
 					"-lstdc++",
 					"-lsqlite3",
@@ -1074,7 +1090,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 19;
+				CURRENT_PROJECT_VERSION = 20;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = NO;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -1088,7 +1104,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.2.0;
+				MARKETING_VERSION = 0.3.0;
 				OTHER_LDFLAGS = (
 					"-lstdc++",
 					"-lsqlite3",
@@ -1119,10 +1135,10 @@
 			buildSettings = {
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 19;
+				CURRENT_PROJECT_VERSION = 20;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.2.0;
+				MARKETING_VERSION = 0.3.0;
 				OTHER_LDFLAGS = (
 					"-lsqlite3",
 				);
@@ -1137,10 +1153,10 @@
 			buildSettings = {
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 19;
+				CURRENT_PROJECT_VERSION = 20;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.2.0;
+				MARKETING_VERSION = 0.3.0;
 				OTHER_LDFLAGS = (
 					"-lsqlite3",
 				);

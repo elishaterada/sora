@@ -408,7 +408,7 @@ index 46a75be8e..2623d576b 100644
 +    try testing.expect(!isCommandBoundary(1, false));
 +}
 diff --git a/src/renderer/generic.zig b/src/renderer/generic.zig
-index 2a81f42b4..a93c9eda4 100644
+index 2a81f42b4..2397d8d86 100644
 --- a/src/renderer/generic.zig
 +++ b/src/renderer/generic.zig
 @@ -233,6 +233,8 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
@@ -560,10 +560,10 @@ index 2a81f42b4..a93c9eda4 100644
 +                        if (bg.*[3] != 0) continue;
 +                        bg.* = if (y_usize < command_end)
 +                            if (light)
-+                                if (row.command_failed) .{ 252, 230, 233, 240 } else .{ 233, 237, 242, 240 }
-+                            else if (row.command_failed) .{ 53, 32, 36, 240 } else .{ 35, 38, 43, 240 }
++                                if (row.command_failed) .{ 252, 180, 195, 58 } else .{ 233, 237, 242, 38 }
++                            else if (row.command_failed) .{ 110, 32, 50, 58 } else .{ 65, 72, 82, 38 }
 +                        else
-+                            .{ base.r, base.g, base.b, 240 };
++                            .{ base.r, base.g, base.b, 0 };
 +                    }
 +                }
              }
@@ -578,6 +578,18 @@ index 2a81f42b4..a93c9eda4 100644
                  const cursor_vp = state.cursor.viewport orelse break :cursor;
                  const cursor_style: terminal.Style = cursor_style: {
                      const cells = state.row_data.items(.cells);
+@@ -3088,8 +3146,9 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
+                             break :bg_alpha @intFromFloat(opacity);
+                         }
+
+-                        // Cells that have an explicit bg color should be fully opaque.
+-                        if (bg_style != null) break :bg_alpha default;
++                        // Sora softens explicit ANSI fills without weakening selections
++                        // or inverse-video cells (handled above). Keep colors recognizable.
++                        if (bg_style != null) break :bg_alpha if (self.config.semantic_prompt_boundaries) 209 else default;
+
+                         // Otherwise, we won't draw the bg for this cell,
+                         // we'll let the already-drawn background color
 diff --git a/src/renderer/size.zig b/src/renderer/size.zig
 index 6cf05f58a..2b25e4af4 100644
 --- a/src/renderer/size.zig

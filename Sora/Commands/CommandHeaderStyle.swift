@@ -3,29 +3,21 @@ import AppKit
 /// Reads only the styling emitted by Ghostty's VT formatter. Shell text is never
 /// re-tokenized: custom highlighters and restored scrollback keep their colors.
 enum CommandHeaderStyle {
-    // Ghostty composites its {35,38,43,240} block fill over {20,22,26}.
-    // Precompose that fill so output cannot show through the pinned header.
-    private static let darkBackground = NSColor(
-        srgbRed: (35 * (240.0 / 255) + 20 * (15.0 / 255)) / 255,
-        green: (38 * (240.0 / 255) + 22 * (15.0 / 255)) / 255,
-        blue: (43 * (240.0 / 255) + 26 * (15.0 / 255)) / 255, alpha: 1)
-    private static let darkErrorBackground = NSColor(
-        srgbRed: (53 * (240.0 / 255) + 20 * (15.0 / 255)) / 255,
-        green: (32 * (240.0 / 255) + 22 * (15.0 / 255)) / 255,
-        blue: (36 * (240.0 / 255) + 26 * (15.0 / 255)) / 255, alpha: 1)
-    private static let darkForeground = NSColor(srgbRed: 0.8, green: 0.8, blue: 0.8, alpha: 1)
-
-    static var background: NSColor { TerminalPreferences.isLight ? lightBackground(failed: false) : darkBackground }
-    static var errorBackground: NSColor { TerminalPreferences.isLight ? lightBackground(failed: true) : darkErrorBackground }
+    // Match Ghostty's semantic washes; the header's native material supplies frost.
+    static var background: NSColor {
+        SoraTheme.adaptive(light: 0xE9EDF2, dark: 0x414852).withAlphaComponent(38.0 / 255)
+    }
+    static var errorBackground: NSColor {
+        SoraTheme.adaptive(light: 0xFCB4C3, dark: 0x6E2032).withAlphaComponent(58.0 / 255)
+    }
+    private static let terminalBackground = SoraTheme.adaptive(light: 0xF7F8FA, dark: 0x14161A)
     static var foreground: NSColor {
-        TerminalPreferences.isLight ? NSColor(srgbRed: 36/255, green: 40/255, blue: 51/255, alpha: 1) : darkForeground
+        TerminalPreferences.isLight
+            ? NSColor(srgbRed: 36.0 / 255, green: 40.0 / 255, blue: 51.0 / 255, alpha: 1)
+            : NSColor(srgbRed: 0.8, green: 0.8, blue: 0.8, alpha: 1)
     }
-    private static func lightBackground(failed: Bool) -> NSColor {
-        let rgb: [Double] = failed ? [252, 230, 233] : [233, 237, 242]
-        let base: [Double] = [247, 248, 250]
-        let values = zip(rgb, base).map { ($0 * 240 + $1 * 15) / (255 * 255) }
-        return NSColor(srgbRed: values[0], green: values[1], blue: values[2], alpha: 1)
-    }
+    // Match the renderer's explicit ANSI background opacity; inverse stays solid.
+    static let ansiBackgroundOpacity = 209.0 / 255
 
     static func attributedCommand(_ snapshot: String, font: NSFont) -> NSAttributedString {
         let output = NSMutableAttributedString(string: "")
@@ -41,11 +33,11 @@ enum CommandHeaderStyle {
             if bold { traits.insert(.boldFontMask) }
             if italic { traits.insert(.italicFontMask) }
             let face = NSFontManager.shared.convert(font, toHaveTrait: traits)
-            var color = inverse ? (bg ?? background) : (fg ?? defaults)
+            var color = inverse ? (bg ?? terminalBackground) : (fg ?? defaults)
             if invisible { color = .clear }
             else if faint { color = color.withAlphaComponent(0.5) }
             var attributes: [NSAttributedString.Key: Any] = [.font: face, .foregroundColor: color]
-            if inverse || bg != nil { attributes[.backgroundColor] = inverse ? (fg ?? defaults) : bg }
+            if inverse || bg != nil { attributes[.backgroundColor] = inverse ? (fg ?? defaults) : bg?.withAlphaComponent(ansiBackgroundOpacity) }
             if underline != 0 { attributes[.underlineStyle] = underline }
             if let underlineColor { attributes[.underlineColor] = underlineColor }
             if strike { attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue }

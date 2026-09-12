@@ -18,6 +18,14 @@ enum TerminalPreferences {
             switch self { case .dark: return .dark; case .light: return .light; case .system: return nil }
         }
     }
+    static func isTypingFeedbackEvent(characters: String?, modifiers: NSEvent.ModifierFlags, isRepeat: Bool) -> Bool {
+        guard !isRepeat, modifiers.intersection([.command, .control]).isEmpty,
+              let characters, !characters.isEmpty else { return false }
+        return characters.unicodeScalars.allSatisfy {
+            $0.value == 3 || $0.value == 13 || $0.value == 127 || ($0.value >= 32 && !($0.value >= 0xF700 && $0.value <= 0xF8FF))
+        }
+    }
+
     static let appearanceKey = "terminal.appearance"
     static let fontFamilyKey = "terminal.fontFamily"
     static let compactSpacingKey = "terminal.compactSpacing"
@@ -55,7 +63,7 @@ enum TerminalPreferences {
                      "window-padding-x = \(compact ? 16 : 24)", "window-padding-y = \(compact ? 10 : 18)",
                      "adjust-cell-height = \(compact ? 4 : 12)%"]
         if light {
-            lines += ["background = #f7f8fa", "foreground = #242833", "background-opacity = 1",
+            lines += ["background = #f7f8fa", "foreground = #242833", "background-opacity = 0.18",
                       "cursor-color = #00796b", "cursor-text = #ffffff",
                       "selection-background = #c7e3e1", "selection-foreground = #182d30"]
             let palette = ["242833", "b42349", "00796b", "8a4b00", "175fb3", "a22d78", "6744ad", "444b59",

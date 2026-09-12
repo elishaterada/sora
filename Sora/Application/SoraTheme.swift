@@ -10,7 +10,9 @@ enum SoraTheme {
             NSColor(srgb: appearance.bestMatch(from: [.aqua, .darkAqua]) == .aqua ? light : dark)
         }
     }
-    static let nsInputBackground = adaptive(light: 0xF7F8FA, dark: 0x111111)
+    static var nsInputBackground: NSColor {
+        adaptive(light: 0xF7F8FA, dark: 0x111111).withAlphaComponent(0.20)
+    }
 
     // MARK: - Panda primitives (from sora.ghostty)
 
