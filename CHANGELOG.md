@@ -4,6 +4,13 @@ Human-readable highlights for each Sora release live here. Add the newest
 version before creating its `vX.Y.Z` tag; the release workflow requires a
 matching section and publishes it to GitHub.
 
+## 0.4.1 — 2026-09-12
+
+### Fixes
+
+- Select and copy individual words or passages in Agent responses, including answers containing web links and file paths. Selection can span paragraphs while links remain clickable.
+- Keep selected response text highlighted when unrelated parts of the conversation update.
+
 ## 0.4.0 — 2026-09-12
 
 ### What’s new
