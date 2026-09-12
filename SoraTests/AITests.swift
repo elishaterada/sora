@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import XCTest
 
 final class OpenAIProviderTests: XCTestCase {
@@ -1053,6 +1054,43 @@ final class AskSessionTests: XCTestCase {
         session.stop()
     }
 
+    func testApprovedSkinImportRetainsFileAndResumesWithEvidence() async throws {
+        let provider = ControlledProvider(), session = makeSession(ControlledProvider())
+        let importingSession = makeSession(provider)
+        importingSession.enabled = true
+        importingSession.permissionMode = .fullAccess
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("sora-agent-skin-\(UUID())")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 20, pixelsHigh: 20,
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+            bytesPerRow: 0, bitsPerPixel: 0)!
+        try XCTUnwrap(bitmap.representation(using: .png, properties: [:])).write(to: root.appendingPathComponent("photo.png"))
+        let library = SkinLibrary(root: root.appendingPathComponent("library"), startsTimer: false)
+        importingSession.skinLibrary = library
+        importingSession.configureAgent(directory: root)
+        importingSession.draft = "Import photo.png as my terminal skin"
+        importingSession.send()
+        await waitFor { provider.requests.count == 1 }
+        provider.emit(.text(#"<SORA_TOOL>{"tool":"importSkin","summary":"Add skin","path":"photo.png"}</SORA_TOOL>"#))
+        provider.emit(.completed); provider.finish()
+        await waitFor { !importingSession.isSending }
+        XCTAssertTrue(library.configuration.skins.isEmpty, "Even Full access must wait for import approval")
+        let messageID = try XCTUnwrap(importingSession.messages.last?.id)
+        importingSession.runTool(messageID: messageID)
+        await waitFor { provider.requests.count == 2 }
+        let result = try XCTUnwrap(importingSession.messages.first(where: { $0.id == messageID })?.toolResult)
+        XCTAssertFalse(result.failed)
+        XCTAssertTrue(result.output.contains("retained its own copy"))
+        XCTAssertEqual(library.configuration.skins.count, 1)
+        importingSession.stop()
+        session.permissionMode = .fullAccess
+        session.requiresCommandApproval = true
+        XCTAssertFalse(AgentCommandPermission.shouldAutoRunCommand("curl https://example.com -o clip.mp4", mode: session.commandPermissionMode))
+        session.permissionMode = .askForApproval
+        XCTAssertEqual(session.commandPermissionMode, .askForApproval)
+    }
+
     func testNativeToolApprovalRecordsEvidenceAndResumesTheGoal() async throws {
         let provider = ControlledProvider()
         let session = makeSession(provider)
@@ -2053,7 +2091,7 @@ final class AgentGoalTests: XCTestCase {
 
     func testInterruptedTypedReadsSurvivePersistenceAndCanRetry() throws {
         let directory = URL(fileURLWithPath: "/tmp")
-        for kind in AgentToolCall.Kind.allCases {
+        for kind in AgentToolCall.Kind.allCases where kind.replaySafety == .readOnly {
             var goal = AgentGoal(request: "Inspect the project", firstMessageIndex: 0)
             let call = AgentToolCall(tool: kind, summary: "Inspect", path: ".", query: kind == .searchFiles ? "needle" : nil)
             let identity = call.identity(directory: directory), first = UUID()

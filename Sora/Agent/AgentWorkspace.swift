@@ -8,9 +8,11 @@ final class AgentWorkspace: ObservableObject {
     private var sessions: [UUID: AskSession] = [:]
     private let makeSession: (UUID) -> AskSession
 
-    init(windowID: UUID) {
+    init(windowID: UUID, skins: SkinLibrary? = nil) {
         makeSession = { tabID in
-            AskSession(backends: AIBackend.live(windowID: windowID, tabID: tabID), restoreConversation: true)
+            let session = AskSession(backends: AIBackend.live(windowID: windowID, tabID: tabID), restoreConversation: true)
+            session.skinLibrary = skins
+            return session
         }
     }
 

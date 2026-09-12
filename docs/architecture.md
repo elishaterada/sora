@@ -624,7 +624,8 @@ to propagate changes to every surface without replacing sessions. Native chrome,
 Agent/history windows, input, command headers and separators share adaptive
 colors. System appearance changes use AppKit's effective-appearance observation.
 Font/spacing changes remeasure wrapped input and keep its caret geometry aligned.
-Light chrome uses an opaque base to stay readable over dark wallpapers.
+Native window glass supplies the default backdrop; Reduce Transparency supplies
+an opaque backing. Optional custom media uses its own adaptive readability tint.
 
 The existing MIT-licensed Ghostty integration patch now selects light or dark
 semantic block fills from the terminal background; explicit program backgrounds
@@ -632,6 +633,23 @@ and selections remain authoritative. Its source and rebuilt framework are kept
 in sync through `scripts/build-ghosttykit.sh`. Command duration and Agent markers
 use palette colors so future output follows the theme. Existing archived explicit
 RGB styling remains literal; changing theme does not rewrite historical output.
+
+`SkinLibrary` owns the app-wide photo/video catalog, retained originals, selection,
+per-video mute preference, and ordered rotation. Imports copy and decode off the
+main actor before atomic catalog publication; unreadable catalogs block writes
+and expose an error. `SkinBackgroundView` owns native glass, AVFoundation looping,
+visibility-aware playback, and local pointer parallax independently of terminal
+rendering and PTY ownership. Reduce Motion pauses animation; Reduce Transparency
+uses a solid backdrop. Settings previews are always muted, and video sound is
+limited to the active terminal window.
+
+Settings → Skins also prepares an editable clip request in an app-owned
+`AskSession`. Its effective command policy requires approval for downloads and
+changes even under global Full access. The provider-independent `importSkin`
+tool always requires explicit approval, rechecks the approved path, and calls
+the shared native importer before returning evidence. Optional user-installed
+download/trim executables are not application dependencies. See
+[terminal skins](terminal-skins.md) for storage, controls, and verification limits.
 
 ### App keyboard shortcuts
 

@@ -46,3 +46,6 @@ dist/
 
 # Impeccable critique snapshots (local UX review archive)
 .impeccable/
+
+# User-provided skin samples (local testing only)
+/Skin/
