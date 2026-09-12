@@ -54,3 +54,11 @@ Do not call the release complete until all of these are true:
 Release artifacts are currently ad-hoc signed and not Apple-notarized. Keep the
 first-open Gatekeeper guidance on the release page until distribution moves to
 Developer ID signing and notarization.
+
+## Build cache
+
+The Ghostty cache includes a checkout with Sora's renderer patch already applied.
+Its key must include both the build script and patch hashes. Do not restore an
+older patch revision through a broad fallback key: neither applying the new
+patch nor reverse-checking it against the old patched tree is reliable. A patch
+change starts a fresh cache and rebuilds GhosttyKit.

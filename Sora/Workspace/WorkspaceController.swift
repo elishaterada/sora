@@ -11,18 +11,29 @@ final class WorkspaceController: ObservableObject {
     private var hasRestoredFrame = false
     private var isClosed = false
     private var startedPersistence = false
+    private var commandPalette: CommandPaletteController?
     private let model: WorkspaceModel
     private var surfaces: [UUID: GhosttySurfaceView] = [:]
     private var historyTimer: Timer?
     private let historyWriter = TerminalHistoryWriter()
-    private var terminationObserver: NSObjectProtocol?
-    private let persist: (WorkspaceSnapshot) -> Void
+    private var persistenceObservers: [NSObjectProtocol] = []
+    private let persist: (WorkspaceSnapshot) -> Bool
 
     var onWindowClose: (() -> Void)?
     var agentIsBusy: (([UUID]) -> Bool)?
+    var ownsKeyWindow: Bool {
+        guard let window = NSApp.keyWindow else { return false }
+        return surfaces.values.contains { $0.window === window }
+    }
 
-    var splitFraction: CGFloat = 0.5
-    @Published private(set) var splitPair: [UUID] = []
+    @Published private(set) var paneLayout: PaneLayout<UUID>?
+    @Published private(set) var isPaneMaximized = false
+    var hasSelectedSplit: Bool { paneLayout?.leaves.contains(selectedID) == true }
+    var displayedPaneLayout: PaneLayout<UUID> {
+        hasSelectedSplit && !isPaneMaximized ? paneLayout! : .leaf(selectedID)
+    }
+    @Published private(set) var activities: [UUID: WorkspaceModel.TerminalActivity] = [:]
+    @Published private(set) var busyAgents: Set<UUID> = []
     @Published private(set) var attention: [UUID: String] = [:]
     var canReopenTab: Bool { model.canReopenTab }
     @Published private(set) var tabs: [WorkspaceModel.Tab]
@@ -36,19 +47,17 @@ final class WorkspaceController: ObservableObject {
         runtime: GhosttyRuntime,
         snapshot: WorkspaceSnapshot,
         windowID: UUID = UUID(),
-        persist: ((WorkspaceSnapshot) -> Void)? = nil
+        persist: ((WorkspaceSnapshot) -> Bool)? = nil
     ) {
         self.runtime = runtime
         self.windowID = windowID
         self.restoredFrame = snapshot.windowFrame
-        self.persist = persist ?? { [weak runtime] snapshot in runtime?.windowStore.save(snapshot, for: windowID) }
+        self.persist = persist ?? { [weak runtime] snapshot in runtime?.windowStore.save(snapshot, for: windowID) ?? false }
         self.model = WorkspaceModel(snapshot: snapshot)
         self.tabs = model.tabs
         self.selectedID = model.selectedID
-        if let fraction = snapshot.splitFraction, fraction.isFinite { splitFraction = min(0.8, max(0.2, fraction)) }
-        if let pair = snapshot.splitIDs, pair.count == 2, pair[0] != pair[1], pair.allSatisfy({ id in model.tabs.contains { $0.id == id } }) {
-            self.splitPair = pair
-        }
+        paneLayout = snapshot.restoredPaneLayout()
+        isPaneMaximized = snapshot.isPaneMaximized == true && paneLayout?.leaves.contains(model.selectedID) == true
     }
 
     func startPersistence() {
@@ -57,16 +66,22 @@ final class WorkspaceController: ObservableObject {
         self.historyTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
             self?.refreshWorkingDirectories()
         }
-        self.terminationObserver = NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
-            self?.refreshWorkingDirectories()
-            self?.historyWriter.flush()
+        for name in [WorkspaceWindowStore.terminationApproved, NSApplication.willTerminateNotification,
+                     WorkspaceWindowStore.checkpointRequested] {
+            persistenceObservers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: nil) { [weak self] _ in
+                guard let self else { return }
+                // These lifecycle notifications originate on the owning main thread.
+                if name != WorkspaceWindowStore.checkpointRequested { self.runtime.windowStore.isTerminating = true }
+                self.refreshWorkingDirectories()
+                self.historyWriter.flush()
+            })
         }
-        persist(snapshotForSave())
+        _ = persist(snapshotForSave())
     }
 
     deinit {
         historyTimer?.invalidate()
-        if let terminationObserver { NotificationCenter.default.removeObserver(terminationObserver) }
+        persistenceObservers.forEach(NotificationCenter.default.removeObserver)
         for view in surfaces.values {
             view.delegate = nil
             view.closeSession()
@@ -86,9 +101,14 @@ final class WorkspaceController: ObservableObject {
             guard let self, self.selectedID != id else { return }
             self.select(id)
         }
+        view.onCommandStarted = { [weak self] in
+            self?.activities[id] = .running
+            self?.attention[id] = nil
+        }
         view.onCommandFinished = { [weak self] code in
-            guard let self, id != self.selectedID || !NSApp.isActive else { return }
-            self.attention[id] = code == 0 ? "Finished" : "Exit \(code)"
+            guard let self, code >= 0 else { return }
+            self.activities[id] = code == 0 ? .finished : .failed(code)
+            if id != self.selectedID || !NSApp.isActive { self.attention[id] = code == 0 ? "Finished" : "Exit \(code)" }
         }
         view.onNotificationActivate = { [weak self] in
             guard let self else { return }
@@ -102,16 +122,48 @@ final class WorkspaceController: ObservableObject {
         return view
     }
 
-    func splitTerminal() {
-        guard splitPair.isEmpty else { return }
+    func canSplit(_ axis: PaneSplitAxis) -> Bool {
+        guard !hasSelectedSplit || (paneLayout?.leaves.count ?? 0) < PaneLayout<UUID>.maximumPanes else { return false }
+        guard let pane = surfaces[selectedID]?.superview else { return false }
+        let size = isPaneMaximized && hasSelectedSplit
+            ? paneLayout?.geometry(in: pane.superview?.bounds ?? .zero).panes[selectedID]?.size ?? .zero : pane.bounds.size
+        return axis == .right ? size.width >= 440 : size.height >= 440
+    }
+
+    func splitTerminal(axis: PaneSplitAxis = .right) {
+        guard canSplit(axis) else { return }
         let previous = selectedID
         let next = model.addTab(workingDirectory: surfaces[previous]?.currentWorkingDirectory() ?? model.selected.workingDirectory)
-        splitPair = [previous, next]
+        let tree = hasSelectedSplit ? paneLayout! : .leaf(previous)
+        paneLayout = tree.splitting(previous, adding: next, axis: axis)
+        isPaneMaximized = false
         publishAndPersist()
     }
-    func endSplit() { splitPair = []; publishAndPersist() }
+    func endSplit() { paneLayout = nil; isPaneMaximized = false; publishAndPersist() }
+    func togglePaneMaximized() {
+        guard hasSelectedSplit else { return }
+        isPaneMaximized.toggle()
+        publishAndPersist()
+    }
+    func focusPane(_ direction: PaneFocusDirection) {
+        guard hasSelectedSplit, let next = paneLayout?.neighbor(of: selectedID, direction: direction) else { return }
+        select(next)
+    }
+    func resizeSplit(_ id: UUID, fraction: Double, commit: Bool) {
+        paneLayout = paneLayout?.settingFraction(fraction, for: id)
+        if commit { _ = persist(snapshotForSave()) }
+    }
 
     func findOutput() { surfaces[selectedID]?.showFind() }
+
+    func showCommandPalette() {
+        guard let window = surfaces[selectedID]?.window, window.attachedSheet == nil else { return }
+        let palette = CommandPaletteController(workspace: self)
+        commandPalette = palette
+        palette.onClose = { [weak self] in self?.commandPalette = nil }
+        palette.present(in: window)
+    }
+
 
     func addTabInheritingCWD() {
         let cwd = surfaces[selectedID]?.currentWorkingDirectory()
@@ -148,6 +200,11 @@ final class WorkspaceController: ObservableObject {
         if alert.runModal() == .alertFirstButtonReturn { model.rename(id, name: input.stringValue); publishAndPersist() }
     }
     func moveTab(_ id: UUID, by offset: Int) { model.move(id, by: offset); publishAndPersist() }
+    func moveTab(_ id: UUID, to target: UUID) { model.move(id, to: target); publishAndPersist() }
+    func updateAgentBusy(_ busy: Bool, id: UUID) {
+        guard busyAgents.contains(id) != busy else { return }
+        if busy { busyAgents.insert(id) } else { busyAgents.remove(id) }
+    }
     func reopenTab() { model.reopenTab(); publishAndPersist() }
 
     func closeTab(id: UUID) {
@@ -156,37 +213,38 @@ final class WorkspaceController: ObservableObject {
             return
         }
         guard confirmClose(ids: [id]) else { return }
-        saveHistories()
-        if splitPair.contains(id) { splitPair = [] }
+        refreshWorkingDirectories()
+        let neighbor = paneLayout?.focusAfterRemoving(id)
+        let closedSelectedPane = selectedID == id && hasSelectedSplit
         guard model.closeTab(id: id) else {
-            persist(snapshotForSave())
+            _ = persist(snapshotForSave())
             NSApp.keyWindow?.performClose(nil)
             return
         }
         retireSurface(id: id)
+        if closedSelectedPane, let neighbor { model.select(neighbor) }
         publishAndPersist()
     }
 
     func select(_ id: UUID) {
-        if !splitPair.isEmpty && !splitPair.contains(id) { splitPair = [] }
         attention[id] = nil
         model.select(id)
-        publish()
+        publishAndPersist()
     }
 
     func selectNext() {
         model.selectOffset(1)
-        publish()
+        publishAndPersist()
     }
 
     func selectPrevious() {
         model.selectOffset(-1)
-        publish()
+        publishAndPersist()
     }
 
     func gotoTab(_ raw: Int32) {
         model.gotoTab(raw)
-        publish()
+        publishAndPersist()
     }
 
     /// Agent conversation label for the sidebar/chrome (first user question).
@@ -201,21 +259,30 @@ final class WorkspaceController: ObservableObject {
     }
 
     private func saveHistories() {
-        for (id, view) in surfaces {
+        for (id, view) in surfaces where view.canCheckpointHistory {
             historyWriter.enqueue(.init(id: id, text: view.historyText(), draft: view.draftText))
         }
     }
 
     func refreshWorkingDirectories() {
         guard !isClosed else { return }
-        saveHistories()
         for tab in model.tabs {
             if let url = surfaces[tab.id]?.currentWorkingDirectory() {
                 model.updateWorkingDirectory(url, id: tab.id)
             }
         }
         tabs = model.tabs
-        persist(snapshotForSave())
+        if persist(snapshotForSave()) { saveHistories() }
+    }
+
+    func applyShortcutsToAllSurfaces() {
+        for view in surfaces.values { view.applyShortcuts() }
+        objectWillChange.send()
+    }
+
+    func applyAppearanceToAllSurfaces() {
+        for view in surfaces.values { view.applyAppearance() }
+        objectWillChange.send()
     }
 
     /// Push Settings font size into every live Ghostty surface.
@@ -236,18 +303,29 @@ final class WorkspaceController: ObservableObject {
         window.setFrame(frame, display: true)
     }
 
-    func windowWillClose() {
+    func windowWillClose(explicitlyClosed: Bool) {
         onWindowClose?()
         refreshWorkingDirectories()
         isClosed = true
         historyTimer?.invalidate()
-        runtime.windowStore.close(windowID)
+        historyWriter.flush()
+        runtime.windowStore.close(windowID, explicitlyRequested: explicitlyClosed)
+    }
+
+    func projectLayoutSnapshot() -> WorkspaceSnapshot {
+        refreshWorkingDirectories()
+        return snapshotForSave()
     }
 
     private func snapshotForSave() -> WorkspaceSnapshot {
         var snapshot = model.snapshot()
-        snapshot.splitIDs = splitPair.isEmpty ? nil : splitPair
-        snapshot.splitFraction = Double(splitFraction)
+        snapshot.paneLayout = paneLayout
+        snapshot.isPaneMaximized = isPaneMaximized
+        // Keep the legacy pair fields for an older build's simple layouts.
+        if case .split(_, .right, let fraction, .leaf(let first), .leaf(let second)) = paneLayout {
+            snapshot.splitIDs = [first, second]
+            snapshot.splitFraction = fraction
+        }
         snapshot.windowFrame = surfaces.values.compactMap { $0.window }.first.map { NSStringFromRect($0.frame) } ?? restoredFrame
         return snapshot
     }
@@ -255,20 +333,25 @@ final class WorkspaceController: ObservableObject {
     private func publishAndPersist() {
         guard !isClosed else { return }
         publish()
-        persist(snapshotForSave())
+        _ = persist(snapshotForSave())
     }
 
     private func publish() {
         tabs = model.tabs
         selectedID = model.selectedID
         attention[selectedID] = nil
-        if !splitPair.isEmpty && !splitPair.contains(selectedID) { splitPair = [] }
+        paneLayout = paneLayout?.retaining(Set(tabs.map(\.id)))
+        if paneLayout?.isSplit != true { paneLayout = nil }
+        if !hasSelectedSplit { isPaneMaximized = false }
         let title = model.selected.displayTitle
         runtime.applyTitle(title)
         surfaces[selectedID]?.window?.title = title
     }
 
     private func retireSurface(id: UUID) {
+        activities[id] = nil
+        attention[id] = nil
+        busyAgents.remove(id)
         guard let view = surfaces.removeValue(forKey: id) else { return }
         view.delegate = nil
         view.closeSession()
@@ -305,7 +388,7 @@ extension WorkspaceController: GhosttySurfaceDelegate {
         case GHOSTTY_ACTION_CLOSE_TAB_MODE_OTHER:
             let removed = model.tabs.map(\.id).filter { $0 != id }
             guard confirmClose(ids: removed) else { return }
-            saveHistories()
+            refreshWorkingDirectories()
             model.closeOtherTabs(keeping: id)
             removed.forEach(retireSurface(id:))
             publishAndPersist()
@@ -313,7 +396,7 @@ extension WorkspaceController: GhosttySurfaceDelegate {
             guard let index = model.tabs.firstIndex(where: { $0.id == id }) else { return }
             let removed = Array(model.tabs.suffix(from: index + 1).map(\.id))
             guard confirmClose(ids: removed) else { return }
-            saveHistories()
+            refreshWorkingDirectories()
             model.closeTabsToTheRight(of: id)
             removed.forEach(retireSurface(id:))
             publishAndPersist()

@@ -25,6 +25,9 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     private(set) var lastWorkingDirectory: URL?
     private(set) var cellSize = NSSize(width: 8, height: 16)
     private let completion = CompletionSession()
+    private let commandCompletions = CommandCompletionSession()
+    private var completionMenu: CommandCompletionMenu?
+    private var completionRequest: CommandCompletionRequest?
     private let ghostText = GhostTextView()
     private var commandHeaderStyles: [String: NSAttributedString] = [:]
     private var commandHeaderFont: NSFont?
@@ -48,20 +51,29 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     private var completionRefreshPending = false
     private var shellRecognizesCommand = false
     private var shellEditLine: String?
+    private var shellContext: ShellContextReport?
+    private var shellContextPID: UInt64?
+    private var nativeInputEnabled = false
     private var runningCommand: String?
     private var shellCursorOffset = 0
     private var promptIntent: PromptIntent?
     var onSessionUsed: (() -> Void)?
     var onFocus: (() -> Void)?
+    var onCommandStarted: (() -> Void)?
     var onCommandFinished: ((Int16) -> Void)?
     let notificationID = UUID()
     let tabID: UUID
     var onNotificationActivate: (() -> Void)?
     var onBell: (() -> Void)?
-    var draftText: String { isShellPromptReady ? promptLineForSubmission() : "" }
+    // An immediate quit during shell startup must not replace the restored files
+    // with an empty screen or an edit buffer that has not loaded yet.
+    var canCheckpointHistory: Bool { surface != nil && !startupInput.isWaiting }
+    var draftText: String { isShellPromptReady && !isRemoteSession ? (shellEditLine ?? "") : "" }
     var onAgentPrompt: ((String) -> Void)?
+    var onAgentOutput: ((TerminalOutputAttachment) -> Void)?
     var onContinueAgent: (() -> Bool)?
     let commandHistory = CommandHistorySession()
+    private var historySearch: CommandHistorySearchController?
     var onHistoryChange: (() -> Void)?
     let blockActions = CommandBlockActionsView()
     private(set) var isBrowsingCommandBlocks = false
@@ -102,7 +114,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
 
     func attachStickyPromptBar(_ bar: StickyPromptBar) {
         stickyBar = bar
-        refreshStickyBar()
+        applyShortcuts()
     }
 
     @available(*, unavailable)
@@ -121,11 +133,12 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
             // is owned by WindowChromeView. Do not reserve a titlebar strip here.
             window.isOpaque = false
             window.backgroundColor = SoraTheme.nsWindowFill
-            window.appearance = NSAppearance(named: .darkAqua)
+            window.appearance = TerminalPreferences.appearance.native
             createSurfaceIfNeeded()
             updateSurfaceMetrics()
             setOccluded(isHidden)
         } else {
+            dismissCompletionMenu()
             setOccluded(true)
         }
     }
@@ -163,6 +176,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
 
     override func resignFirstResponder() -> Bool {
         let resigned = super.resignFirstResponder()
+        if resigned { dismissCompletionMenu() }
         if resigned, let surface {
             ghostty_surface_set_focus(surface, false)
         }
@@ -197,7 +211,15 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         }
         finishStartupForOtherProcessIfNeeded()
         if startupInput.enqueue(.keyDown(event)) { return }
-        if replaceSelectedInputIfNeeded(event) { return }
+        if replaceSelectedInputIfNeeded(event) { dismissCompletionMenu(); return }
+        if handleCompletionMenuKey(event) { return }
+        if event.keyCode == PromptEvent.rightArrow,
+           event.modifierFlags.intersection([.command, .control, .option, .shift]) == [.option],
+           canAcceptCompletionWord {
+            acceptNextCompletionWord()
+            swallowedKeyCodes.insert(event.keyCode)
+            return
+        }
         if handleCommandBlockKey(event) { return }
         if handleCommandHistoryKey(event) { return }
         stickyBar?.resetCaretBlink()
@@ -209,7 +231,10 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
             || characters == "\r" || characters == "\n"
         // Fullscreen applications own their input; do not query history or the
         // filesystem, rank shell suggestions, or intercept Tab/Right Arrow.
-        if !isShellPromptReady && !(isReturn && foregroundProcessIsShell()) {
+        if !hasLocalEditablePrompt || (!isShellPromptReady && !(isReturn && foregroundProcessIsShell())) {
+            if isReturn { isShellPromptReady = false; shellEditLine = nil; setNativeInput(false) }
+            completion.stopTracking()
+            refreshStickyBar()
             sendKey(event, action: event.isARepeat ? GHOSTTY_ACTION_REPEAT : GHOSTTY_ACTION_PRESS)
             return
         }
@@ -307,12 +332,15 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         guard event.type == .keyDown else { return false }
+        if runtime.shortcuts.matches(event) { return false }
         let chars = event.charactersIgnoringModifiers ?? ""
-        // Let SwiftUI's AI menu handle Ask before terminal key forwarding.
-        if chars.lowercased() == "a",
+        // App-owned command entry points must precede terminal key forwarding.
+        if ["a", "p", "r"].contains(chars.lowercased()),
            event.modifierFlags.intersection([.command, .shift, .option, .control]) == [.command, .shift] {
             return false
         }
+        if [PromptEvent.upArrow, PromptEvent.downArrow].contains(event.keyCode),
+           event.modifierFlags.intersection([.command, .shift, .option, .control]) == [.command, .option] { return false }
         // Native workspace shortcuts must reach the menu before Ghostty.
         if ["n", "t", "d", "f", "w"].contains(chars.lowercased()),
            event.modifierFlags.contains(.command),
@@ -417,6 +445,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     var usesBinaryImagePaste: Bool { !isShellPromptReady }
 
     func insertDroppedImages(_ files: [URL]) throws {
+        guard !isRemoteSession else { throw TerminalImageDrop.DropError.remoteTransferRequired }
         if usesBinaryImagePaste {
             guard files.count == 1, let image = files.first else { throw TerminalImageDrop.DropError.multipleImages }
             try GhosttyClipboard.writeImage(at: image, to: .general)
@@ -440,7 +469,12 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     }
 
     func pasteFromPasteboard() {
+        dismissCompletionMenu()
         guard surface != nil else { return }
+        if isRemoteSession, GhosttyClipboard.hasImage(in: .general) {
+            NSAlert(error: TerminalImageDrop.DropError.remoteTransferRequired).runModal()
+            return
+        }
         if usesBinaryImagePaste, GhosttyClipboard.hasImage(in: .general) {
             pasteClipboardImageIntoProgram()
             return
@@ -486,6 +520,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     // MARK: - Mouse
 
     override func mouseDown(with event: NSEvent) {
+        dismissCompletionMenu()
         outputMouseDragged = false
         dismissCommandHistory()
         leaveCommandBlocks(focusInput: false)
@@ -503,6 +538,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     }
 
     func applyStickyBarFocus() {
+        dismissCompletionMenu()
         acceptCommandHistory()
         leaveCommandBlocks()
         window?.makeFirstResponder(self)
@@ -546,6 +582,18 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     }
 
     override func rightMouseDown(with event: NSEvent) {
+        if !isBrowsingCommandBlocks, let surface, ghostty_surface_has_selection(surface) {
+            handledBlockContextClick = true
+            let menu = NSMenu(title: "Selected Output")
+            let copy = NSMenuItem(title: "Copy", action: #selector(copy(_:)), keyEquivalent: "")
+            copy.target = self
+            menu.addItem(copy)
+            let ask = NSMenuItem(title: "Ask Agent About Selection…", action: #selector(askAboutOutput(_:)), keyEquivalent: "")
+            ask.target = self
+            menu.addItem(ask)
+            NSMenu.popUpContextMenu(menu, with: event, for: self)
+            return
+        }
         handledBlockContextClick = selectCommandBlock(at: event)
         if handledBlockContextClick {
             NSMenu.popUpContextMenu(commandBlockMenu(), with: event, for: self)
@@ -609,14 +657,34 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     // MARK: - Lifecycle
 
     private var findPanel: TerminalFindPanel?
-    func showFind() {
+    func showFind(scope: OutputSearchScope? = nil, query: String? = nil) {
         if findPanel == nil { findPanel = TerminalFindPanel(surface: self) }
-        findPanel?.show()
+        findPanel?.show(scope: scope ?? (isBrowsingCommandBlocks ? .selectedBlock : .terminal), query: query ?? selectedTextForFind())
     }
     func updateFindCount(_ count: Int) { findPanel?.setCount(count) }
+    func updateFindSelection(_ index: Int) { findPanel?.setSelected(index) }
     func searchOutput(_ query: String) { performBinding("search:" + query) }
     func navigateFind(previous: Bool) { performBinding("navigate_search:" + (previous ? "previous" : "next")) }
     func endFind() { performBinding("end_search") }
+    private func selectedTextForFind() -> String? {
+        guard !isBrowsingCommandBlocks, let surface, ghostty_surface_has_selection(surface) else { return nil }
+        var text = ghostty_text_s()
+        guard ghostty_surface_read_selection(surface, &text) else { return nil }
+        defer { ghostty_surface_free_text(surface, &text) }
+        guard let bytes = text.text else { return nil }
+        var data = Data(UnsafeRawBufferPointer(start: bytes, count: min(Int(text.text_len), 4096)))
+        while String(data: data, encoding: .utf8) == nil { data.removeLast() }
+        let value = String(decoding: data, as: UTF8.self)
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : String(trimmed.prefix(512))
+    }
+    func captureOutputSearchSnapshot(scope: OutputSearchScope) -> OutputSearchSnapshot? {
+        if scope == .selectedBlock {
+            guard isBrowsingCommandBlocks, let command = readCommandBlock(command: true) else { return nil }
+            return OutputSearchSnapshot(text: readCommandBlock(command: false) ?? "", command: command)
+        }
+        return plainHistoryText().map { OutputSearchSnapshot(text: $0) }
+    }
     var hasRunningTask: Bool {
         guard let surface else { return false }
         return ghostty_surface_needs_confirm_quit(surface)
@@ -644,7 +712,8 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         if ghostty_surface_read_command_history(surface, &history) {
             defer { ghostty_surface_free_text(surface, &history) }
             guard let bytes = history.text else { return "" }
-            return String(decoding: UnsafeRawBufferPointer(start: bytes, count: Int(history.text_len)), as: UTF8.self)
+            let text = String(decoding: UnsafeRawBufferPointer(start: bytes, count: Int(history.text_len)), as: UTF8.self)
+            return TerminalHistoryArchive.preparingGhosttyExport(text, promptReady: isShellPromptReady)
         }
         NSLog("Could not capture command boundaries; falling back to styled terminal history")
         isExportingHistory = true
@@ -736,6 +805,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
             // shader sees iFocus=0 and custom-shader-animation never runs.
             reassertTerminalFocus()
         } else {
+            dismissCompletionMenu()
             dismissCommandHistory()
             ghostText.hide()
             if runtime.activeSurface === self {
@@ -755,8 +825,39 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         destroySurface()
     }
 
-    func currentWorkingDirectory() -> URL? {
+    private var foregroundExecutable: String? {
         guard let surface else { return nil }
+        let pid = ghostty_surface_foreground_pid(surface)
+        guard pid > 0, pid <= UInt64(pid_t.max) else { return nil }
+        return ForegroundWorkingDirectory.executableName(pid: pid_t(pid))
+    }
+
+    var isRemoteSession: Bool {
+        ShellContextReport.isRemote(report: shellContext, foreground: foregroundExecutable,
+            reportedPID: shellContextPID, foregroundPID: surface.map(ghostty_surface_foreground_pid))
+    }
+    private var hasLocalEditablePrompt: Bool { !isRemoteSession && shellEditLine != nil }
+    private var contextLabel: String? { isRemoteSession ? ShellContextReport.displayRemote(report: shellContext) : nil }
+
+    private func setNativeInput(_ enabled: Bool) {
+        guard nativeInputEnabled != enabled else { return }
+        nativeInputEnabled = enabled
+        if let surface { ghostty_surface_set_native_input(surface, enabled) }
+    }
+
+    @discardableResult
+    func allowLocalAgent() -> Bool {
+        guard isRemoteSession else { return true }
+        let alert = NSAlert()
+        alert.messageText = "Agent works in a local terminal"
+        alert.informativeText = "This tab is connected to a remote shell. Open a local tab to use Agent; commands here continue to run in the remote shell."
+        alert.addButton(withTitle: "OK")
+        if let window, window.attachedSheet == nil { alert.beginSheetModal(for: window) }
+        return false
+    }
+
+    func currentWorkingDirectory() -> URL? {
+        guard !isRemoteSession, let surface else { return nil }
         let pid = ghostty_surface_foreground_pid(surface)
         guard pid > 0, pid <= UInt64(pid_t.max) else { return nil }
         return ForegroundWorkingDirectory.url(pid: pid_t(pid))
@@ -775,9 +876,27 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
 
     func applyTitle(_ title: String) {
         guard let title = titleAssembler.consume(title) else { return }
+        if title.hasPrefix(ShellContextReport.prefix) {
+            guard let report = ShellContextReport.parse(title) else { return }
+            shellContext = report
+            shellContextPID = surface.map(ghostty_surface_foreground_pid)
+            promptContextDirectory = nil
+            promptContextBranch = nil
+            if report.shell != "zsh" { shellEditLine = nil; setNativeInput(false) }
+            if report.isRemote || isRemoteSession {
+                completion.stopTracking()
+                dismissCompletionMenu()
+                dismissCommandHistory()
+                refreshStickyBar()
+            } else { applyWorkingDirectory(report.path) }
+            return
+        }
         if let command = ShellEditLine.startedCommand(title: title) {
+            setNativeInput(false)
+            dismissCompletionMenu()
             onSessionUsed?()
-            runningCommand = command.isEmpty ? nil : command
+            if !isRemoteSession { runningCommand = command.isEmpty ? nil : command }
+            if !command.isEmpty { onCommandStarted?() }
             dismissCommandHistory()
             leaveCommandBlocks(focusInput: false)
             isShellPromptReady = false
@@ -795,6 +914,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
             if !isShellPromptReady { completion.reset() }
             shellRecognizesCommand = ShellEditLine.shellRecognizesCommand(title: title)
             shellEditLine = line
+            setNativeInput(true)
             shellCursorOffset = ShellEditLine.cursorOffset(title: title) ?? line.unicodeScalars.count
             // Only ZLE emits this, so the shell is definitionally at a prompt.
             isShellPromptReady = true
@@ -814,6 +934,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     }
 
     func applyWorkingDirectory(_ path: String) {
+        guard !isRemoteSession, path.hasPrefix("/") else { refreshStickyBar(); return }
         let url = URL(fileURLWithPath: path)
         promptContextDirectory = nil
         lastWorkingDirectory = url
@@ -839,15 +960,21 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         dismissCommandHistory()
         onCommandFinished?(exitCode)
         isShellPromptReady = true
-        shellEditLine = ""
+        shellEditLine = nil
+        guard !isRemoteSession else {
+            completion.stopTracking()
+            refreshStickyBar()
+            return
+        }
         let cwd = lastWorkingDirectory ?? currentWorkingDirectory() ?? initialWorkingDirectory
         let run = runtime.recordCommand(
             tabID: tabID,
-            command: runningCommand ?? lastShellTitle,
+            command: runningCommand ?? (shellContext?.shell == "bash" ? "" : lastShellTitle),
             cwd: cwd,
             exitCode: exitCode,
             durationNanos: durationNanos
         )
+        if let run { runtime.notifications.commandFinished(run, from: self) }
         runningCommand = nil
         completion.reset()
         ghostTextAnchor = nil
@@ -866,7 +993,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     }
 
     var canRunAgentCommand: Bool {
-        isShellPromptReady && completion.buffer.isTracking && completion.buffer.text.isEmpty
+        hasLocalEditablePrompt && isShellPromptReady && completion.buffer.isTracking && completion.buffer.text.isEmpty
     }
 
     @discardableResult
@@ -919,6 +1046,8 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     }
 
     private func destroySurface() {
+        findPanel?.dismiss(returnFocus: false)
+        findPanel = nil
         ghostText.hide()
         guard let surface else { return }
         if runtime.activeSurface === self {
@@ -1081,6 +1210,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
 
     /// Recomputes only the shell/agent route label for the current line.
     private func displayIntent(for line: String) -> PromptIntent {
+        guard hasLocalEditablePrompt else { return .shell }
         switch PromptIntentClassifier.submission(for: line, allowImplicitAgent: TerminalPreferences.automaticAgentRouting,
                                                 shellCommandKnown: shellRecognizesCommand && line == shellEditLine,
                                                 commandExists: { _ in line == shellEditLine ? shellRecognizesCommand : true }) {
@@ -1099,7 +1229,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
 
     private func refreshCompletion() {
         refreshCommandHeader()
-        guard isShellPromptReady else {
+        guard isShellPromptReady, hasLocalEditablePrompt else {
             completion.stopTracking()
             ghostText.hide()
             refreshStickyBar()
@@ -1140,17 +1270,17 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
 
     private func refreshStickyBar() {
         guard let stickyBar else { return }
-        let cwd = lastWorkingDirectory
+        let cwd = isRemoteSession ? nil : (lastWorkingDirectory
             ?? currentWorkingDirectory()
-            ?? initialWorkingDirectory
-        let path = StickyPromptBarModel.displayPath(for: cwd)
+            ?? initialWorkingDirectory)
+        let path = contextLabel ?? StickyPromptBarModel.displayPath(for: cwd)
         if promptContextDirectory != cwd {
             promptContextDirectory = cwd
             promptContextBranch = cwd.flatMap { GitRepository.branchName(containing: $0) }
         }
         let branch = promptContextBranch
         let historyPreview = commandHistory.isPresented ? commandHistory.selected?.command : nil
-        let suggestion = commandHistory.isPresented ? nil : completion.suggestion
+        let suggestion = commandHistory.isPresented || !hasLocalEditablePrompt ? nil : completion.suggestion
         let buffer = historyPreview ?? shellEditLine ?? completion.buffer.text
         let predicted = isShellPromptReady && buffer.isEmpty && suggestion?.source == .prediction
         let line: String? = isShellPromptReady
@@ -1170,15 +1300,22 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         let validSuffix = completion.buffer.isTracking && completion.buffer.text == buffer
             && shellCursorOffset == buffer.unicodeScalars.count && !buffer.isEmpty
             && suggestion?.source != .prediction && promptIntent != .agent
-        stickyBar.updateSuggestion(validSuffix ? suggestion?.insertSuffix : nil)
+        stickyBar.updateSuggestion(validSuffix ? suggestion?.insertSuffix : nil,
+                                   acceptsWord: validSuffix && completion.nextWordSuffix != nil)
         stickyBar.updateBlockBrowsing(isBrowsingCommandBlocks)
         stickyBar.updateHistoryBrowsing(commandHistory.isPresented, hasSelection: historyPreview != nil)
+        stickyBar.updateShellInput(mirrored: shellEditLine != nil, remote: isRemoteSession)
     }
 
     // MARK: - Command history in the input
 
     private func handleCommandHistoryKey(_ event: NSEvent) -> Bool {
         let mods = event.modifierFlags.intersection([.command, .control, .option, .shift])
+        if mods == [.control], event.keyCode == 15, canSearchHistory {
+            showHistorySearch()
+            swallowedKeyCodes.insert(event.keyCode)
+            return true
+        }
         if commandHistory.isPresented {
             if mods.isEmpty {
                 switch event.keyCode {
@@ -1220,7 +1357,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
             return false
         }
         guard window?.firstResponder === self,
-              !isBrowsingCommandBlocks,
+              !isBrowsingCommandBlocks, hasLocalEditablePrompt,
               CommandHistoryInput.opensHistory(
                 keyCode: event.keyCode, modifiers: event.modifierFlags,
                 promptReady: isShellPromptReady, hasShellIntegration: shellEditLine != nil,
@@ -1243,11 +1380,37 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         window?.makeFirstResponder(self)
     }
 
+    var canInsertCommandForEditing: Bool { isShellPromptReady && hasLocalEditablePrompt }
+    var canSearchHistory: Bool { canInsertCommandForEditing && !isBrowsingCommandBlocks }
+
+    func showHistorySearch() {
+        guard canSearchHistory, let window, window.attachedSheet == nil else { return }
+        dismissCommandHistory()
+        let picker = CommandHistorySearchController(store: runtime.history, tabID: tabID,
+            directory: currentWorkingDirectory() ?? initialWorkingDirectory ?? FileManager.default.homeDirectoryForCurrentUser)
+        historySearch = picker
+        picker.onFinish = { [weak self] command in
+            guard let self else { return }
+            self.historySearch = nil
+            self.window?.makeFirstResponder(self)
+            if let command, self.canSearchHistory { self.stageShellCommand(command) }
+        }
+        picker.present(in: window)
+    }
+
     private func acceptCommandHistory() {
         guard commandHistory.isPresented else { return }
         let command = commandHistory.selected?.command
         commandHistory.dismiss()
         guard isShellPromptReady, let command else { return }
+        stageShellCommand(command)
+    }
+
+    func insertCommandForEditing(_ command: String) {
+        guard canInsertCommandForEditing else { NSSound.beep(); return }
+        dismissCommandHistory()
+        if isBrowsingCommandBlocks { leaveCommandBlocks() }
+        window?.makeFirstResponder(self)
         stageShellCommand(command)
     }
 
@@ -1263,6 +1426,125 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         shellCursorOffset = command.unicodeScalars.count
         shellRecognizesCommand = false
         refreshStickyBar()
+        scheduleCompletionRefresh()
+    }
+
+    // MARK: - Contextual command completions
+
+    private var canAcceptCompletionWord: Bool {
+        canInsertCommandForEditing && !isBrowsingCommandBlocks && !commandHistory.isPresented
+            && shellEditLine == completion.buffer.text
+            && shellCursorOffset == completion.buffer.text.unicodeScalars.count
+            && promptIntent != .agent && completion.nextWordSuffix != nil
+    }
+
+    func acceptNextCompletionWord() {
+        guard canAcceptCompletionWord, let suffix = completion.acceptNextWord() else { NSSound.beep(); return }
+        dismissCompletionMenu()
+        shellEditLine = completion.buffer.text
+        shellCursorOffset = completion.buffer.text.unicodeScalars.count
+        insertText(suffix)
+        refreshCompletion()
+        scheduleCompletionRefresh()
+    }
+
+    func showCommandCompletions() {
+        guard requestCommandCompletions(autoAcceptSingle: false) else {
+            if canInsertCommandForEditing && !isBrowsingCommandBlocks { sendShellCompletionTab() }
+            return
+        }
+    }
+
+    private func handleCompletionMenuKey(_ event: NSEvent) -> Bool {
+        let modifiers = event.modifierFlags.intersection([.command, .control, .option, .shift])
+        if let menu = completionMenu, modifiers.isEmpty {
+            switch event.keyCode {
+            case PromptEvent.upArrow: menu.move(-1)
+            case PromptEvent.downArrow: menu.move(1)
+            case PromptEvent.tab, PromptEvent.returnKey: menu.accept()
+            case PromptEvent.escape: dismissCompletionMenu()
+            default: dismissCompletionMenu(); return false
+            }
+            swallowedKeyCodes.insert(event.keyCode)
+            return true
+        }
+        if commandCompletions.isPending || completionMenu != nil {
+            dismissCompletionMenu()
+            if modifiers.isEmpty, event.keyCode == PromptEvent.escape {
+                swallowedKeyCodes.insert(event.keyCode)
+                return true
+            }
+        }
+        guard modifiers.isEmpty, event.keyCode == PromptEvent.tab, !commandHistory.isPresented,
+              requestCommandCompletions(autoAcceptSingle: true) else { return false }
+        swallowedKeyCodes.insert(event.keyCode)
+        return true
+    }
+
+    @discardableResult
+    private func requestCommandCompletions(autoAcceptSingle: Bool) -> Bool {
+        guard canInsertCommandForEditing, !isBrowsingCommandBlocks, let line = shellEditLine,
+              shellCursorOffset == line.unicodeScalars.count else { return false }
+        let directory = currentWorkingDirectory() ?? initialWorkingDirectory ?? FileManager.default.homeDirectoryForCurrentUser
+        guard let request = CommandCompletionRequest.parse(line: line, directory: directory) else { return false }
+        dismissCompletionMenu()
+        completionRequest = request
+        commandCompletions.request(request) { [weak self] result in
+            guard let self, self.completionRequest == request,
+                  self.canInsertCommandForEditing, self.shellEditLine == request.line,
+                  self.shellCursorOffset == request.line.unicodeScalars.count,
+                  self.window?.firstResponder === self,
+                  (self.currentWorkingDirectory() ?? self.initialWorkingDirectory ?? FileManager.default.homeDirectoryForCurrentUser) == request.directory
+            else { return }
+            switch result {
+            case .success(let choices) where choices.isEmpty:
+                self.dismissCompletionMenu()
+                self.sendShellCompletionTab()
+            case .success(let choices) where choices.count == 1 && autoAcceptSingle:
+                self.acceptCommandCompletion(choices[0], request: request)
+            default:
+                let menu = CommandCompletionMenu()
+                self.completionMenu = menu
+                menu.onChoose = { [weak self] choice in self?.acceptCommandCompletion(choice, request: request) }
+                menu.onCancel = { [weak self] in self?.dismissCompletionMenu() }
+                menu.onShellCompletion = { [weak self] in
+                    self?.dismissCompletionMenu()
+                    self?.sendShellCompletionTab()
+                }
+                switch result {
+                case .success(let choices): menu.present(choices: choices, above: self.stickyBar ?? self)
+                case .failure(let error): menu.present(choices: [], error: error.localizedDescription, above: self.stickyBar ?? self)
+                }
+            }
+        }
+        return true
+    }
+
+    private func acceptCommandCompletion(_ choice: CommandCompletionChoice, request: CommandCompletionRequest) {
+        guard completionRequest == request, canInsertCommandForEditing,
+              shellEditLine == request.line, shellCursorOffset == request.line.unicodeScalars.count,
+              (currentWorkingDirectory() ?? initialWorkingDirectory ?? FileManager.default.homeDirectoryForCurrentUser) == request.directory else {
+            dismissCompletionMenu()
+            return
+        }
+        dismissCompletionMenu()
+        stageShellCommand(choice.inserting(into: request))
+    }
+
+    private func dismissCompletionMenu() {
+        commandCompletions.cancel()
+        completionRequest = nil
+        completionMenu?.hide()
+        completionMenu = nil
+    }
+
+    private func sendShellCompletionTab() {
+        guard canInsertCommandForEditing, let event = NSEvent.keyEvent(with: .keyDown, location: .zero,
+            modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window?.windowNumber ?? 0,
+            context: nil, characters: "\t", charactersIgnoringModifiers: "\t", isARepeat: false, keyCode: PromptEvent.tab) else { return }
+        completion.stopTracking()
+        sendKey(event, action: GHOSTTY_ACTION_PRESS)
+        sendKey(event, action: GHOSTTY_ACTION_RELEASE)
         scheduleCompletionRefresh()
     }
 
@@ -1409,12 +1691,38 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         add("Copy Command", #selector(copyBlockCommand(_:)), enabled: hasCommand)
         add("Copy Output", #selector(copyBlockOutput(_:)), enabled: hasOutput)
         add("Copy Entire Block", #selector(copy(_:)), enabled: hasCommand)
+        add("Save Command…", #selector(saveBlockCommand(_:)), enabled: hasCommand)
         add("Save Output…", #selector(saveBlockOutput(_:)), enabled: hasOutput)
+        add("Bookmark Block", #selector(bookmarkBlock(_:)), enabled: hasCommand && hasOutput)
+        add("Find in Block…", #selector(findInBlock(_:)), enabled: hasCommand)
+        add("Ask Agent About Output…", #selector(askAboutOutput(_:)), enabled: hasOutput)
         menu.addItem(.separator())
         add("Use Command in Input", #selector(reuseBlockCommand(_:)),
             enabled: hasCommand && isShellPromptReady && shellEditLine != nil)
         add("Return to Input", #selector(returnFromBlock(_:)))
         return menu
+    }
+
+    @objc func askAboutOutput(_ sender: Any?) {
+        let source: TerminalOutputAttachment.Source
+        let value: String
+        var excerpt = false
+        if isBrowsingCommandBlocks, let output = readCommandBlock(command: false), !output.isEmpty {
+            source = .commandBlock
+            value = output
+        } else if let surface, ghostty_surface_has_selection(surface) {
+            var text = ghostty_text_s()
+            guard ghostty_surface_read_selection(surface, &text) else { return }
+            defer { ghostty_surface_free_text(surface, &text) }
+            guard let bytes = text.text, text.text_len > 0 else { return }
+            source = .selection
+            let count = min(Int(text.text_len), TerminalOutputAttachment.byteLimit + 4)
+            value = String(decoding: UnsafeRawBufferPointer(start: bytes, count: count), as: UTF8.self)
+            excerpt = Int(text.text_len) > TerminalOutputAttachment.byteLimit
+        } else { NSSound.beep(); return }
+        onAgentOutput?(TerminalOutputAttachment(source: source,
+            command: source == .commandBlock ? readCommandBlock(command: true) : nil,
+            directory: currentWorkingDirectory()?.path, text: value, isExcerpt: excerpt))
     }
 
     @objc private func copyBlockCommand(_ sender: Any?) {
@@ -1426,6 +1734,24 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         guard let text = readCommandBlock(command: false) else { NSSound.beep(); return }
         GhosttyClipboard.writePlainText(text, to: .general)
     }
+
+    @objc private func saveBlockCommand(_ sender: Any?) {
+        guard !isRemoteSession, let command = readCommandBlock(command: true) else { NSSound.beep(); return }
+        SavedCommandEditor.present(command: command,
+            directory: currentWorkingDirectory() ?? initialWorkingDirectory ?? FileManager.default.homeDirectoryForCurrentUser,
+            in: window)
+    }
+
+    @objc private func bookmarkBlock(_ sender: Any?) {
+        guard let command = readCommandBlock(command: true), let output = readCommandBlock(command: false) else { return }
+        do {
+            let id = try runtime.bookmarks.save(command: command, output: output,
+                directory: contextLabel ?? currentWorkingDirectory()?.path ?? initialWorkingDirectory?.path ?? "", tabID: tabID)
+            runtime.bookmarkLibrary.show(select: id)
+        } catch { NSAlert(error: error).runModal() }
+    }
+
+    @objc private func findInBlock(_ sender: Any?) { showFind(scope: .selectedBlock) }
 
     @objc private func saveBlockOutput(_ sender: Any?) {
         guard let text = readCommandBlock(command: false), let window else { return }
@@ -1536,6 +1862,20 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         )
     }
 
+    func applyShortcuts() {
+        stickyBar?.agentShortcut = runtime.shortcuts.binding(.openAgent).display
+        refreshStickyBar()
+    }
+
+    func applyAppearance() {
+        window?.appearance = TerminalPreferences.appearance.native
+        dismissCompletionMenu()
+        stickyBar?.applyAppearance()
+        refreshCommandHeader()
+        superview?.needsLayout = true
+        needsDisplay = true
+    }
+
     /// Apply a live font size via Ghostty's `set_font_size` binding.
     func applyFontSize(_ points: CGFloat) {
         let clamped = min(
@@ -1543,59 +1883,6 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
             max(TerminalPreferences.minimumFontSize, points.rounded())
         )
         performBinding("set_font_size:\(clamped)")
-    }
-}
-
-
-/// Native floating find bar; Ghostty owns matching, highlighting and scrolling.
-private final class TerminalFindPanel: NSObject, NSSearchFieldDelegate, NSWindowDelegate {
-    private weak var surface: GhosttySurfaceView?
-    private let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 470, height: 76),
-                                styleMask: [.titled, .closable, .utilityWindow], backing: .buffered, defer: false)
-    private let field = NSSearchField(frame: NSRect(x: 12, y: 38, width: 330, height: 24))
-    private let count = NSTextField(labelWithString: "Type to search output")
-    init(surface: GhosttySurfaceView) {
-        self.surface = surface
-        super.init()
-        panel.title = "Find in Terminal Output"
-        panel.isReleasedWhenClosed = false
-        panel.delegate = self
-        field.placeholderString = "Find in output"
-        field.delegate = self
-        panel.contentView?.addSubview(field)
-        count.frame = NSRect(x: 12, y: 10, width: 320, height: 20)
-        panel.contentView?.addSubview(count)
-        let previous = NSButton(title: "↑", target: self, action: #selector(previousMatch))
-        previous.setAccessibilityLabel("Previous match")
-        previous.frame = NSRect(x: 350, y: 35, width: 48, height: 28)
-        let next = NSButton(title: "↓", target: self, action: #selector(nextMatch))
-        next.setAccessibilityLabel("Next match")
-        next.frame = NSRect(x: 404, y: 35, width: 48, height: 28)
-        panel.contentView?.addSubview(previous)
-        panel.contentView?.addSubview(next)
-    }
-    func show() {
-        if let window = surface?.window {
-            panel.setFrameTopLeftPoint(NSPoint(x: window.frame.maxX - 490, y: window.frame.maxY - 80))
-        }
-        panel.makeKeyAndOrderFront(nil)
-        panel.makeFirstResponder(field)
-    }
-    func setCount(_ total: Int) { count.stringValue = total < 0 ? "Searching…" : "\(total) matches" }
-    func controlTextDidChange(_ obj: Notification) { surface?.searchOutput(field.stringValue) }
-    func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
-        if selector == #selector(NSResponder.insertNewline(_:)) {
-            surface?.navigateFind(previous: NSApp.currentEvent?.modifierFlags.contains(.shift) == true)
-            return true
-        }
-        if selector == #selector(NSResponder.cancelOperation(_:)) { panel.close(); return true }
-        return false
-    }
-    @objc private func previousMatch() { surface?.navigateFind(previous: true) }
-    @objc private func nextMatch() { surface?.navigateFind(previous: false) }
-    func windowWillClose(_ notification: Notification) {
-        surface?.endFind()
-        surface?.window?.makeKeyAndOrderFront(nil)
-        if let surface { surface.window?.makeFirstResponder(surface) }
+        applyAppearance()
     }
 }

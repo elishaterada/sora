@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 
 struct AskView: View {
+    @AppStorage(TerminalPreferences.appearanceKey) private var appearanceName = "dark"
     @ObservedObject var session: AskSession
     var inline = false
     var onClose: (() -> Void)?
@@ -11,6 +12,7 @@ struct AskView: View {
     @State private var debugLog: String?
     @State private var debugLogError: String?
     @State private var transcriptLimit = 40
+    @StateObject private var transcriptScroll = AgentTranscriptScrollController()
     @State private var showsPrograms = false
     @State private var programDirectories: [UUID: String] = [:]
     @State private var programArguments: [UUID: String] = [:]
@@ -22,6 +24,11 @@ struct AskView: View {
         session.messages.filter { $0.isAgentContinuation != true }
     }
 
+    private var transcriptRevision: String {
+        guard let last = visibleMessages.last else { return "empty" }
+        return "\(last.id)-\(last.text.count)-\(last.status)-\(last.processProgress?.bytesRead ?? 0)-\(last.toolResult?.output.count ?? 0)-\(visibleMessages.count)"
+    }
+
     private var conversationTitle: String? {
         visibleMessages.first(where: { $0.role == .user })?.text
     }
@@ -29,6 +36,7 @@ struct AskView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+            goalStatus
             if realtimeVoice.isActive || realtimeVoice.errorMessage != nil || realtimeStartError != nil {
                 realtimeVoiceBar
             }
@@ -38,7 +46,7 @@ struct AskView: View {
                     // disclosure expansion. Bound eager layout; retain full history.
                     VStack(alignment: .leading, spacing: 18) {
                         if visibleMessages.count > transcriptLimit {
-                            Button("Show earlier messages") { transcriptLimit += 40 }
+                            Button("Show earlier messages") { transcriptScroll.preserveBeforePrepending(); transcriptLimit += 40 }
                                 .buttonStyle(.borderless)
                         }
                         if visibleMessages.isEmpty {
@@ -53,11 +61,16 @@ struct AskView: View {
                     .padding(.vertical, SoraTheme.space3)
                     .frame(maxWidth: 760, alignment: .leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(AgentTranscriptScrollObserver(controller: transcriptScroll, revision: transcriptRevision))
                 }
 
 
             }
 
+            if transcriptScroll.hasNewResponse {
+                Button("New response ↓") { transcriptScroll.showLatest() }
+                    .font(.caption).padding(.vertical, 6)
+            }
             if let error = session.errorMessage {
                 Text(error).font(SoraTheme.agentCaption).foregroundStyle(SoraTheme.danger)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -71,13 +84,16 @@ struct AskView: View {
         }
         .background(inlineBackground)
         .frame(minWidth: inline ? 0 : 540, minHeight: inline ? 0 : 560)
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(TerminalPreferences.Appearance(rawValue: appearanceName)?.colorScheme)
         .tint(SoraTheme.accent)
         .sheet(isPresented: $showsPrograms) {
             AgentProgramsView(session: session)
         }
         .onAppear {
             session.load()
+            if session.pendingTerminalOutput != nil {
+                DispatchQueue.main.async { composerFocused = true }
+            }
             #if DEBUG
             Task { @MainActor in
                 await Task.yield()
@@ -85,11 +101,15 @@ struct AskView: View {
             }
             #endif
         }
+        .onChange(of: session.pendingTerminalOutput?.id) { id in if id != nil { composerFocused = true } }
         .onChange(of: session.activeTabID) { _ in transcriptLimit = 40 }
         .onChange(of: session.selectedProvider) { _ in
             transcriptLimit = 40
             voiceInput.stop()
             realtimeVoice.stop()
+        }
+        .onChange(of: session.goal?.state) { state in
+            if state == .waitingForInput { composerFocused = true }
         }
         .onChange(of: session.enabled) { enabled in
             if !enabled { realtimeVoice.stop() }
@@ -106,10 +126,49 @@ struct AskView: View {
         }
     }
 
+    @ViewBuilder private var goalStatus: some View {
+        if let goal = session.goal {
+            VStack(alignment: .leading, spacing: 5) {
+                HStack {
+                    Label(goal.state.title, systemImage: goal.state == .completed ? "checkmark.circle" : "scope")
+                        .font(.caption.weight(.semibold))
+                    Spacer()
+                    if !(goal.readGrants ?? []).isEmpty {
+                        Button("Revoke Read Grants") { session.revokeReadGrants() }.font(.caption)
+                    }
+                    if [.paused, .stopped].contains(goal.state) {
+                        Button(goal.budgetPauseReason == nil ? "Resume" : "Extend & Resume") {
+                            if goal.budgetPauseReason == nil { session.resumeGoal() }
+                            else { session.extendGoalBudget() }
+                        }
+                            .disabled(session.isSending || session.isRunningCommand)
+                    }
+                }
+                if let budget = goal.budget {
+                    Text(budget.summary).font(.caption2).foregroundStyle(.secondary)
+                        .help("Limits belong to this task. Tokens are a text-based estimate, not billed usage. Extend adds 24 actions, 80 requests and 15 active minutes.")
+                }
+                Text(goal.request).font(.caption).lineLimit(2).help(goal.request)
+                if let update = goal.pendingSteering {
+                    HStack(alignment: .top) {
+                        Text("Queued update: " + update).font(.caption).lineLimit(3)
+                        Button("Edit") { session.removeQueuedSteering(); composerFocused = true }.font(.caption)
+                    }
+                    Text("Applied after the current action. Stop ends the running action.").font(.caption2).foregroundStyle(.secondary)
+                }
+                if !goal.detail.isEmpty {
+                    Text(goal.detail).font(.caption).foregroundStyle(.secondary).lineLimit(3)
+                }
+            }
+            .padding(.horizontal, SoraTheme.gridPaddingX).padding(.vertical, 8)
+            .accessibilityElement(children: .contain)
+        }
+    }
+
     private var inlineBackground: some View {
         ZStack {
             // Hybrid overlay: grid stays visible underneath.
-            Color.black.opacity(inline ? 0.42 : 0.88)
+            SoraTheme.fillDeep.opacity(inline ? 0.65 : 1)
             if inline {
                 Rectangle()
                     .fill(.ultraThinMaterial)
@@ -346,6 +405,17 @@ struct AskView: View {
 
     private var composer: some View {
         VStack(alignment: .leading, spacing: SoraTheme.space2) {
+            if let attachment = session.pendingTerminalOutput {
+                HStack {
+                    terminalOutputPreview(attachment)
+                    Button("Remove output", systemImage: "xmark.circle") { session.pendingTerminalOutput = nil }
+                        .labelStyle(.iconOnly).buttonStyle(.borderless)
+                }
+                Text(session.isSending || session.isRunningCommand
+                     ? "This attachment stays in your draft until the current task finishes or you stop it."
+                     : "Attached to your next message. Review or remove it before sending.")
+                    .font(SoraTheme.agentCaption2).foregroundStyle(.secondary)
+            }
             if !session.pendingImages.isEmpty {
                 HStack {
                     ForEach(session.pendingImages) { image in
@@ -418,6 +488,8 @@ struct AskView: View {
                 .help(voiceInput.isListening ? "Stop dictating" : "Dictate into Agent")
                 .accessibilityLabel(voiceInput.isListening ? "Stop dictating" : "Dictate into Agent")
                 if session.isSending || session.isRunningCommand {
+                    Button("Send Update", systemImage: "arrow.up") { submitComposer() }
+                        .disabled(!session.canSteer)
                     Button("Stop", systemImage: "stop.fill") { session.stop() }
                 } else {
                     Button("Send", systemImage: "arrow.up") { submitComposer() }
@@ -435,6 +507,20 @@ struct AskView: View {
     }
 
     @ViewBuilder
+    private func terminalOutputPreview(_ attachment: TerminalOutputAttachment) -> some View {
+        DisclosureGroup(attachment.title + " · \(attachment.text.utf8.count) bytes" + (attachment.isExcerpt ? " · excerpt" : "")) {
+            VStack(alignment: .leading, spacing: 4) {
+                if let command = attachment.command { Text(command).font(SoraTheme.agentCaption.monospaced()).textSelection(.enabled) }
+                if let directory = attachment.directory { Text("Terminal folder at capture: " + directory).font(SoraTheme.agentCaption2).foregroundStyle(.secondary) }
+                ScrollView {
+                    Text(attachment.text).font(SoraTheme.agentCaption.monospaced())
+                        .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+                }.frame(maxHeight: 140)
+            }
+        }.font(SoraTheme.agentCaption)
+    }
+
+    @ViewBuilder
     private func imagePreview(_ attachment: AIImageAttachment) -> some View {
         if let image = NSImage(data: attachment.png) {
             Image(nsImage: image).resizable().scaledToFit().frame(maxWidth: 180, maxHeight: 100)
@@ -444,7 +530,7 @@ struct AskView: View {
 
     private func submitComposer() {
         if let first = mentionMatches.first { insertMention(first); return }
-        guard session.canSend else { return }
+        guard session.canSend || session.canSteer else { return }
         voiceInput.stop()
         realtimeVoice.stop()
         session.send()
@@ -502,6 +588,12 @@ struct AskView: View {
     }
 
     private func streamingEnvelope(_ text: String) -> (prose: String, title: String)? {
+        if let prose = AgentEnvelope.proseBeforeEnvelope(in: text, opening: AgentToolCall.openingTag) {
+            return (prose, "Preparing inspection…")
+        }
+        if let prose = AgentEnvelope.proseBeforeEnvelope(in: text, opening: AgentTaskDecision.openingTag) {
+            return (prose, "Assessing the goal…")
+        }
         if let prose = AgentCommandProposalParser.proseBeforeEnvelope(in: text) {
             return (prose, "Preparing a command…")
         }
@@ -559,12 +651,16 @@ struct AskView: View {
             if let proposal = message.programProposal {
                 programCard(proposal, message: message)
             }
+            if let call = message.toolCall {
+                toolCard(call, message: message)
+            }
             if let proposal = message.commandProposal {
                 commandCard(proposal, messageID: message.id)
             }
             if let proposal = message.webpageProposal {
                 webpageCard(proposal, messageID: message.id)
             }
+            if let attachment = message.terminalOutput { terminalOutputPreview(attachment) }
             if let page = message.webpage {
                 DisclosureGroup("Webpage: \(page.title)") {
                     VStack(alignment: .leading, spacing: SoraTheme.space2) {
@@ -599,6 +695,29 @@ struct AskView: View {
                     .font(SoraTheme.agentCaption).foregroundStyle(SoraTheme.muted)
             }
         }
+    }
+
+    private func toolCard(_ call: AgentToolCall, message: AIMessage) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(call.tool.title, systemImage: "doc.text.magnifyingglass").font(.callout.weight(.semibold))
+            Text(call.approvedPath ?? call.resolvedURL(directory: session.agentDirectory ?? URL(fileURLWithPath: "/")).path)
+                .font(.caption.monospaced()).textSelection(.enabled)
+            if let query = call.query { Text("Find: " + query).font(.caption) }
+            if call.tool == .readFile { Text("Byte offset \(call.offset), up to \(call.maxBytes) bytes").font(.caption) }
+            if call.status == .pending {
+                Text("Read-only inspection. Results are sent to the selected AI provider.").font(.caption).foregroundStyle(.secondary)
+                HStack {
+                    Button("Dismiss") { session.dismissTool(messageID: message.id) }
+                    Button("Allow Once") { session.runTool(messageID: message.id) }
+                    Button("Allow Same Read for Task") { session.runTool(messageID: message.id, remember: true) }
+                }.disabled(session.isSending || session.isRunningCommand)
+            } else if let result = message.toolResult {
+                DisclosureGroup(result.failed ? "Inspection failed" : (result.truncated ? "Result — excerpt" : "Inspection result")) {
+                    Text(result.output.isEmpty ? "No output." : result.output)
+                        .font(.system(.caption, design: .monospaced)).textSelection(.enabled)
+                }
+            } else { Text(call.status == .dismissed ? "Dismissed" : "Inspecting…").font(.caption) }
+        }.padding(12).background(SoraTheme.fillCard, in: RoundedRectangle(cornerRadius: 8))
     }
 
     private func programCard(_ proposal: AgentProgramProposal, message: AIMessage) -> some View {
@@ -733,7 +852,7 @@ struct AskView: View {
                 if result.interrupted { return "Command stopped" }
                 return result.exitCode == 0 ? "Command finished" : "Command failed (exit \(result.exitCode))"
             }
-            return message?.commandState == "failed" ? "Command failed" : "Running command"
+            return message?.commandState == "failed" ? "Command failed" : message?.commandState == "stopped" ? "Command stopped" : "Running command"
         }()
         let stroke = pending
             ? (routine ? SoraTheme.accent.opacity(0.65) : SoraTheme.warning.opacity(0.75))
@@ -758,8 +877,8 @@ struct AskView: View {
                     .disabled(onRunCommand == nil || session.isSending || session.isRunningCommand)
                     .accessibilityLabel(routine ? "Run command" : "Run command with elevated risk")
                 } else if proposal.status == .approved {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
+                    Image(systemName: message?.commandResult == nil && message?.commandState == "running" ? "clock" : (message?.commandResult?.exitCode == 0 ? "checkmark.circle.fill" : "exclamationmark.circle"))
+                        .foregroundStyle(message?.commandResult?.exitCode == 0 ? SoraTheme.accent : SoraTheme.muted)
                         .accessibilityLabel(executionTitle)
                 }
             }
@@ -776,6 +895,15 @@ struct AskView: View {
                     Text("Outside the read-only allowlist — runs with your full file permissions.")
                         .font(SoraTheme.agentCaption2)
                         .foregroundStyle(SoraTheme.warning)
+                }
+            }
+            if let progress = message?.processProgress, message?.commandResult == nil {
+                Text(message?.commandState == "stopped" ? "Stopped · captured output retained" : progress.status)
+                    .font(.caption).foregroundStyle(.secondary)
+                if !progress.output.isEmpty {
+                    DisclosureGroup("Live output") {
+                        Text(progress.output).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
+                    }
                 }
             }
             Text(proposal.command)

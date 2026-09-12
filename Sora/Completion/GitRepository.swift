@@ -53,7 +53,7 @@ enum GitRepository {
         return nil
     }
 
-    private static func gitDirectory(containing url: URL, fileManager: FileManager) -> URL? {
+    static func gitDirectory(containing url: URL, fileManager: FileManager) -> URL? {
         guard let root = root(containing: url, fileManager: fileManager) else { return nil }
         let git = root.appendingPathComponent(".git")
         var isDirectory: ObjCBool = false
@@ -61,7 +61,12 @@ enum GitRepository {
         if isDirectory.boolValue {
             return git
         }
-        guard let text = try? String(contentsOf: git, encoding: .utf8) else { return nil }
+        guard let info = try? git.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
+              info.isRegularFile == true, (info.fileSize ?? 0) <= 16_384,
+              let file = try? FileHandle(forReadingFrom: git) else { return nil }
+        defer { try? file.close() }
+        guard let data = try? file.read(upToCount: 16_385), data.count <= 16_384,
+              let text = String(data: data, encoding: .utf8) else { return nil }
         for line in text.split(whereSeparator: \.isNewline) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             guard trimmed.hasPrefix("gitdir:") else { continue }

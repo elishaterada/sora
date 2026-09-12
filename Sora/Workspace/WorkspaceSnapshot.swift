@@ -10,6 +10,8 @@ struct WorkspaceSnapshot: Codable, Equatable, Sendable {
     var splitIDs: [UUID]?
     var windowFrame: String?
     var splitFraction: Double?
+    var paneLayout: PaneLayout<UUID>?
+    var isPaneMaximized: Bool?
 
     static let empty = WorkspaceSnapshot(directories: [""], selectedIndex: 0)
 
@@ -20,6 +22,26 @@ struct WorkspaceSnapshot: Codable, Equatable, Sendable {
         self.directories = dirs
         self.selectedIndex = min(max(0, selectedIndex), dirs.count - 1)
     }
+    private enum CodingKeys: String, CodingKey {
+        case directories, selectedIndex, sessionIDs, tabNames, splitIDs, windowFrame, splitFraction, paneLayout, isPaneMaximized
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(directories: try values.decode([String].self, forKey: .directories),
+                  selectedIndex: try values.decode(Int.self, forKey: .selectedIndex),
+                  sessionIDs: try values.decodeIfPresent([UUID].self, forKey: .sessionIDs),
+                  tabNames: try values.decodeIfPresent([String].self, forKey: .tabNames))
+        splitIDs = try values.decodeIfPresent([UUID].self, forKey: .splitIDs)
+        windowFrame = try values.decodeIfPresent(String.self, forKey: .windowFrame)
+        splitFraction = try values.decodeIfPresent(Double.self, forKey: .splitFraction)
+        paneLayout = try values.decodeIfPresent(PaneLayout<UUID>.self, forKey: .paneLayout)
+        isPaneMaximized = try values.decodeIfPresent(Bool.self, forKey: .isPaneMaximized)
+        if let paneLayout, !paneLayout.isValid(allowed: Set(sessionIDs ?? [])) {
+            throw DecodingError.dataCorruptedError(forKey: .paneLayout, in: values, debugDescription: "Invalid terminal pane arrangement")
+        }
+    }
+
 }
 
 /// Styled scrollback and passive block metadata, never interpreted as shell input.
@@ -112,6 +134,31 @@ enum TerminalHistoryArchive {
             }
         }
         return lines.joined(separator: "\n")
+    }
+
+    /// The native exporter appends one synthetic output marker after the screen
+    /// to separate the next shell's launch chrome. It is not command evidence.
+    static func preparingGhosttyExport(_ text: String, promptReady: Bool) -> String {
+        let terminator = "\u{1b}]133;C;aid=sora-archive\u{1b}\\"
+        guard promptReady, text.hasSuffix(terminator) else { return text }
+        return removingUnsubmittedPrompts(String(text.dropLast(terminator.count))) + terminator
+    }
+
+    /// The current edit buffer is saved separately. Replaying its unfinished
+    /// prompt adds another fake command on each launch and consumes history space.
+    /// Only canonical archive prompt/input pairs without a command-start marker
+    /// are removed; completed/running output and unstructured legacy text remain.
+    static func removingUnsubmittedPrompts(_ text: String) -> String {
+        let prompt = "\u{1b}]133;A;aid=sora-archive\u{1b}\\"
+        let input = "\u{1b}]133;B;aid=sora-archive\u{1b}\\"
+        let output = "\u{1b}]133;C;aid=sora-archive\u{1b}\\"
+        var end = text.endIndex
+        while let range = text.range(of: prompt, options: .backwards, range: text.startIndex..<end) {
+            let tail = text[range.upperBound..<end]
+            guard tail.contains(input), !tail.contains(output) else { break }
+            end = range.lowerBound
+        }
+        return String(text[..<end])
     }
 
     static func save(_ text: String, for id: UUID) throws {

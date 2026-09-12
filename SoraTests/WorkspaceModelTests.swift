@@ -1,6 +1,36 @@
 import XCTest
 
 final class WorkspaceModelTests: XCTestCase {
+    func testDragTargetUsesVisibleRowsAndRejectsDropsOutsideSidebar() {
+        let first = UUID(), second = UUID(), hidden = UUID()
+        let rows = [first: CGRect(x: 6, y: 0, width: 208, height: 28),
+                    second: CGRect(x: 6, y: 29, width: 208, height: 48),
+                    hidden: CGRect(x: 6, y: -60, width: 208, height: 28)]
+        let size = CGSize(width: 220, height: 400)
+        XCTAssertEqual(WorkspaceModel.dropTarget(at: CGPoint(x: 60, y: 10), rows: rows, viewport: size), first)
+        XCTAssertEqual(WorkspaceModel.dropTarget(at: CGPoint(x: 60, y: 350), rows: rows, viewport: size), second)
+        XCTAssertNil(WorkspaceModel.dropTarget(at: CGPoint(x: 221, y: 10), rows: rows, viewport: size))
+        XCTAssertNil(WorkspaceModel.dropTarget(at: CGPoint(x: 60, y: -1), rows: rows, viewport: size))
+    }
+
+    func testDroppedTabsMoveToDestinationAndPreserveSelectionAndNames() {
+        let model = WorkspaceModel(snapshot: WorkspaceSnapshot(directories: ["/a", "/b", "/c"], selectedIndex: 1))
+        let ids = model.tabs.map(\.id)
+        model.rename(ids[0], name: "Alpha")
+        model.move(ids[0], to: ids[2])
+        XCTAssertEqual(model.tabs.map(\.id), [ids[1], ids[2], ids[0]])
+        XCTAssertEqual(model.selectedID, ids[1])
+        model.move(ids[0], to: ids[1])
+        XCTAssertEqual(model.tabs.map(\.id), ids)
+        model.move(UUID(), to: ids[1])
+        model.move(ids[1], to: ids[1])
+        XCTAssertEqual(model.tabs.map(\.id), ids)
+        XCTAssertEqual(WorkspaceModel(snapshot: model.snapshot()).tabs.first?.displayTitle, "Alpha")
+        XCTAssertEqual(WorkspaceModel.TerminalActivity.failed(7).label, "Exit 7")
+        XCTAssertTrue(WorkspaceModel.TerminalActivity.failed(7).isFailure)
+        XCTAssertFalse(WorkspaceModel.TerminalActivity.running.isFailure)
+    }
+
     func testRenameReorderAndReopenKeepIdentity() {
         let model = WorkspaceModel(snapshot: .empty)
         let first = model.selectedID

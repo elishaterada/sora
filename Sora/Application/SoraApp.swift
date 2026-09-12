@@ -6,12 +6,16 @@ struct SoraApp: App {
     @StateObject private var runtime: GhosttyRuntime
     @StateObject private var ask = AskSession(backends: AIBackend.live())
     private let updates = UpdateController()
+    #if DEBUG
+    private let evaluation = AgentEvaluationLauncher()
+    #endif
 
     init() {
         do {
             let history = try CommandHistoryStore()
             try HushLogin.ensure()
             _ = try SoraZshBootstrap.prepare()
+            try SoraShellIntegration.prepare()
             // App-scoped: do not change the user's global Tahoe defaults.
             UserDefaults.standard.set(false, forKey: "NSSplitViewItemSidebarDefaultsToFloatingAppearance")
             let runtime = try GhosttyRuntime(history: history)
@@ -24,16 +28,22 @@ struct SoraApp: App {
     var body: some Scene {
         WindowGroup("Sora", id: "terminal", for: UUID.self) { $windowID in
             ContentView(runtime: runtime, windowID: windowID ?? runtime.initialWindowID)
-                .task { updates.checkAtLaunch() }
+                .task {
+                    updates.checkAtLaunch()
+                    #if DEBUG
+                    await evaluation.runIfRequested()
+                    #endif
+                }
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in ask.stop() }
         } defaultValue: { runtime.initialWindowID }
         .defaultSize(width: 980, height: 620)
         .windowResizability(.contentMinSize)
         .commands {
-            WorkspaceCommands()
-            SidebarCommands()
-            HistoryCommands()
-            AskCommands()
+            WorkspaceCommands(shortcuts: runtime.shortcuts)
+            ProjectLayoutCommands(runtime: runtime, store: runtime.projectLayouts)
+            SidebarCommands(shortcuts: runtime.shortcuts)
+            HistoryCommands(runtime: runtime)
+            AskCommands(shortcuts: runtime.shortcuts)
             UpdateCommands(updates: updates)
             // Standard Edit commands follow the first responder, including
             // SecureField and the Ask composer. GhosttySurfaceView implements
@@ -45,8 +55,17 @@ struct SoraApp: App {
         }
         .defaultSize(width: 520, height: 360)
 
+        Window("Project Layouts", id: "project-layouts") {
+            ProjectLayoutsView(runtime: runtime, store: runtime.projectLayouts)
+        }
+        .defaultSize(width: 740, height: 440)
+
+        Window("Shell Integration", id: "shell-integration") { ShellIntegrationView() }
+            .defaultSize(width: 660, height: 520)
+            .windowResizability(.contentMinSize)
+
         Settings {
-            SoraSettingsView(session: ask)
+            SoraSettingsView(session: ask, globalShortcut: runtime.globalShortcut, shortcuts: runtime.shortcuts)
         }
     }
 }
@@ -64,6 +83,7 @@ private struct UpdateCommands: Commands {
 }
 
 private struct HistoryCommands: Commands {
+    let runtime: GhosttyRuntime
     @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
@@ -71,17 +91,19 @@ private struct HistoryCommands: Commands {
             Button("Command History") {
                 openWindow(id: "command-history")
             }
+            Button("Block Bookmarks") { runtime.bookmarkLibrary.show() }
         }
     }
 }
 
 private struct AskCommands: Commands {
+    @ObservedObject var shortcuts: AppShortcutStore
     @FocusedValue(\.inlineAskAction) private var inlineAskAction
 
     var body: some Commands {
         CommandMenu("Agent") {
             Button("Open Agent") { inlineAskAction?.call() }
-                .keyboardShortcut("a", modifiers: [.command, .shift])
+                .appShortcut(.openAgent, store: shortcuts)
                 .disabled(inlineAskAction == nil)
         }
     }

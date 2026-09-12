@@ -11,8 +11,8 @@ enum StickyPromptBarModel {
         return text
     }
 
-    static func visibleLineCount(total: Int, maximumHeight: CGFloat, baseHeight: CGFloat = 112) -> Int {
-        min(max(1, total), max(1, Int((maximumHeight - baseHeight) / 24) + 1))
+    static func visibleLineCount(total: Int, maximumHeight: CGFloat, baseHeight: CGFloat = 112, lineHeight: CGFloat = 24) -> Int {
+        min(max(1, total), max(1, Int((maximumHeight - baseHeight) / max(1, lineHeight)) + 1))
     }
 
     struct WrappedInput {

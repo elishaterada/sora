@@ -36,7 +36,10 @@ final class CommandHistoryStore: ObservableObject {
             appropriateFor: nil,
             create: true
         )
-        let directory = root.appendingPathComponent("Sora", isDirectory: true)
+        var directory = root.appendingPathComponent("Sora", isDirectory: true)
+        if let identifier = Bundle.main.bundleIdentifier, identifier != "dev.sora.app" {
+            directory.appendPathComponent("Development/\(identifier)", isDirectory: true)
+        }
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         return directory.appendingPathComponent("history.sqlite")
     }
@@ -176,6 +179,51 @@ final class CommandHistoryStore: ObservableObject {
                     lastUsed: Date(timeIntervalSince1970: sqlite3_column_double(statement, 1))
                 ))
             case SQLITE_DONE: return entries
+            default: throw CommandHistoryStoreError.executeFailed(message)
+            }
+        }
+    }
+
+    /// Search is independent of prefix recall: Up/Down keep their original
+    /// tab-only semantics. Values are bound; LIKE metacharacters remain literal.
+    func search(query: String, scope: CommandHistoryScope, tabID: UUID, directory: URL, limit: Int = 80) throws -> [CommandHistorySearchHit] {
+        guard limit > 0 else { return [] }
+        let query = String(query.prefix(256))
+        let pattern = "%" + query.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX")).filter { !$0.isWhitespace }.map { character in
+            String(character).replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "%", with: "\\%").replacingOccurrences(of: "_", with: "\\_")
+        }.joined(separator: "%") + "%"
+        let statement = try prepare("""
+            SELECT command, cwd, MAX(finished_at), COUNT(*) FROM command_runs
+            WHERE (command LIKE ? ESCAPE '\\' OR command GLOB '*[^ -~]*')
+                AND (? = 0 OR tab_id = ?)
+                AND (? = 0 OR cwd = ?)
+            GROUP BY command
+            ORDER BY MAX(finished_at) DESC, command ASC;
+            """)
+        defer { sqlite3_finalize(statement) }
+        try bindText(statement, index: 1, pattern)
+        sqlite3_bind_int(statement, 2, scope == .tab ? 1 : 0)
+        try bindText(statement, index: 3, tabID.uuidString)
+        sqlite3_bind_int(statement, 4, scope == .folder ? 1 : 0)
+        try bindText(statement, index: 5, directory.path)
+        var matches: [CommandHistorySearchHit] = []
+        func rank(_ left: CommandHistorySearchHit, _ right: CommandHistorySearchHit) -> Bool {
+            if left.match.score != right.match.score { return left.match.score > right.match.score }
+            if left.lastUsed != right.lastUsed { return left.lastUsed > right.lastUsed }
+            return left.command < right.command
+        }
+        while true {
+            switch sqlite3_step(statement) {
+            case SQLITE_ROW:
+                guard let value = sqlite3_column_text(statement, 0), let cwd = sqlite3_column_text(statement, 1) else { continue }
+                let command = String(cString: value)
+                guard let match = FuzzySearch.match(query, in: command) else { continue }
+                matches.append(CommandHistorySearchHit(command: command, directory: String(cString: cwd),
+                    lastUsed: Date(timeIntervalSince1970: sqlite3_column_double(statement, 2)),
+                    uses: Int(sqlite3_column_int(statement, 3)), match: match))
+                if matches.count > limit * 2 { matches.sort(by: rank); matches = Array(matches.prefix(limit)) }
+            case SQLITE_DONE: return Array(matches.sorted(by: rank).prefix(limit))
             default: throw CommandHistoryStoreError.executeFailed(message)
             }
         }

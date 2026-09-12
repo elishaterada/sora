@@ -6,6 +6,12 @@ scope restriction for this slice. On 2026-09-05 the user authorized persistent
 agent mode, bounded command execution, and automatic troubleshooting. Accounts,
 sync, and a hosted backend remain deferred.
 
+**Planned direction (2026-09-11):** the user requested a goal-oriented harness
+that verifies completion, recovers from failures, and asks for human input only
+when necessary. See [Agent harness design](agent-harness.md) and H1–H8 in the
+[roadmap](roadmap.md). H1 is now implemented; later slices remain planned. Current action/time limits
+remain in force. See [verification](verification-agent-harness.md).
+
 ## User flow
 
 At a ready shell prompt, type a clear conversational request such as
@@ -104,7 +110,7 @@ Sora defaults to **Ask for approval**: every proposed command and webpage fetch
 waits for an explicit decision. Switch to **Approve for me** to auto-run the
 narrow read-only listing grammar (pwd, constrained ls/du, find -type f
 -print/-print0, and constrained pipelines through xargs -0 du -h, sort, and
-head); webpage fetches and anything outside that grammar still need approval.
+head), plus bounded native inspections inside the task folder (excluding credential-like paths). Webpage fetches, outside paths, and other commands still need approval.
 **Full access** runs any validated proposal and fetches pages without asking.
 The mode is stored in UserDefaults and can be changed from Setup or the
 Agent status bar at any time. Substitutions, redirections, and shell escapes are
@@ -113,23 +119,26 @@ execution. This is a conservative permission check, not an OS sandbox.
 Approved commands have the user's filesystem permissions.
 
 When the agent needs a public HTTPS page, it proposes a `<SORA_WEBPAGE>` envelope.
-Under Approve for me / Full access, Sora fetches a static text snapshot
-automatically (no cookies, credentials, or script execution), using the same
+Under Full access, Sora fetches a static text snapshot automatically
+(no cookies, credentials, or script execution), using the same
 limits as the earlier manual attach path (2 MB download, 50 KB text, HTTPS-only
-public hosts). Under Ask for approval, the fetch waits for an explicit confirm.
+public hosts). Under Ask for approval or Approve for me, the fetch waits for an
+explicit confirmation.
 The snapshot is stored on the conversation turn and fed back to the model as
 untrusted reference data. There is no manual **Attach webpage** control in the
 composer; the agent owns fetching when a page is required.
 
 Output (up to 32 KiB), working directory, and exit code stay in the conversation
 and are sent to the selected AI provider as untrusted result data. The AI reviews
-results, proposes a next command or webpage when needed, or summarizes findings
-and a next step. Each user turn permits at most six agent actions (commands or
-webpage fetches); each command has a 60-second time limit. Stop marks the
+results and continues toward verified goal completion. Each task defaults to 24
+actions, 80 model requests and 15 active minutes; follow-ups preserve those limits.
+Agent shell commands may run up to five minutes within the remaining task budget.
+Saved Programs run without AI and retain their separate 60-second limit. Stop marks the
 command stopped, kills its process group, keeps Ask busy until the runner exits,
 stores any captured output, and cancels continuation so a second command cannot
-overlap a dying pipeline. A time limit pauses for user follow-up without treating
-the pause as a user Stop. Commands are never resumed on relaunch.
+overlap a dying pipeline. Command timeouts return observations for recovery; task
+budget exhaustion pauses for explicit extension. Commands are never automatically
+resumed on relaunch.
 
 Providers only propose commands and webpages through Sora's strict single-line
 envelopes. Malformed envelopes and control characters are rejected. The initial
@@ -464,3 +473,46 @@ network trace or hidden model reasoning log.
 Export reads no Keychain credentials or environment variables. Messages and tool
 output may still contain secrets, URLs, and local paths; the editable preview
 allows users to remove those before sharing. Copying never uploads a report.
+
+## Explicit goals and completion verification (2026-09-12)
+
+Execution requests now retain a goal separately from individual replies. The
+native status strip shows working, verifying, waiting, paused, stopped, or
+completed. Action proposals also establish a goal for requests the local intent
+check did not recognize. Explanatory questions can still receive ordinary prose.
+
+`AgentGoal` checks structured task decisions against recorded evidence IDs from
+the current goal and requires a finding for each success criterion. Completion
+then goes through a separate model review of the original results. Missing or
+invalid decisions receive at most two corrections before pausing; they never
+silently finish the task. This catches unsupported reports but semantic review
+remains fallible. Task state does not authorize actions or reset task budgets.
+Resume continues from evidence. Task decision records and snapshots are retained
+locally; H5 supplies independent tab runtimes and restoration without replay.
+
+### Task budgets and recovery (2026-09-12)
+
+Execution tasks now default to 24 actions, 80 model requests and 15 minutes of
+active work. Corrections and protocol repairs count as requests. Usage belongs
+to the task and a follow-up does not reset it. Hard limits preserve progress and
+show **Extend & Resume**, which adds the same allowance without widening action
+permissions. Text token counts are estimates, not provider billing data.
+
+Failed launches and command timeouts return concrete observations to the loop.
+Equivalent repeats and unchanged alternating attempts trigger bounded recovery.
+Interrupted writes are not automatically replayed by matching action identity.
+All of this remains subject to the existing permission mode and Stop control.
+
+### Native inspections and task restoration (2026-09-12)
+
+Native file reads, directory listings, literal file search, Git status and tracked
+unstaged diffs now return typed, bounded evidence. Approve for me allows those
+inspections inside the task folder, excluding credential-like paths. Outside
+paths still ask; explicit exact-read grants can be retained for the task or revoked.
+
+Each tab owns its runtime. Selecting another tab or hiding Agent keeps work
+running. New versioned task files restore transcripts, budgets and decisions
+across launches; unfinished work resumes only on an explicit user action. Stopped
+tasks stay stopped. Existing shared legacy files are preserved, because their
+original tab cannot be reliably inferred. Long conversations retain their full
+local transcript while sending a bounded recent context and task constraints.

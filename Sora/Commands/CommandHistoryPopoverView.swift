@@ -137,7 +137,7 @@ final class CommandHistoryPopoverView: NSView, NSTableViewDataSource, NSTableVie
 
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
-        NSColor.white.withAlphaComponent(0.12).setFill()
+        NSColor.labelColor.withAlphaComponent(0.12).setFill()
         let geometry = CommandHistoryLayout(height: bounds.height)
         for y in [CGFloat(0), geometry.footer, bounds.height - geometry.header, bounds.height - 1] {
             NSRect(x: 0, y: y, width: bounds.width, height: 1).fill()

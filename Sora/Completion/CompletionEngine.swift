@@ -38,7 +38,10 @@ enum CompletionEngine {
 
         let (_, token) = PathCompleter.lastToken(in: line)
         let pathFirst = PathCompleter.looksLikePath(token)
-        let pathSuggestion = pathSuggestion(token: token, matches: pathMatches)
+        // The lightweight path completer does not parse shell quoting. Leave
+        // complex lines to zsh rather than appending bytes in the wrong context.
+        let plainPathContext = !line.contains { "'\"\\$`;|&()<>[]{}*?!".contains($0) }
+        let pathSuggestion = plainPathContext ? pathSuggestion(token: token, matches: pathMatches) : nil
         let historySuggestion = historySuggestion(line: line, cwd: cwd, now: now, history: history)
 
         if pathFirst {
@@ -97,7 +100,10 @@ enum CompletionEngine {
             || best.token.lowercased().hasPrefix(token.lowercased())
         guard tokenMatches, best.token.count > token.count else { return nil }
         let suffix = String(best.token.dropFirst(token.count))
-        guard !suffix.isEmpty else { return nil }
-        return CompletionSuggestion(insertSuffix: suffix, source: .path)
+        guard !suffix.isEmpty,
+              !suffix.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains) else { return nil }
+        let safe = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "_./-"))
+        let escaped = suffix.unicodeScalars.map { safe.contains($0) ? String($0) : "\\" + String($0) }.joined()
+        return CompletionSuggestion(insertSuffix: escaped, source: .path)
     }
 }

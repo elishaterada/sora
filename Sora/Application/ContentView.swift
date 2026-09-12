@@ -2,9 +2,10 @@ import AppKit
 import SwiftUI
 
 struct ContentView: View {
+    @AppStorage(TerminalPreferences.appearanceKey) private var appearanceName = "dark"
     @Environment(\.openWindow) private var openWindow
     @ObservedObject var runtime: GhosttyRuntime
-    @StateObject private var ask: AskSession
+    @StateObject private var agents: AgentWorkspace
     @StateObject private var workspace: WorkspaceController
     @State private var sidebarVisible = true
     @State private var titlebarHeight: CGFloat = 52
@@ -13,7 +14,7 @@ struct ContentView: View {
 
     init(runtime: GhosttyRuntime, windowID: UUID) {
         self.runtime = runtime
-        _ask = StateObject(wrappedValue: AskSession(backends: AIBackend.live(windowID: windowID)))
+        _agents = StateObject(wrappedValue: AgentWorkspace(windowID: windowID))
         _workspace = StateObject(
             wrappedValue: WorkspaceController(
                 runtime: runtime,
@@ -34,8 +35,7 @@ struct ContentView: View {
                     workspace: workspace,
                     sidebarVisible: $sidebarVisible,
                     titlebarHeight: titlebarHeight,
-                    trafficLightWidth: trafficLightWidth,
-                    onAsk: { agentTrigger += 1 }
+                    trafficLightWidth: trafficLightWidth
                 )
                 .frame(width: 220)
 
@@ -52,8 +52,16 @@ struct ContentView: View {
                     trafficLightWidth: trafficLightWidth,
                     onAsk: { agentTrigger += 1 }
                 )
-                WorkspaceHostRepresentable(workspace: workspace, ask: ask, agentTrigger: agentTrigger)
+                WorkspaceHostRepresentable(workspace: workspace, agents: agents, agentTrigger: agentTrigger)
                     .frame(minWidth: 480, maxWidth: .infinity, minHeight: 280, maxHeight: .infinity)
+            }
+        }
+        .overlay(alignment: .bottom) {
+            VStack(spacing: 4) {
+                if let error = runtime.configurationError {
+                    Text(error).font(.caption).padding(8).background(.regularMaterial)
+                }
+                WorkspacePersistenceNotice(store: runtime.windowStore)
             }
         }
         .animation(SoraTheme.motionSidebar, value: sidebarVisible)
@@ -69,20 +77,28 @@ struct ContentView: View {
         .modifier(ClearWindowBackground())
         .modifier(HiddenWindowTitle())
         .ignoresSafeArea()
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(TerminalPreferences.Appearance(rawValue: appearanceName)?.colorScheme)
         .focusedSceneObject(workspace)
         .focusedSceneValue(\.sidebarVisible, $sidebarVisible)
         .focusedSceneValue(\.inlineAskAction, InlineAskAction { agentTrigger += 1 })
         .onAppear {
+            let open = openWindow
+            runtime.globalShortcut.openWindow = { open(id: "terminal", value: UUID()) }
             workspace.startPersistence()
             for id in runtime.remainingRestoredWindowIDs(excluding: workspace.windowID) {
                 openWindow(id: "terminal", value: id)
             }
             runtime.setFocus(NSApp.isActive)
         }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in ask.stop() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in agents.stopAll() }
         .onDisappear {
             workspace.refreshWorkingDirectories()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: AppShortcutStore.didChange, object: runtime.shortcuts)) { _ in
+            workspace.applyShortcutsToAllSurfaces()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: GhosttyRuntime.appearanceApplied, object: runtime)) { _ in
+            workspace.applyAppearanceToAllSurfaces()
         }
         .onReceive(NotificationCenter.default.publisher(for: TerminalPreferences.fontSizeDidChange)) { _ in
             workspace.applyFontSizeToAllSurfaces()
@@ -116,6 +132,7 @@ extension FocusedValues {
 }
 
 struct SidebarCommands: Commands {
+    @ObservedObject var shortcuts: AppShortcutStore
     @FocusedValue(\.sidebarVisible) private var sidebarVisible
 
     var body: some Commands {
@@ -125,7 +142,7 @@ struct SidebarCommands: Commands {
                     sidebarVisible?.wrappedValue.toggle()
                 }
             }
-            .keyboardShortcut("s", modifiers: [.command, .control])
+            .appShortcut(.toggleSidebar, store: shortcuts)
             .disabled(sidebarVisible == nil)
         }
     }
@@ -133,25 +150,39 @@ struct SidebarCommands: Commands {
 
 /// Full-window frost. Corner radius stays 0 so this is not a floating card.
 struct WindowFrostRepresentable: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSView {
+    func makeNSView(context: Context) -> WindowFrostView { WindowFrostView() }
+    func updateNSView(_ nsView: WindowFrostView, context: Context) { nsView.applyAppearance() }
+}
+
+final class WindowFrostView: NSView {
+    private var material: NSView?
+    init() {
+        super.init(frame: .zero)
+        wantsLayer = true
         if #available(macOS 26.0, *) {
             let glass = NSGlassEffectView()
             glass.style = .regular
             glass.cornerRadius = 0
-            glass.tintColor = SoraTheme.nsGlassTint
-            return glass
+            material = glass
+        } else {
+            let effect = NSVisualEffectView()
+            effect.material = .underWindowBackground
+            effect.blendingMode = .behindWindow
+            effect.state = .active
+            material = effect
         }
-        let effect = NSVisualEffectView()
-        effect.material = .underWindowBackground
-        effect.blendingMode = .behindWindow
-        effect.state = .active
-        effect.wantsLayer = true
-        effect.layer?.cornerRadius = 0
-        return effect
+        if let material { addSubview(material) }
+        applyAppearance()
     }
-
-    func updateNSView(_ nsView: NSView, context: Context) {
-        nsView.layer?.cornerRadius = 0
+    required init?(coder: NSCoder) { nil }
+    override func layout() { super.layout(); material?.frame = bounds }
+    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); applyAppearance() }
+    func applyAppearance() {
+        // An opaque light base keeps chrome legible over a dark wallpaper.
+        let light = TerminalPreferences.isLight
+        material?.isHidden = light
+        layer?.backgroundColor = (light ? NSColor(calibratedWhite: 0.965, alpha: 1) : .clear).cgColor
+        if #available(macOS 26.0, *), let glass = material as? NSGlassEffectView { glass.tintColor = SoraTheme.nsGlassTint }
     }
 }
 
@@ -332,6 +363,28 @@ private struct HiddenWindowTitle: ViewModifier {
                 .toolbarBackground(.hidden, for: .windowToolbar)
         } else {
             content
+        }
+    }
+}
+
+/// Persistence failures stay visible instead of quietly starting a replacement workspace.
+private struct WorkspacePersistenceNotice: View {
+    @ObservedObject var store: WorkspaceWindowStore
+    var body: some View {
+        if let message = store.persistenceError {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.yellow)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Sessions could not be saved").fontWeight(.semibold)
+                    Text(message).font(.caption).textSelection(.enabled)
+                }
+                Spacer()
+                Button("Show Saved Data") {
+                    NSWorkspace.shared.activateFileViewerSelecting([store.url.deletingLastPathComponent()])
+                }
+            }
+            .padding(12)
+            .background(.regularMaterial)
         }
     }
 }

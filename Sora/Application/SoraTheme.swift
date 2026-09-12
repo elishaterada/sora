@@ -5,6 +5,13 @@ import SwiftUI
 /// Semantic chrome tokens. Terminal ANSI colors live in `Resources/sora.ghostty`;
 /// the values below mirror that file so SwiftUI chrome and Ghostty stay aligned.
 enum SoraTheme {
+    static func adaptive(light: UInt32, dark: UInt32) -> NSColor {
+        NSColor(name: nil) { appearance in
+            NSColor(srgb: appearance.bestMatch(from: [.aqua, .darkAqua]) == .aqua ? light : dark)
+        }
+    }
+    static let nsInputBackground = adaptive(light: 0xF7F8FA, dark: 0x111111)
+
     // MARK: - Panda primitives (from sora.ghostty)
 
     /// `#292a2b`
@@ -22,22 +29,22 @@ enum SoraTheme {
 
     // MARK: - Semantic color
 
-    static let text = pandaForeground
+    static let text = Color(nsColor: adaptive(light: 0x242833, dark: 0xCCCCCC))
     static let muted = Color.secondary
     static let git = Color.green
     /// Prefer this over `Color.accentColor` so identity is Panda, not System Settings.
-    static let accent = pandaTeal
+    static let accent = Color(nsColor: nsAccent)
     /// High-stakes / full-access / destructive emphasis.
-    static let warning = pandaPeach
-    static let danger = pandaPink
+    static let warning = Color(nsColor: nsWarning)
+    static let danger = Color(nsColor: adaptive(light: 0xB42349, dark: 0xFF2C6D))
 
     /// Inline code in agent answers. Distinct from teal links so a sentence
     /// mixing identifiers and links stays readable without background fills.
-    static let codeInline = pandaPeach
+    static let codeInline = Color(nsColor: nsCodeInline)
 
-    static var nsAccent: NSColor { NSColor(srgb: 0x19F9D8) }
-    static var nsCodeInline: NSColor { NSColor(srgb: 0xFFB86C) }
-    static var nsWarning: NSColor { NSColor(srgb: 0xFFB86C) }
+    static let nsAccent = adaptive(light: 0x00796B, dark: 0x19F9D8)
+    static let nsCodeInline = adaptive(light: 0x8A4B00, dark: 0xFFB86C)
+    static let nsWarning = adaptive(light: 0x8A4B00, dark: 0xFFB86C)
     static var nsClear: NSColor { .clear }
 
     /// Near-clear window fill so AppKit composites glass; `.clear` skips blur.
@@ -47,20 +54,20 @@ enum SoraTheme {
 
     /// Window frost. Keep this lighter than a solid pane so the desktop shows through.
     static var nsGlassTint: NSColor {
-        NSColor(calibratedWhite: 0.10, alpha: 0.50)
+        NSColor(calibratedWhite: TerminalPreferences.isLight ? 0.96 : 0.10, alpha: 0.65)
     }
 
     // MARK: - Elevation / hairline
 
     /// Single hairline value for chrome dividers and selected-row washes.
-    static let hairline = Color.white.opacity(0.08)
-    static let hairlineStrong = Color.white.opacity(0.10)
-    static let fillSubtle = Color.white.opacity(0.08)
-    static let fillPanel = Color.black.opacity(0.55)
-    static let fillDeep = Color.black.opacity(0.72)
-    static let fillCode = Color.black.opacity(0.35)
+    static let hairline = Color.primary.opacity(0.08)
+    static let hairlineStrong = Color.primary.opacity(0.10)
+    static let fillSubtle = Color.primary.opacity(0.08)
+    static let fillPanel = Color(nsColor: adaptive(light: 0xFFFFFF, dark: 0x000000)).opacity(0.75)
+    static let fillDeep = Color(nsColor: adaptive(light: 0xF2F4F7, dark: 0x000000)).opacity(0.92)
+    static let fillCode = Color.primary.opacity(0.07)
     static let fillCard = Color.primary.opacity(0.04)
-    static let sidebarWash = Color.black.opacity(0.12)
+    static let sidebarWash = Color.primary.opacity(0.04)
 
     // MARK: - Spacing (4pt grid)
 
@@ -69,9 +76,9 @@ enum SoraTheme {
     static let space3: CGFloat = 12
     static let space4: CGFloat = 16
     /// Matches `window-padding-x` in `sora.ghostty`.
-    static let gridPaddingX: CGFloat = 14
+    static var gridPaddingX: CGFloat { TerminalPreferences.compactSpacing ? 16 : 24 }
     /// Matches sticky / resume inset used next to the grid.
-    static let chromeInset: CGFloat = 14
+    static var chromeInset: CGFloat { gridPaddingX }
 
     // MARK: - Radius
 
@@ -102,7 +109,8 @@ enum SoraTheme {
     }
 
     static var terminalFont: NSFont {
-        NSFont(name: "SFMono-Regular", size: terminalFontSize)
+        NSFontManager.shared.font(withFamily: TerminalPreferences.fontFamily, traits: [], weight: 5, size: terminalFontSize)
+            ?? NSFont(name: "SFMono-Regular", size: terminalFontSize)
             ?? NSFont(name: "SF Mono", size: terminalFontSize)
             ?? NSFont.monospacedSystemFont(ofSize: terminalFontSize, weight: .regular)
     }
@@ -126,9 +134,7 @@ enum SoraTheme {
     }
 
     static var agentMonoSemibold: Font {
-        let bold = NSFont(name: "SFMono-Semibold", size: terminalFontSize)
-            ?? NSFont(name: "SF Mono", size: terminalFontSize)
-            ?? NSFont.monospacedSystemFont(ofSize: terminalFontSize, weight: .semibold)
+        let bold = NSFontManager.shared.convert(terminalFont, toHaveTrait: .boldFontMask)
         return Font(bold)
     }
 

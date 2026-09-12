@@ -28,6 +28,14 @@ final class UpdateController: NSObject, SPUUpdaterDelegate {
         controller.checkForUpdates(nil)
     }
 
+    func updater(_ updater: SPUUpdater, willInstallUpdate item: SUAppcastItem) {
+        NotificationCenter.default.post(name: WorkspaceWindowStore.checkpointRequested, object: nil)
+    }
+
+    func updaterWillRelaunchApplication(_ updater: SPUUpdater) {
+        NotificationCenter.default.post(name: WorkspaceWindowStore.checkpointRequested, object: nil)
+    }
+
     func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
         policy.recordFoundUpdate()
     }

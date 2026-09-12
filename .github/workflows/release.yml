@@ -56,9 +56,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: Vendor/ghostty
-          key: ghosttykit-${{ runner.os }}-${{ runner.arch }}-c81f0b26871c7fbbe2fc35549fdad1f64ed29094-${{ hashFiles('Scripts/build-ghosttykit.sh') }}
-          restore-keys: |
-            ghosttykit-${{ runner.os }}-${{ runner.arch }}-c81f0b26871c7fbbe2fc35549fdad1f64ed29094-
+          # The cached checkout already has Sora's patch applied. Reusing a
+          # checkout from another patch revision prevents clean application.
+          key: ghosttykit-${{ runner.os }}-${{ runner.arch }}-c81f0b26871c7fbbe2fc35549fdad1f64ed29094-${{ hashFiles('Scripts/build-ghosttykit.sh', 'patches/ghostty-semantic-prompt-boundaries.patch') }}
 
       - name: Resolve version
         id: ver

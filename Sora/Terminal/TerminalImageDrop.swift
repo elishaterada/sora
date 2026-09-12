@@ -12,8 +12,10 @@ enum TerminalImageDrop {
         case unsupportedImage
         case unsafeFilename
         case multipleImages
+        case remoteTransferRequired
         var errorDescription: String? {
             switch self {
+            case .remoteTransferRequired: return "This image is on your Mac. Transfer it to the remote host before using its remote path."
             case .multipleImages: return "Drop one image at a time when pasting into a running program."
             case .unsupportedImage: return "The dropped item could not be read as an image."
             case .unsafeFilename: return "Rename the image to remove control characters before dropping it."

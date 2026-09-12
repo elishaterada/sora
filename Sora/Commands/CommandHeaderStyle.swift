@@ -5,15 +5,27 @@ import AppKit
 enum CommandHeaderStyle {
     // Ghostty composites its {35,38,43,240} block fill over {20,22,26}.
     // Precompose that fill so output cannot show through the pinned header.
-    static let background = NSColor(
+    private static let darkBackground = NSColor(
         srgbRed: (35 * (240.0 / 255) + 20 * (15.0 / 255)) / 255,
         green: (38 * (240.0 / 255) + 22 * (15.0 / 255)) / 255,
         blue: (43 * (240.0 / 255) + 26 * (15.0 / 255)) / 255, alpha: 1)
-    static let errorBackground = NSColor(
+    private static let darkErrorBackground = NSColor(
         srgbRed: (53 * (240.0 / 255) + 20 * (15.0 / 255)) / 255,
         green: (32 * (240.0 / 255) + 22 * (15.0 / 255)) / 255,
         blue: (36 * (240.0 / 255) + 26 * (15.0 / 255)) / 255, alpha: 1)
-    static let foreground = NSColor(srgbRed: 0.8, green: 0.8, blue: 0.8, alpha: 1)
+    private static let darkForeground = NSColor(srgbRed: 0.8, green: 0.8, blue: 0.8, alpha: 1)
+
+    static var background: NSColor { TerminalPreferences.isLight ? lightBackground(failed: false) : darkBackground }
+    static var errorBackground: NSColor { TerminalPreferences.isLight ? lightBackground(failed: true) : darkErrorBackground }
+    static var foreground: NSColor {
+        TerminalPreferences.isLight ? NSColor(srgbRed: 36/255, green: 40/255, blue: 51/255, alpha: 1) : darkForeground
+    }
+    private static func lightBackground(failed: Bool) -> NSColor {
+        let rgb: [Double] = failed ? [252, 230, 233] : [233, 237, 242]
+        let base: [Double] = [247, 248, 250]
+        let values = zip(rgb, base).map { ($0 * 240 + $1 * 15) / (255 * 255) }
+        return NSColor(srgbRed: values[0], green: values[1], blue: values[2], alpha: 1)
+    }
 
     static func attributedCommand(_ snapshot: String, font: NSFont) -> NSAttributedString {
         let output = NSMutableAttributedString(string: "")

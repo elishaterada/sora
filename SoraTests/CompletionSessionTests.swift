@@ -194,3 +194,40 @@ final class CompletionSessionTests: XCTestCase {
         XCTAssertEqual(session.suggestion?.insertSuffix, "ls")
     }
 }
+
+extension CompletionSessionTests {
+    func testPartialCompletionKeepsQuotesEscapesAndUnicodeWordsIntact() {
+        XCTAssertEqual(CompletionWord.prefix(line: "gi", suffix: "t status --short"), "t")
+        XCTAssertEqual(CompletionWord.prefix(line: "git", suffix: " status --short"), " status")
+        XCTAssertEqual(CompletionWord.prefix(line: "cat ", suffix: "'hello world/é' next"), "'hello world/é'")
+        XCTAssertEqual(CompletionWord.prefix(line: "cat 'hel", suffix: "lo world/é' next"), "lo world/é'")
+        XCTAssertEqual(CompletionWord.prefix(line: "cat ", suffix: "hello\\ world/👩‍💻 next"), "hello\\ world/👩‍💻")
+        XCTAssertEqual(CompletionWord.prefix(line: "echo ", suffix: "'it'\\''s done' next"), "'it'\\''s done'")
+        XCTAssertEqual(CompletionWord.prefix(line: "echo ", suffix: "cafe\u{301} noir"), "cafe\u{301}")
+        for suffix in ["$(touch file) next", "`pwd` next", "'unfinished", "word\\", "one\ntwo", "   "] {
+            XCTAssertNil(CompletionWord.prefix(line: "echo ", suffix: suffix), suffix)
+        }
+        XCTAssertNil(CompletionWord.prefix(line: "echo $(", suffix: "pwd)"))
+    }
+
+    func testPartialAcceptanceRetainsRemainderAndEditingInvalidatesIt() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = try CommandHistoryStore(url: root.appendingPathComponent("history.sqlite"))
+        try store.record(XCTUnwrap(CommandRunFactory.make(command: "git status --short", cwd: root, exitCode: 0, durationNanos: 1)))
+        let session = CompletionSession()
+        session.handlePaste("gi")
+        session.refresh(cwd: root, history: store)
+        XCTAssertEqual(session.acceptNextWord(), "t")
+        XCTAssertEqual(session.buffer.text, "git")
+        XCTAssertEqual(session.suggestion?.insertSuffix, " status --short")
+        XCTAssertEqual(session.acceptNextWord(), " status")
+        XCTAssertEqual(session.buffer.text, "git status")
+        _ = session.handleKeyDown(keyCode: 0, characters: "x", modifiers: [])
+        XCTAssertNil(session.acceptNextWord())
+        XCTAssertEqual(session.buffer.text, "git statusx")
+        session.stopTracking()
+        XCTAssertNil(session.nextWordSuffix)
+    }
+}

@@ -2,6 +2,17 @@ import Foundation
 
 /// Pure tab list. No PTY or view ownership.
 final class WorkspaceModel {
+    enum TerminalActivity: Equatable {
+        case running, finished, failed(Int16)
+        var label: String {
+            switch self { case .running: return "Running"; case .finished: return "Finished"; case .failed(let code): return "Exit \(code)" }
+        }
+        var symbol: String {
+            switch self { case .running: return "clock"; case .finished: return "checkmark.circle"; case .failed: return "exclamationmark.circle" }
+        }
+        var isFailure: Bool { if case .failed = self { return true }; return false }
+    }
+
     struct Tab: Identifiable, Equatable {
         let id: UUID
         /// Shell OSC / Ghostty title (often the last command).
@@ -101,6 +112,19 @@ final class WorkspaceModel {
         guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
         let destination = min(tabs.count - 1, max(0, index + offset))
         let tab = tabs.remove(at: index)
+        tabs.insert(tab, at: destination)
+    }
+
+    static func dropTarget(at point: CGPoint, rows: [UUID: CGRect], viewport: CGSize) -> UUID? {
+        guard point.x >= 0, point.x <= viewport.width, point.y >= 0, point.y <= viewport.height else { return nil }
+        return rows.filter { $0.value.maxY > 0 && $0.value.minY < viewport.height }
+            .min { abs($0.value.midY - point.y) < abs($1.value.midY - point.y) }?.key
+    }
+
+    func move(_ id: UUID, to target: UUID) {
+        guard id != target, let source = tabs.firstIndex(where: { $0.id == id }),
+              let destination = tabs.firstIndex(where: { $0.id == target }) else { return }
+        let tab = tabs.remove(at: source)
         tabs.insert(tab, at: destination)
     }
 
