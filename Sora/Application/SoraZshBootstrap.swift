@@ -56,9 +56,11 @@ enum SoraZshBootstrap {
 
     static func defaultDirectory(fileManager: FileManager = .default) -> URL {
         let root = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return root
-            .appendingPathComponent("Sora", isDirectory: true)
-            .appendingPathComponent("zsh", isDirectory: true)
+        var namespace = root.appendingPathComponent("Sora", isDirectory: true)
+        if let identifier = Bundle.main.bundleIdentifier, identifier != "dev.sora.app" {
+            namespace.appendPathComponent("Development/\(identifier)", isDirectory: true)
+        }
+        return namespace.appendingPathComponent("zsh", isDirectory: true)
     }
 
     static func prepare(

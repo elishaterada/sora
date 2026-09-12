@@ -89,7 +89,7 @@ The host does not implement VT parsing, glyph rendering, or PTY spawn.
 
 - tabs and the active session
 - independent Ghostty surfaces / PTYs per tab
-- basic restoration of tab working directories via `UserDefaults`
+- versioned, atomic workspace files in Application Support; legacy `UserDefaults` migration
 - split-pane architecture only after tabs are stable
 
 ### Commands and Storage
@@ -383,8 +383,8 @@ The live test exposed expensive Markdown/path parsing, redundant native pane/tit
 updates, and hidden Agent hosts observing the shared session. Hidden panes now host
 EmptyView, the overlay disables intrinsic sizing, and unchanged titles/frames do not
 republish. Completed Markdown uses one attributed Text instead of one view per block;
-streaming stays plain until complete. Automatic transcript scrolling is currently
-removed. Code fences retain text styling but no separate background container.
+streaming stays plain until complete. H7 restores conditional transcript following with an AppKit scroll observer;
+scrolling up preserves the reading position and exposes a New response control. Code fences retain text styling but no separate background container.
 
 The revised 302-message run completed all updates and output expansion/older-message
 loading remained interactive afterward. Initial bulk layout remains slow and logs
@@ -395,7 +395,7 @@ tests pass, but those unit tests do not certify UI responsiveness.
 ## Terminal history restoration
 
 Workspace snapshots retain stable tab IDs. Ghostty scrollback with SGR text styling is
-checkpointed every ten seconds and on normal workspace shutdown, capped at
+checkpointed every ten seconds, before Sparkle installation/relaunch, and on workspace shutdown, capped at
 2 MB per tab, in private Application Support/Sora/TerminalHistory files.
 The zsh bootstrap prints that text once before starting the new prompt; it never
 evaluates archived text. Colors, text styling, and command boundaries are restored;
@@ -451,9 +451,10 @@ return-to-input, resize, and screen reset restore row-aligned positioning.
 - Cmd-T creates a tab. Tabs can be renamed and moved up/down from their context
   menus. Cmd-Shift-T reopens up to ten recently closed tabs in the current window.
   Names and ordering persist; reopening creates a new shell with archived output.
-- Cmd-D creates a two-pane side-by-side view with a draggable divider. Clicking
-  either pane selects its terminal. Cmd-Shift-D returns to one pane without
-  closing the other session. The pair and divider position persist across relaunch. Arbitrary nested splits are not implemented.
+- Cmd-D splits the selected pane side by side; Split Terminal Below adds a
+  vertical split. A nested pane tree supports up to eight panes, directional
+  focus, draggable dividers and maximizing a pane without closing its siblings.
+  The tree, divider positions and maximized state persist across relaunch.
 - Tab/window close and application quit ask before terminating a running child
   process. Background command completions appear as sidebar status text.
 - Automatic natural-language routing is enabled by default under Terminal
@@ -466,8 +467,12 @@ return-to-input, resize, and screen reset restore row-aligned positioning.
 Cmd-N opens an independent terminal window. Each window has a stable UUID and
 its own tabs, selection, split pair, divider position, and frame in the window
 catalog. Existing single-window snapshots migrate with their tab IDs intact.
-Closing a window removes its restoration record; quitting preserves all open
-windows. Invalid catalog data is backed up before migration recovery. Each window owns its Agent session, including drafts, provider requests, command
+An explicit, approved window close removes its restoration record; quitting and
+incidental window teardown preserve open windows. The versioned catalog lives in
+Application Support with atomic writes, a valid prior checkpoint, stale-writer
+rejection, and visible errors. Original preference snapshots remain available
+after migration. See [workspace durability](workspace-durability.md) for the
+failure investigation and signed update verification. Each window owns its Agent session, including drafts, provider requests, command
 execution and cancellation. Switching windows does not bind or stop another
 window’s session. Closing a window explicitly stops only its Agent work. Close
 and quit warnings include Agent requests as well as terminal processes.
@@ -476,9 +481,11 @@ changes and apply only changed values; disabling Agent stops all sessions.
 Provider changes intentionally stop the affected sessions. Program catalog
 notifications refresh all windows, and each edit reads the current catalog before
 writing so stale in-memory lists cannot discard another window’s changes.
-Agent conversation snapshots are stored under AgentWindows/<window UUID> to
-avoid cross-window overwrites. Tab conversations are still only restored within
-the current app run; these snapshots are not yet a persistent conversation browser.
+Agent conversation checkpoints are stored under
+AgentWindows/<window UUID>/Tasks/<tab UUID>, with separate files per provider.
+Transcripts and goals restore across launches; unfinished work waits for explicit
+Resume. Switching tabs keeps the originating task running. Older shared snapshots
+remain untouched because their original tab cannot be inferred reliably.
 Named terminal profiles remain deferred.
 Terminal OSC 9 / OSC 777 desktop requests and BEL signals now feed native macOS
 notifications through `TerminalNotificationController`, independently of Agent.
@@ -498,7 +505,8 @@ Prompt cues derive their vertical placement from the native text field baseline.
 The chevron uses the input font cap height, and the caret uses its ascender and
 descender, keeping placeholders, suggestions, and wrapped input aligned.
 
-History checkpoints omit the standalone restore banner and its launch spacer.
+History checkpoints omit the standalone restore banner, its launch spacer, and
+trailing unsubmitted prompts; drafts are saved separately without execution.
 Only the fresh shell prints a session boundary; previously accumulated banners
 are cleaned on the next checkpoint and disappear on the following relaunch.
 SGR styling and other output are retained.
@@ -553,3 +561,212 @@ and running commands retain the neutral fill. No AI service is involved.
 Failure metadata follows rows through scrollback and reflow. Sora's VT archive
 preserves it with an internal `OSC 133;D;1;aid=sora-archive-row` marker, replayed
 without command-completion notifications. The packed row remains 64 bits.
+
+### H7 transcript follow verification (2026-09-12)
+
+The 302-message fixture completed all 240 updates with conditional following.
+Scrolling up held the reading position and exposed New response; that control
+returned to the bottom. Output expansion remained responsive. Loading 40 older
+messages preserved the visible region around request 131. AttributeGraph cycle
+warnings already documented above still occur in the bulk fixture; this is a
+behavioral pass, not a claim that the earlier layout-warning debt is resolved.
+
+
+## Saved terminal commands
+
+`SavedCommandEditor` is a shared native review dialog for command blocks, the
+History window, and Ctrl-R search. It writes through `AgentProgramStore` without
+requiring an Agent session. Each save reads the current catalog and rejects name
+collisions; scripts stay literal. The command palette can insert saved scripts
+into a ready shell, including from block browsing, without executing or changing
+folders. Running programs retain input ownership. Existing Programs storage,
+validation, backups, and review/deletion UI are reused; there is no second catalog.
+
+### Contextual command completion
+
+`CommandCompletionRequest` recognizes a bounded, plain-shell subset: Git
+subcommands/local branches, package-manager `run` scripts, and a small authored
+flag catalog. `CommandCompletionEngine` reads local refs (including worktree
+`commondir` and packed refs) and the nearest package manifest. It never runs Git,
+package scripts, provider calls, or network requests. Reads are bounded; large or
+invalid files expose an error with shell completion available.
+
+`CommandCompletionSession` permits one worker lookup and one newest queued
+request. Cancelled or obsolete results cannot update the nonactivating AppKit
+child menu. `GhosttySurfaceView` checks the originating line, caret, directory,
+and input ownership before showing or accepting results. Tab opens choices or
+inserts a sole match. Up/Down selects; Return/Tab inserts, without execution;
+Escape preserves the draft. Typing dismisses the menu, and another Tab requests
+choices for the edited prefix. Mouse, paste, tab/window changes and command start
+cancel the pending lookup. Edit → Show Command Completions is also discoverable
+through the command palette.
+
+Aliases, quoted/compound input, non-final caret positions and unsupported
+commands retain the existing completion path. The menu offers an explicit shell
+fallback. Package/branch names are shell-quoted when needed; lightweight path
+suggestions escape spaces and metacharacters and defer complex quoting to zsh.
+This is a focused catalog, not a replacement for installed shell completion
+plugins, remote completion, or every option of every CLI.
+
+### Appearance preferences
+
+T10 adds installed monospaced font families, Dark/Light/System appearance, and
+compact spacing. Dark/SF Mono/18 pt remains the default. The selected font is
+validated against native installed families before generating configuration, so
+preferences cannot inject Ghostty settings. A blank font-family entry replaces
+the bundled family instead of appending another fallback. Each configuration
+load uses a unique temporary overlay, removed immediately after parsing; it
+cannot overwrite another running app's overlay.
+
+`GhosttyRuntime` loads a fresh bundled configuration plus preferences, reports
+parse/reload errors, and uses libghostty's existing app configuration update API
+to propagate changes to every surface without replacing sessions. Native chrome,
+Agent/history windows, input, command headers and separators share adaptive
+colors. System appearance changes use AppKit's effective-appearance observation.
+Font/spacing changes remeasure wrapped input and keep its caret geometry aligned.
+Light chrome uses an opaque base to stay readable over dark wallpapers.
+
+The existing MIT-licensed Ghostty integration patch now selects light or dark
+semantic block fills from the terminal background; explicit program backgrounds
+and selections remain authoritative. Its source and rebuilt framework are kept
+in sync through `scripts/build-ghosttykit.sh`. Command duration and Agent markers
+use palette colors so future output follows the theme. Existing archived explicit
+RGB styling remains literal; changing theme does not rewrite historical output.
+
+### App keyboard shortcuts
+
+`GhosttyRuntime` owns one `AppShortcutStore`; SwiftUI command groups observe it
+and use the same bindings shown in Settings and the command palette. Native
+terminal key forwarding yields to configured app commands. Terminal editing,
+tab-number keys, standard app actions and the opt-in global show/hide shortcut
+keep their separate behavior. Agent/close hints follow the configured bindings.
+
+Settings records a chord with an app-local event monitor only while its explicit
+Record Shortcut control is active in the key window. Escape, changing action,
+closing Settings or switching windows ends recording. No global listener is
+installed. Bindings require Command and a supported key, and are checked against
+other managed shortcuts, reserved terminal/standard actions, and existing native
+menu items before persistence. Reset can report an occupied default; Reset All
+restores the whole set together. Malformed or conflicting saved catalogs expose
+an error and preserve their original bytes until an explicit edit/reset.
+
+
+### Named project layouts
+
+`ProjectLayout` stores only names, folders, selected tab and pane arrangement.
+Opening always assigns new window/session identities and never reads a source
+terminal archive, draft or Agent task. `ProjectLayoutStore` keeps a versioned
+JSON catalog in Application Support/Sora/Layouts (isolated per development bundle),
+with a lock, atomic private writes, synchronized files/directories and a validated
+backup. Fresh reads merge independent changes; record revisions reject stale
+rename/delete. Unknown versions are preserved, and corrupt-primary recovery
+preserves the unreadable bytes and exposes a recovery message.
+
+File menus and the command palette save/open layouts; the native manager reviews,
+renames and deletes them. Missing directories require an explicit replacement,
+Home fallback, or Cancel. Replacements affect this opening only. The new workspace
+is durably seeded before opening its window. Templates are bounded to 50 layouts
+and 64 tabs per layout; startup commands are outside this slice.
+
+
+### Nested terminal panes
+
+`PaneLayout` is a bounded binary tree with right/below branches, stable divider
+identities and per-branch ratios. Workspaces use session UUID leaves; project
+templates map them to tab indices and assign new UUIDs when opened. Existing
+two-pane snapshots migrate into the tree without changing session IDs. New
+snapshots preserve the tree and maximize state; malformed trees fail decoding
+through the existing protected workspace recovery path.
+
+`WorkspaceHostView` owns flat, stable AppKit pane views and lays them out from
+the tree. Resizing, focus changes and maximize never reparent or replace terminal
+surfaces. Dividers expose drag and accessibility increment/decrement; mouse-up
+commits the ratio immediately, while normal checkpoints cover interrupted drags.
+Keyboard focus uses adjacent pane geometry; closing a pane collapses its branch
+and focuses a neighboring survivor. Other tabs and their histories remain intact.
+Switching to a separate tab retains the window's arrangement, and selecting one
+of its pane tabs reveals it again. Return to Single Pane explicitly clears the
+arrangement without closing its sessions.
+
+One window has one saved pane arrangement, up to eight visible panes. New splits
+require enough room for roughly 220 points per child along the split axis; smaller
+restored windows may compress panes, with maximize available for reading. Four
+Control–Command–Arrow actions, Option–Command–D for below, and Control–Command–M
+for maximize join the editable shortcut catalog. Arrow identity uses native
+navigation key codes when the keyboard layout translator returns no character.
+The active pane alone receives the accent input edge and caret.
+
+
+### Block bookmarks
+
+A bookmark is an immutable plain-text copy of one selected command block's
+output, retained until explicit deletion. It does not depend on a Ghostty pin,
+scrollback row number, a source tab staying open, or terminal archive retention.
+The native library opens that copy and can activate its source tab if still open;
+it does not claim to relocate an expired block within the terminal. Source folder
+metadata describes the tab at capture time, not an inferred historical directory.
+
+`BlockBookmarkStore` uses a private SQLite file under the same stable app-support
+namespace as layouts. Transactions merge independent saves; an immutable digest
+avoids duplicate captures within one tab. The first 1 MB is saved at a UTF-8
+boundary for large blocks, explicitly marked as an excerpt. The 200-copy limit
+rejects new saves rather than evicting old output. Unknown database versions and
+unreadable files are left in place with visible errors. The library loads only
+one output body at a time; metadata search and read-only AppKit text need no AI.
+
+Native utility windows exposed a focus-ownership issue in SwiftUI's cached
+FocusedObject. Workspace/menu actions now verify the actual key window before
+mutating tabs; the Close action falls back to closing the active utility window.
+The bookmark window also handles its own Command-W/Command-F/Escape with a local
+monitor restricted to that window and removed when it closes. This prevents
+closing or editing a background terminal through a utility-window shortcut.
+
+
+### Output search and matching-line snapshots
+
+The native Find panel offers Terminal and Selected block scopes. Whole-terminal
+search stays in Ghostty, including authoritative selected/total match callbacks.
+Selected-block search reads Ghostty's block text into a read-only AppKit reader;
+Only matching lines does the same for either scope. Filtering never edits the
+terminal or changes PTY output. Show All Lines explicitly resets the filter, and
+Refresh Snapshot recaptures live output. Escape/Command-W return focus to the
+source input or selected block; surface teardown dismisses the panel.
+
+Snapshots are labeled with capture time, scope and excerpt status. They retain
+the first 1 MB at a valid UTF-8 boundary. Literal case-insensitive search uses
+UTF-16 ranges for AppKit, caps navigation at 10,000 matches and filtered output
+at 10,000 matching lines, and labels either cap. One background worker keeps
+only the newest pending request; revisions discard obsolete or canceled results.
+Matching lines remain verbatim without inserted line-number matches. Native
+selection prefills the query, bounded to 512 characters; selecting an entire
+command block chooses block scope instead. The floating panel stays within its
+screen and handles Return/Shift-Return navigation without submitting shell input.
+
+
+### Shell capabilities and remote context
+
+See [shell integration](shell-integration.md) for the supported capability matrix.
+Sora separates a shell's semantic command markers from its editable-input mirror.
+Ghostty's new per-surface native-input flag defaults off and is enabled only by
+an authoritative edit-line report. This preserves the visible grid prompt and
+cursor in Bash and unintegrated nested shells while keeping semantic block
+styling, navigation and search. Command start returns input rendering to Ghostty.
+
+Bounded shell context reports carry shell, locality, host and path. A detected
+SSH/mosh/telnet process overrides local claims; remote reports are bound to its
+foreground process identity. Remote paths are display-only, never local file
+URLs. Remote input stays with the remote shell; local completions, recall,
+Agent entry and image-path insertion cannot operate against that context.
+New tabs and saved workspace folders retain the last local location. Remote
+output archives preserve command boundaries, but unsubmitted remote drafts
+are excluded from local relaunch and remote commands from the local recall index.
+
+The optional native Shell Integration window copies activation commands and
+exports a complete source folder. The export is staged and renamed atomically,
+refuses an existing destination, and preserves the bundled Ghostty sources and
+licenses. No SSH connection or startup-file edit occurs during export. Bash
+keeps Readline input; its adapter handles command identity, history exclusions,
+exit status and display-only archive replay. Native helpers and the command
+index now use the same stable bundle namespace as the workspace catalog for
+verification builds. The production `Sora/history.sqlite` location is unchanged;
+terminal archive identities remain stable UUID filenames.

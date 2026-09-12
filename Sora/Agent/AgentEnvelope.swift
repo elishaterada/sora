@@ -13,6 +13,7 @@ enum AgentEnvelope {
     Answer the original request again. Emit at most ONE action: either
     <SORA_COMMAND>{"summary":"Short single-line summary","command":"single-line zsh command"}</SORA_COMMAND>
     or <SORA_WEBPAGE>{"summary":"Short single-line summary","url":"https://example.com/path"}</SORA_WEBPAGE>.
+    or one valid <SORA_TOOL> inspection or <SORA_TASK> decision as documented.
     or one valid <SORA_PROGRAM> save/run proposal as described in the system instructions.
     Use valid JSON: escape embedded double quotes and backslashes. Include the
     closing tag. Keep summary under 600 UTF-8 bytes and command under 4096 bytes.
@@ -31,7 +32,7 @@ enum AgentEnvelope {
 
     static func validationReasons(for text: String) -> [String] {
         var reasons: [String] = []
-        let tags = ["COMMAND", "WEBPAGE", "PROGRAM"]
+        let tags = ["COMMAND", "WEBPAGE", "PROGRAM", "TASK", "TOOL"]
         if text.components(separatedBy: "<SORA_").count > 2 {
             reasons.append("Multiple actions were returned. Return only the first necessary action, then wait for its result.")
         }
@@ -70,6 +71,8 @@ enum AgentEnvelope {
         return AgentCommandProposalParser.match(text) == nil
             && AgentWebpageProposalParser.match(text) == nil
             && AgentProgramProposal.match(text) == nil
+            && AgentTaskDecision.parse(text) == nil
+            && AgentToolCall.parse(text) == nil
     }
 
     struct Span: Equatable {

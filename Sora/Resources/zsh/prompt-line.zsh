@@ -91,3 +91,23 @@ _sora_report_command_started() {
 }
 typeset -ag preexec_functions
 preexec_functions+=(_sora_report_command_started)
+
+# This metadata distinguishes display-only remote paths from local folders.
+# Escape delimiters and percent before transport; no path is ever evaluated.
+_sora_report_context() {
+  emulate -L zsh
+  local host=${HOST:-localhost} path=$PWD location=local
+  [[ -n ${SSH_CONNECTION:-}${SSH_TTY:-} ]] && location=remote
+  host=${host//\%/\%25}
+  host=${host//;/\%3B}
+  path=${path//\%/\%25}
+  path=${path//;/\%3B}
+  path=${path//$'\n'/\%0A}
+  path=${path//$'\t'/\%09}
+  path=${path//$'\r'/\%0D}
+  path=${path//$'\e'/\%1B}
+  path=${path//$'\a'/\%07}
+  _sora_send_title "sora-context;1;zsh;${location};${host};${path}"
+}
+typeset -ag precmd_functions
+precmd_functions=(_sora_report_context ${precmd_functions:#_sora_report_context})

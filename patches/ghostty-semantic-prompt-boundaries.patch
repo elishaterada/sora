@@ -1,8 +1,8 @@
 diff --git a/include/ghostty.h b/include/ghostty.h
-index 518af3ff2..37c82b558 100644
+index 518af3ff2..3556b4b7b 100644
 --- a/include/ghostty.h
 +++ b/include/ghostty.h
-@@ -1227,6 +1227,14 @@ GHOSTTY_API void ghostty_surface_deny_clipboard_request(ghostty_surface_t,
+@@ -1227,6 +1227,16 @@ GHOSTTY_API void ghostty_surface_deny_clipboard_request(ghostty_surface_t,
                                                             void*);
  GHOSTTY_API bool ghostty_surface_has_selection(ghostty_surface_t);
  GHOSTTY_API bool ghostty_surface_read_selection(ghostty_surface_t, ghostty_text_s*);
@@ -14,6 +14,8 @@ index 518af3ff2..37c82b558 100644
 +GHOSTTY_API bool ghostty_surface_read_sticky_command(ghostty_surface_t, bool following, ghostty_text_s*, double* remaining_px, double* source_px, bool* failed);
 +GHOSTTY_API void ghostty_surface_clear_command_block(ghostty_surface_t);
 +GHOSTTY_API bool ghostty_surface_read_command_history(ghostty_surface_t, ghostty_text_s*);
++// Sora mirrors input only when an authoritative shell edit buffer is available.
++GHOSTTY_API void ghostty_surface_set_native_input(ghostty_surface_t, bool);
  GHOSTTY_API bool ghostty_surface_read_text(ghostty_surface_t,
                                                ghostty_selection_s,
                                                ghostty_text_s*);
@@ -108,10 +110,10 @@ index 775292127..b9160e37d 100644
  }
 
 diff --git a/src/apprt/embedded.zig b/src/apprt/embedded.zig
-index 525bc856d..2e208a2ec 100644
+index 525bc856d..72407fca3 100644
 --- a/src/apprt/embedded.zig
 +++ b/src/apprt/embedded.zig
-@@ -1881,6 +1881,143 @@ pub const CAPI = struct {
+@@ -1881,6 +1881,153 @@ pub const CAPI = struct {
          return readTextLocked(surface, core_sel, result);
      }
 
@@ -217,6 +219,16 @@ index 525bc856d..2e208a2ec 100644
 +        core.renderer_state.mutex.lockUncancelable(global.io());
 +        defer core.renderer_state.mutex.unlock(global.io());
 +        core.io.terminal.screens.active.clearSelection();
++        surface.refresh();
++    }
++
++    export fn ghostty_surface_set_native_input(surface: *Surface, enabled: bool) void {
++        const core = &surface.core_surface;
++        core.renderer_state.mutex.lockUncancelable(global.io());
++        defer core.renderer_state.mutex.unlock(global.io());
++        if (core.io.terminal.flags.sora_native_input == enabled) return;
++        core.io.terminal.flags.sora_native_input = enabled;
++        core.io.terminal.flags.dirty.clear = true;
 +        surface.refresh();
 +    }
 +
@@ -396,7 +408,7 @@ index 46a75be8e..2623d576b 100644
 +    try testing.expect(!isCommandBoundary(1, false));
 +}
 diff --git a/src/renderer/generic.zig b/src/renderer/generic.zig
-index 2a81f42b4..5f73f6819 100644
+index 2a81f42b4..a93c9eda4 100644
 --- a/src/renderer/generic.zig
 +++ b/src/renderer/generic.zig
 @@ -233,6 +233,8 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
@@ -532,33 +544,37 @@ index 2a81f42b4..5f73f6819 100644
              if (rebuild) {
                  // If we are doing a full rebuild, then we clear the entire cell buffer.
                  self.cells.reset();
-@@ -2627,6 +2665,20 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
+@@ -2627,6 +2665,24 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                      log.warn("error building row y={} err={}", .{ y, err });
                      self.cells.clear(y);
                  };
 +                if (self.config.semantic_prompt_boundaries and state.screen == .primary) {
 +                    // Sora presents the live ZLE buffer in its native input panel.
 +                    // Rebuild it normally as soon as OSC 133 marks command output.
-+                    if (state.shell_input_active and y_usize >= command_end) self.cells.clear(y);
++                    if (state.native_input_active and y_usize >= command_end) self.cells.clear(y);
++                    const base = state.colors.background;
++                    const light = @as(u32, base.r) * 299 + @as(u32, base.g) * 587 + @as(u32, base.b) * 114 > 128_000;
 +                    for (0..self.cells.size.columns) |x| {
 +                        const bg = self.cells.bgCell(y, @intCast(x));
 +                        // Preserve application colors and selection highlights.
 +                        if (bg.*[3] != 0) continue;
 +                        bg.* = if (y_usize < command_end)
-+                            if (row.command_failed) .{ 53, 32, 36, 240 } else .{ 35, 38, 43, 240 }
++                            if (light)
++                                if (row.command_failed) .{ 252, 230, 233, 240 } else .{ 233, 237, 242, 240 }
++                            else if (row.command_failed) .{ 53, 32, 36, 240 } else .{ 35, 38, 43, 240 }
 +                        else
-+                            .{ 20, 22, 26, 240 };
++                            .{ base.r, base.g, base.b, 240 };
 +                    }
 +                }
              }
 
              // Setup our cursor rendering information.
-@@ -2641,6 +2693,8 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
+@@ -2641,6 +2697,8 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                  // If the cursor isn't visible on the viewport, don't show
                  // a cursor. Otherwise, get our cursor cell, because we may
                  // need it for styling.
 +                if (self.config.semantic_prompt_boundaries and
-+                    state.screen == .primary and state.shell_input_active) break :cursor;
++                    state.screen == .primary and state.native_input_active) break :cursor;
                  const cursor_vp = state.cursor.viewport orelse break :cursor;
                  const cursor_style: terminal.Style = cursor_style: {
                      const cells = state.row_data.items(.cells);
@@ -1180,10 +1196,19 @@ index 208e276a2..2e06b16ad 100644
      screen: *const Screen,
      current: ?Pin = null,
 diff --git a/src/terminal/Terminal.zig b/src/terminal/Terminal.zig
-index e9cc3b8e6..6839bd61f 100644
+index e9cc3b8e6..58e922bdd 100644
 --- a/src/terminal/Terminal.zig
 +++ b/src/terminal/Terminal.zig
-@@ -1766,6 +1766,7 @@ fn printWrap(self: *Terminal) !void {
+@@ -99,6 +99,8 @@ kitty_dnd: ?*kitty.dnd.State = null,
+
+ /// These are just a packed set of flags we may set on the terminal.
+ flags: packed struct {
++    /// Embedder owns the live input view; ordinary shells keep their grid input.
++    sora_native_input: bool = false,
+     // This supports a Kitty extension where programs using semantic
+     // prompts (OSC133) can annotate their new prompts with `redraw=0` to
+     // disable clearing the prompt on resize.
+@@ -1766,6 +1768,7 @@ fn printWrap(self: *Terminal) !void {
      // Get the old semantic prompt so we can extend it to the next
      // line. We need to do this before we index() because we may
      // modify memory.
@@ -1191,7 +1216,7 @@ index e9cc3b8e6..6839bd61f 100644
      const old_semantic = cursor.semantic_content;
      const old_semantic_clear = cursor.semantic_content_clear_eol;
 
-@@ -1788,6 +1789,7 @@ fn printWrap(self: *Terminal) !void {
+@@ -1788,6 +1791,7 @@ fn printWrap(self: *Terminal) !void {
          const row = self.screens.active.cursor.page_row;
          // Always mark the row as a continuation
          row.wrap_continuation = true;
@@ -1199,7 +1224,7 @@ index e9cc3b8e6..6839bd61f 100644
      }
 
      // Assure that our screen is consistent
-@@ -2192,6 +2194,31 @@ pub fn semanticPrompt(
+@@ -2192,6 +2196,31 @@ pub fn semanticPrompt(
          },
 
          .end_command => {
@@ -1231,7 +1256,7 @@ index e9cc3b8e6..6839bd61f 100644
              // From a terminal state perspective, this doesn't really do
              // anything. Other terminals appear to do nothing here. I think
              // its reasonable at this point to reset our semantic content
-@@ -16504,3 +16531,44 @@ test "Terminal: eraseDisplay complete ignores stale prompt on recycled row" {
+@@ -16504,3 +16533,44 @@ test "Terminal: eraseDisplay complete ignores stale prompt on recycled row" {
 
      try testing.expectEqual(t.screens.active.pages.rows, t.screens.active.pages.total_rows);
  }
@@ -1492,7 +1517,7 @@ index ad2b1a7e5..f5e701843 100644
      /// The semantic prompt state of the row. See `semantic_prompt`.
      pub const SemanticPrompt = enum(u2) {
 diff --git a/src/terminal/render.zig b/src/terminal/render.zig
-index 6bcddb2c2..2b9a9f109 100644
+index 6bcddb2c2..9544e8e34 100644
 --- a/src/terminal/render.zig
 +++ b/src/terminal/render.zig
 @@ -77,10 +77,11 @@ pub const RenderState = struct {
@@ -1509,15 +1534,16 @@ index 6bcddb2c2..2b9a9f109 100644
 
      /// The color state for the terminal.
      colors: Colors,
-@@ -104,6 +105,7 @@ pub const RenderState = struct {
+@@ -104,6 +105,8 @@ pub const RenderState = struct {
      /// The screen type that this state represents. This is used primarily
      /// to detect changes.
      screen: ScreenSet.Key,
 +    shell_input_active: bool = false,
++    native_input_active: bool = false,
 
      /// The last viewport pin used to generate this state. This is NOT
      /// a tracked pin and is generally NOT safe to read other than the direct
-@@ -277,6 +279,19 @@ pub const RenderState = struct {
+@@ -277,6 +280,19 @@ pub const RenderState = struct {
          style: Style,
      };
 
@@ -1537,7 +1563,7 @@ index 6bcddb2c2..2b9a9f109 100644
      // Dirty state.
      pub const Dirty = lib.Enum(lib.target, &.{
          // Not dirty at all. Can skip rendering if prior state was
-@@ -377,6 +392,13 @@ pub const RenderState = struct {
+@@ -377,6 +393,13 @@ pub const RenderState = struct {
      ) Allocator.Error!void {
          const s: *Screen = t.screens.active;
          const viewport_pin = s.pages.getTopLeft(.viewport);
@@ -1551,7 +1577,7 @@ index 6bcddb2c2..2b9a9f109 100644
          const redraw = redraw: {
              // If our screen key changed, we need to do a full rebuild
              // because our render state is viewport-specific.
-@@ -399,7 +421,7 @@ pub const RenderState = struct {
+@@ -399,7 +422,7 @@ pub const RenderState = struct {
              }
 
              // If our dimensions changed, we do a full rebuild.
@@ -1560,7 +1586,7 @@ index 6bcddb2c2..2b9a9f109 100644
                  self.cols != s.pages.cols)
              {
                  break :redraw true;
-@@ -414,11 +436,13 @@ pub const RenderState = struct {
+@@ -414,11 +437,14 @@ pub const RenderState = struct {
          };
 
          // Always set our cheap fields, its more expensive to compare
@@ -1572,10 +1598,11 @@ index 6bcddb2c2..2b9a9f109 100644
          self.cursor.active = .{ .x = s.cursor.x, .y = s.cursor.y };
          self.cursor.cell = s.cursor.page_cell.*;
 +        self.shell_input_active = s.cursor.semantic_content == .input;
++        self.native_input_active = self.shell_input_active and t.flags.sora_native_input;
          self.cursor.style = s.cursor.style;
          self.cursor.visual_style = s.cursor.cursor_style;
          self.cursor.password_input = t.flags.password_input;
-@@ -663,7 +687,8 @@ pub const RenderState = struct {
+@@ -663,7 +689,8 @@ pub const RenderState = struct {
          // There are performance improvements that can be made here, though.
          // For example, `containedRow` recalculates a bunch of information
          // we can cache.
@@ -1585,7 +1612,7 @@ index 6bcddb2c2..2b9a9f109 100644
              @branchHint(.unlikely);
 
              // Populate our selection cache to avoid some expensive
-@@ -735,7 +760,7 @@ pub const RenderState = struct {
+@@ -735,7 +762,7 @@ pub const RenderState = struct {
 
              // Note: we don't clear any row_data here because our rebuild
              // above did this.
@@ -1594,7 +1621,7 @@ index 6bcddb2c2..2b9a9f109 100644
              self.dirty = .partial;
          }
 
-@@ -2045,6 +2070,55 @@ test "colors" {
+@@ -2045,6 +2072,60 @@ test "colors" {
      try testing.expectEqual(0xFF, p0.b);
  }
 
@@ -1628,6 +1655,11 @@ index 6bcddb2c2..2b9a9f109 100644
 +    try testing.expectEqual(5, state.commandBoundaryRow(6));
 +    try testing.expectEqual(9, state.commandBoundaryRow(10));
 +    try testing.expect(state.shell_input_active);
++    try testing.expect(!state.native_input_active);
++    t.flags.sora_native_input = true;
++    t.flags.dirty.clear = true;
++    try state.update(alloc, &t);
++    try testing.expect(state.native_input_active);
 +    for (state.row_data.items(.selection), 0..) |selected, y| {
 +        try testing.expectEqual(y >= 5 and y < 9, selected != null);
 +        if (selected) |bounds| try testing.expectEqualSlices(size.CellCountInt, &.{ 0, 19 }, &bounds);
@@ -1650,7 +1682,7 @@ index 6bcddb2c2..2b9a9f109 100644
  test "selection single line" {
      const testing = std.testing;
      const alloc = testing.allocator;
-@@ -2395,3 +2469,67 @@ test "dirty row resets highlights" {
+@@ -2395,3 +2476,67 @@ test "dirty row resets highlights" {
          try testing.expectEqual(0, row_highlights[0].items.len);
      }
  }

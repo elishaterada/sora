@@ -18,8 +18,15 @@ final class TerminalNotificationController: NSObject, UNUserNotificationCenterDe
         center.delegate = self
     }
 
-    func post(title: String, body: String, from view: GhosttySurfaceView) {
-        view.onBell?()
+    func commandFinished(_ run: CommandRun, from view: GhosttySurfaceView) {
+        guard TerminalNotificationPolicy.shouldNotifyCompletion(enabled: TerminalPreferences.completionAlertsEnabled,
+            durationNanos: run.durationNanos, threshold: TerminalPreferences.completionAlertThreshold) else { return }
+        post(title: run.exitCode == 0 ? "Command finished" : "Command failed · exit \(run.exitCode)",
+             body: run.command, from: view, markAttention: false)
+    }
+
+    func post(title: String, body: String, from view: GhosttySurfaceView, markAttention: Bool = true) {
+        if markAttention { view.onBell?() }
         // A visible, focused terminal already has the user's attention.
         sources = sources.filter { $0.value.view != nil }
         lastDelivery = lastDelivery.filter { sources[$0.key] != nil }
@@ -39,22 +46,30 @@ final class TerminalNotificationController: NSObject, UNUserNotificationCenterDe
         content.sound = .default
         content.threadIdentifier = id
         // Ask lazily, only when a terminal first requests a background alert.
-        center.requestAuthorization(options: [.alert, .sound]) { [weak self] granted, error in
+        center.requestAuthorization(options: [.alert, .sound]) { [weak self, weak view] granted, error in
             if let error { self?.logger.error("Notification authorization failed: \(error.localizedDescription, privacy: .public)") }
             guard TerminalPreferences.notificationsEnabled else { return }
             guard granted else {
                 self?.logger.info("Terminal notification permission is disabled")
                 return
             }
-            self?.center.add(UNNotificationRequest(identifier: id, content: content, trigger: nil)) { error in
-                if let error { self?.logger.error("Notification delivery failed: \(error.localizedDescription, privacy: .public)") }
+            DispatchQueue.main.async { [weak self, weak view] in
+                guard let self, let view, TerminalPreferences.notificationsEnabled,
+                      !(NSApp.isActive && view.window?.isKeyWindow == true && view.window?.firstResponder === view) else { return }
+                self.center.add(UNNotificationRequest(identifier: id, content: content, trigger: nil)) { [weak self] error in
+                    if let error { self?.logger.error("Notification delivery failed: \(error.localizedDescription, privacy: .public)") }
+                }
             }
         }
     }
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
                                 withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
-        completionHandler(TerminalPreferences.notificationsEnabled ? [.banner, .sound] : [])
+        DispatchQueue.main.async { [weak self] in
+            let view = self?.sources[notification.request.identifier]?.view
+            let focused = NSApp.isActive && view?.window?.isKeyWindow == true && view?.window?.firstResponder === view
+            completionHandler(TerminalPreferences.notificationsEnabled && view != nil && !focused ? [.banner, .sound] : [])
+        }
     }
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,

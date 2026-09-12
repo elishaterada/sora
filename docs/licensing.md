@@ -144,3 +144,15 @@ Before any public binary or source release:
 3. verify app-bundle attribution
 4. review the public product name separately
 5. obtain qualified legal review for any consequential uncertainty
+
+
+### Optional SSH shell-integration export (2026-09-12)
+
+The export includes unmodified Ghostty Bash/zsh shell scripts from the pinned
+commit above. Their GPLv3-or-later headers remain intact; the complete GPLv3
+license accompanies the scripts as source. Bash's existing bash-preexec 0.7.0
+helper is MIT; its full notice was verified against the upstream version's
+[LICENSE.md](https://github.com/rcaloras/bash-preexec/blob/0.7.0/LICENSE.md) and is
+included. Sora's separate adapters call those hooks without copying their
+implementation. No new runtime library was added. Existing public-release
+license review requirements remain in force.

@@ -135,6 +135,22 @@ final class CompletionSession {
         buffer.apply(.insert(text))
     }
 
+    var nextWordSuffix: String? {
+        guard buffer.isTracking, let suggestion else { return nil }
+        return CompletionWord.prefix(line: buffer.text, suffix: suggestion.insertSuffix)
+    }
+
+    func acceptNextWord() -> String? {
+        guard let suffix = nextWordSuffix, let current = suggestion else { return nil }
+        buffer.apply(.insert(suffix))
+        invalidateLookup()
+        let remainder = String(current.insertSuffix.dropFirst(suffix.count))
+        if !remainder.isEmpty {
+            suggestion = CompletionSuggestion(insertSuffix: remainder, source: current.source)
+        }
+        return suffix
+    }
+
     func stopTracking() {
         invalidateLookup()
         buffer.apply(.stopTracking)
@@ -204,5 +220,45 @@ final class CompletionSession {
             now: now,
             transitions: stats
         )
+    }
+}
+
+/// Takes one shell word, retaining quoted spaces, escapes and whole graphemes.
+/// Complex shell expressions keep their native Option-Right behavior.
+enum CompletionWord {
+    static func prefix(line: String, suffix: String) -> String? {
+        guard !suffix.isEmpty,
+              !(line + suffix).unicodeScalars.contains(where: {
+                  $0.value < 0x20 || (0x7F...0x9F).contains($0.value) || CharacterSet.newlines.contains($0)
+              }) else { return nil }
+        var quote: Character?
+        var escaped = false
+        func consume(_ character: Character) -> Bool {
+            if escaped { escaped = false; return true }
+            if quote == "'" {
+                if character == "'" { quote = nil }
+                return true
+            }
+            if character == "\\" { escaped = true; return true }
+            if character == "$" || character == "`" { return false }
+            if let current = quote {
+                if character == current { quote = nil }
+            } else if character == "'" || character == "\"" {
+                quote = character
+            } else if ";|&()<>".contains(character) { return false }
+            return true
+        }
+        for character in line { guard consume(character) else { return nil } }
+        var result = ""
+        var started = false
+        for character in suffix {
+            let separator = character == " " && quote == nil && !escaped
+            if separator && started { break }
+            guard consume(character) else { return nil }
+            result.append(character)
+            if !separator { started = true }
+        }
+        guard started, quote == nil, !escaped else { return nil }
+        return result
     }
 }

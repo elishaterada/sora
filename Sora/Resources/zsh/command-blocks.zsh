@@ -37,7 +37,7 @@ _sora_block_rule() {
   if [[ -n $color ]]; then
     builtin print -P -- "%F{${color}}${label}%f"
   else
-    builtin print -P -- "%F{240}${label}%f"
+    builtin print -P -- "%F{8}${label}%f"
   fi
 
   # Keep two real terminal rows between groups. The renderer places the
@@ -61,7 +61,7 @@ _sora_block_precmd() {
   if (( _sora_block_agent )); then
     _sora_block_agent=0
     _sora_block_armed=0
-    _sora_block_rule '(agent)' '#19f9d8'
+    _sora_block_rule '(agent)' 'green'
     return 0
   fi
 
@@ -75,7 +75,7 @@ _sora_block_precmd() {
   dur="$(_sora_format_duration $elapsed)"
 
   if (( _sora_exit != 0 )); then
-    _sora_block_rule "(${dur} · exit ${_sora_exit})" "#ff2c6d"
+    _sora_block_rule "(${dur} · exit ${_sora_exit})" "red"
   else
     _sora_block_rule "(${dur})"
   fi

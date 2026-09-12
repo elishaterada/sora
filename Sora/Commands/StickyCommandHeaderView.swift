@@ -61,8 +61,8 @@ final class StickyCommandHeaderView: NSView {
         // Keep the label anchored to the bottom while the next boundary pushes
         // the header upward. The layer clips the departing command at the top.
         // NSTextField adds a 2pt text inset; align glyphs with the 24pt grid.
-        commandLabel.frame = NSRect(x: 22, y: (fullHeight - labelHeight) / 2,
-                                   width: max(0, bounds.width - 48), height: labelHeight)
+        commandLabel.frame = NSRect(x: SoraTheme.gridPaddingX - 2, y: (fullHeight - labelHeight) / 2,
+                                   width: max(0, bounds.width - SoraTheme.gridPaddingX * 2), height: labelHeight)
         divider.frame = NSRect(x: 0, y: 0, width: bounds.width,
                                height: 1 / (window?.backingScaleFactor ?? 1))
     }

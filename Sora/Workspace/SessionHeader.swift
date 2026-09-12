@@ -1,56 +1,5 @@
 import SwiftUI
 
-struct SessionHeader: View {
-    let workingDirectory: URL?
-
-    var body: some View {
-        HStack(spacing: 6) {
-            if let workingDirectory {
-                ContextChip(
-                    title: displayPath,
-                    systemImage: "folder",
-                    help: workingDirectory.path,
-                    actions: ContextChipActions.path(workingDirectory)
-                )
-            } else {
-                ContextChip(
-                    title: "~",
-                    systemImage: "folder",
-                    help: "Home",
-                    actions: []
-                )
-            }
-            if let branch, let root = workingDirectory.flatMap({ GitRepository.root(containing: $0) }) {
-                ContextChip(
-                    title: branch,
-                    systemImage: "arrow.triangle.branch",
-                    help: "Branch \(branch)",
-                    actions: ContextChipActions.branch(branch, repositoryRoot: root)
-                )
-            } else if let branch {
-                ContextChip(
-                    title: branch,
-                    systemImage: "arrow.triangle.branch",
-                    help: "Branch \(branch)",
-                    actions: ContextChipActions.branch(branch, repositoryRoot: nil)
-                )
-            }
-        }
-        .font(SoraTheme.chromeCaption)
-        .foregroundStyle(SoraTheme.muted)
-        .controlSize(.small)
-        .accessibilityElement(children: .contain)
-    }
-
-    private var displayPath: String {
-        StickyPromptBarModel.displayPath(for: workingDirectory)
-    }
-
-    private var branch: String? {
-        GitRepository.branchName(containing: workingDirectory)
-    }
-}
-
 struct SidebarToggleButton: View {
     @Binding var sidebarVisible: Bool
 
@@ -73,7 +22,8 @@ struct SidebarToggleButton: View {
 }
 
 /// Thin content header. When the sidebar is gone, traffic lights and the
-/// sidebar toggle live here — same row as the session title and path.
+/// sidebar toggle live here, beside session identity. Each pane owns its path
+/// and branch controls in the terminal input or Agent status bar.
 struct TerminalChromeBar: View {
     @ObservedObject var workspace: WorkspaceController
     @Binding var sidebarVisible: Bool
@@ -94,8 +44,6 @@ struct TerminalChromeBar: View {
             Spacer(minLength: SoraTheme.space2)
 
             agentButton
-
-            SessionHeader(workingDirectory: workspace.selected.workingDirectory)
 
             if !sidebarVisible {
                 newTabButton
@@ -172,7 +120,7 @@ struct TerminalChromeBar: View {
             hoverFill: SoraTheme.accent.opacity(0.10),
             cornerRadius: 5
         ))
-        .help("Open Agent (⌘⇧A)")
+        .help("Open Agent (" + workspace.runtime.shortcuts.binding(.openAgent).display + ")")
         .accessibilityLabel("Open Agent")
     }
 

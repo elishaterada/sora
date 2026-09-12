@@ -15,7 +15,10 @@ struct SoraSettingsView: View {
         }
     }
 
+    @AppStorage(TerminalPreferences.appearanceKey) private var appearanceName = "dark"
     @ObservedObject var session: AskSession
+    @ObservedObject var globalShortcut: GlobalShortcutController
+    @ObservedObject var shortcuts: AppShortcutStore
     @State private var selection: Page? = .terminal
 
     var body: some View {
@@ -26,11 +29,12 @@ struct SoraSettingsView: View {
             .navigationSplitViewColumnWidth(min: 150, ideal: 170)
         } detail: {
             switch selection ?? .terminal {
-            case .terminal: TerminalSettingsView()
+            case .terminal: TerminalSettingsView(globalShortcut: globalShortcut, shortcuts: shortcuts)
             case .agent: AgentSettingsView(session: session)
             case .voice: VoiceSettingsView(session: session)
             }
         }
+        .preferredColorScheme(TerminalPreferences.Appearance(rawValue: appearanceName)?.colorScheme)
         .frame(minWidth: 660, minHeight: 460)
         .onReceive(NotificationCenter.default.publisher(for: SoraSettingsOpener.pageNotification)) { note in
             if let page = note.object as? Page { selection = page }
@@ -49,16 +53,39 @@ private struct SettingsPage<Content: View>: View {
 }
 
 private struct TerminalSettingsView: View {
+    @ObservedObject var globalShortcut: GlobalShortcutController
+    @ObservedObject var shortcuts: AppShortcutStore
+    @AppStorage(GlobalShortcutController.enabledKey) private var globalShortcutEnabled = false
     @AppStorage("terminal.automaticAgentRouting") private var automaticAgentRouting = true
     @State private var fontSize = TerminalPreferences.fontSize
+    @AppStorage(TerminalPreferences.appearanceKey) private var appearance = "dark"
+    @AppStorage(TerminalPreferences.fontFamilyKey) private var family = "SF Mono"
+    @AppStorage(TerminalPreferences.compactSpacingKey) private var compact = false
     var body: some View {
         SettingsPage(title: "Terminal") {
             Section("Input") {
                 Toggle("Automatically send natural-language input to Agent", isOn: $automaticAgentRouting)
-                Text("When off, Return runs shell input. Use /agent or ⌘⇧A to ask Agent.").font(.caption).foregroundStyle(.secondary)
+                Text("When off, Return runs shell input. Use /agent or \(shortcuts.binding(.openAgent).display) to ask Agent.").font(.caption).foregroundStyle(.secondary)
             }
+            Section("Global shortcut") {
+                Toggle("Show or hide Sora with ⌃⌥S", isOn: $globalShortcutEnabled)
+                    .onChange(of: globalShortcutEnabled) { _ in globalShortcut.refresh() }
+                Text("Control–Option–S works from any app while Sora is running. Hiding Sora returns to the app you came from. Windows stay on their original display and Space.")
+                    .font(.caption).foregroundStyle(.secondary)
+                if globalShortcut.isRegistered { Text("Shortcut ready").font(.caption).foregroundStyle(.secondary) }
+                if let error = globalShortcut.errorMessage { Text(error).font(.caption).foregroundStyle(SoraTheme.danger) }
+            }
+            ShortcutSettingsSection(shortcuts: shortcuts)
             TerminalNotificationSettingsSection()
-            Section("Text") {
+            Section("Appearance") {
+                Picker("Theme", selection: $appearance) {
+                    ForEach(TerminalPreferences.Appearance.allCases) { Text($0.title).tag($0.rawValue) }
+                }.onChange(of: appearance) { _ in TerminalPreferences.appearanceChanged() }
+                Picker("Font", selection: $family) {
+                    ForEach(TerminalPreferences.fontFamilies, id: \.self) { Text($0).tag($0) }
+                }.onChange(of: family) { _ in TerminalPreferences.appearanceChanged() }
+                Toggle("Compact spacing", isOn: $compact)
+                    .onChange(of: compact) { _ in TerminalPreferences.appearanceChanged() }
                 HStack {
                     Text("Font size")
                     Slider(value: $fontSize,
@@ -67,9 +94,9 @@ private struct TerminalSettingsView: View {
                     Text("\(Int(fontSize)) pt").monospacedDigit().foregroundStyle(.secondary)
                 }
                 .onChange(of: fontSize) { TerminalPreferences.fontSize = $0 }
-                Button("Restore Default") {
+                Button("Restore Appearance Defaults") {
+                    TerminalPreferences.resetAppearance()
                     fontSize = TerminalPreferences.defaultFontSize
-                    TerminalPreferences.fontSize = TerminalPreferences.defaultFontSize
                 }
             }
         }
@@ -79,6 +106,8 @@ private struct TerminalSettingsView: View {
 
 private struct TerminalNotificationSettingsSection: View {
     @AppStorage(TerminalPreferences.notificationsEnabledKey) private var enabled = true
+    @AppStorage(TerminalPreferences.completionAlertsEnabledKey) private var completionAlerts = true
+    @AppStorage(TerminalPreferences.completionAlertThresholdKey) private var completionThreshold = 30.0
     @State private var status = "Checking…"
     @State private var canRequestPermission = false
     @State private var requesting = false
@@ -88,6 +117,14 @@ private struct TerminalNotificationSettingsSection: View {
         Section("Notifications") {
             Toggle("Notify when background terminals need attention", isOn: $enabled)
             Text("CLI agents and other terminal programs can request alerts. The focused terminal stays quiet. Tab attention badges remain available when alerts are off.")
+                .font(.caption).foregroundStyle(.secondary)
+            Toggle("Alert when long commands finish", isOn: $completionAlerts).disabled(!enabled)
+            Picker("Commands running at least", selection: $completionThreshold) {
+                ForEach([5.0, 10, 30, 60, 120, 300], id: \.self) { seconds in
+                    Text(seconds < 60 ? "\(Int(seconds)) seconds" : "\(Int(seconds / 60)) minute\(seconds == 60 ? "" : "s")").tag(seconds)
+                }
+            }.disabled(!enabled || !completionAlerts)
+            Text("Ordinary commands can trigger these alerts without special escape sequences. Applies to successes and failures in background sessions.")
                 .font(.caption).foregroundStyle(.secondary)
             LabeledContent("macOS permission", value: status)
             HStack {
@@ -130,8 +167,13 @@ private struct TerminalNotificationSettingsSection: View {
         case .denied: status = "Denied — enable in System Settings"
         case .authorized:
             status = settings.alertSetting == .enabled ? "Allowed" : "Allowed — banners are off"
-        case .provisional: status = "Quiet delivery only"
-        case .ephemeral: status = "Temporarily allowed"
+            errorMessage = nil
+        case .provisional:
+            status = "Quiet delivery only"
+            errorMessage = nil
+        case .ephemeral:
+            status = "Temporarily allowed"
+            errorMessage = nil
         @unknown default: status = "Unknown"
         }
     }

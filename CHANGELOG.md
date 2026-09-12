@@ -4,6 +4,31 @@ Human-readable highlights for each Sora release live here. Add the newest
 version before creating its `vX.Y.Z` tag; the release workflow requires a
 matching section and publishes it to GitHub.
 
+## 0.2.0 — 2026-09-12
+
+### What’s new
+
+- Give Agent a goal and let it check results, recover from failures, and try another approach. Clear progress, limits, and permission requests help you stay in control.
+- Keep Agent conversations and progress when switching tabs or restarting Sora. Restored tasks wait for you to resume them.
+- Find commands with Control-R, search actions and sessions with Command-Shift-P, and save reusable commands for later editing.
+- Search a selected command block, show only matching output lines, and bookmark useful output so it remains available after closing the original tab.
+- Ask Agent about selected terminal output with an editable preview before sending.
+- Arrange up to eight terminal panes, save named project layouts, and rename or reorder tabs. Light and dark themes, fonts, compact spacing, and configurable app shortcuts make the workspace easier to tailor.
+- Receive alerts when background commands finish and click back to their tabs. Enable the optional Control-Option-S shortcut to show or hide Sora from another app, Space, or display.
+- Use richer command and file suggestions, including accepting one word at a time with Option-Right.
+- Set up optional Bash integration and export shell scripts for richer Bash/zsh behavior over SSH. Remote context stays distinct from local folders and Agent actions.
+
+### Fixes
+
+- Preserve tabs, split layouts, saved output, and unfinished local zsh input through app updates, quitting, and reopening. Workspace backups and protection against stale app copies reduce the risk of losing your session.
+- Keep your place while reading Agent replies, with a visible way to jump to new output.
+- Keep ordinary Bash and unintegrated shell prompts visible, and clear obsolete notification errors after permission is allowed.
+
+### Notes
+
+- Agent actions remain bounded; commands that change files or system state require approval. A restored conversation does not restart commands automatically.
+- SSH sessions reopen as local shells with their saved output. Automatic reconnection, remote command recall, and Bash draft restoration are not included.
+
 ## 0.1.17 — 2026-09-11
 
 ### Fixes

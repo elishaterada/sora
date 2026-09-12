@@ -10,6 +10,23 @@ struct AgentCommandResult: Codable, Equatable, Sendable {
     let truncated: Bool
 }
 
+struct AgentProcessSnapshot: Codable, Equatable, Sendable, Identifiable {
+    let id: UUID
+    let startedAt: Date
+    let observedAt: Date
+    let lastOutputAt: Date?
+    let bytesRead: Int
+    let output: String
+    let truncated: Bool
+    let running: Bool
+    var elapsed: Int { max(0, Int(observedAt.timeIntervalSince(startedAt))) }
+    var status: String {
+        if !running { return "Process ended" }
+        if bytesRead == 0 { return "Running · \(elapsed)s · waiting for output" }
+        return "Running · \(elapsed)s · \(bytesRead) bytes received" + (truncated ? " · excerpt retained" : "")
+    }
+}
+
 /// How aggressively Sora auto-runs agent-proposed commands and webpage fetches.
 enum AgentPermissionMode: String, CaseIterable, Identifiable, Sendable {
     case askForApproval
@@ -31,9 +48,9 @@ enum AgentPermissionMode: String, CaseIterable, Identifiable, Sendable {
     var detail: String {
         switch self {
         case .askForApproval:
-            return "Always ask before running commands or fetching webpages."
+            return "Ask before running commands, native inspections or webpage fetches, unless you granted the same read for this task."
         case .approveForMe:
-            return "Auto-run a fixed list of read-only commands (pwd, ls, du, find). Still ask for every webpage and anything outside that list."
+            return "Auto-run bounded native inspections inside the task folder and a fixed list of listing commands. Outside paths, credential-like files, webpages and other commands still ask."
         case .fullAccess:
             return "Run any proposed command and fetch any page without asking. Commands use your full file permissions."
         }
@@ -43,9 +60,9 @@ enum AgentPermissionMode: String, CaseIterable, Identifiable, Sendable {
     var statusHelp: String {
         switch self {
         case .askForApproval:
-            return "Every command and webpage waits for approval."
+            return "Commands, inspections and webpages wait for approval, except explicit grants for the same native read in this task."
         case .approveForMe:
-            return "Read-only listing commands run automatically. Webpages and other commands still ask."
+            return "Bounded native inspections in the task folder and listing commands run automatically. Outside paths, credential-like files, webpages and other commands still ask."
         case .fullAccess:
             return "Commands and webpages run without asking, with your full file permissions."
         }
@@ -200,6 +217,20 @@ final class AgentCommandRunner: @unchecked Sendable {
     private var interrupted = false
     private let outputLimit = 32_768
     private let searchPath: String
+    private let handleID = UUID()
+    private var startedAt: Date?
+    private var lastOutputAt: Date?
+    private var bytesRead = 0
+    private var capturedOutput = Data()
+    private var outputTruncated = false
+
+    func snapshot() -> AgentProcessSnapshot? {
+        lock.lock(); defer { lock.unlock() }
+        guard let startedAt else { return nil }
+        return AgentProcessSnapshot(id: handleID, startedAt: startedAt, observedAt: Date(),
+            lastOutputAt: lastOutputAt, bytesRead: bytesRead,
+            output: String(decoding: capturedOutput, as: UTF8.self), truncated: outputTruncated, running: pid > 0)
+    }
 
     init(searchPath: String = LoginShellPath.value) {
         self.searchPath = searchPath
@@ -258,6 +289,7 @@ final class AgentCommandRunner: @unchecked Sendable {
         let error = posix_spawn(&child, "/bin/zsh", &actions, &attributes, &argv, &envp)
         if error == 0 {
             pid = child
+            startedAt = Date()
             // Stop may have arrived while spawn held the lock; kill before unlocking.
             if cancelled {
                 interrupted = true
@@ -278,6 +310,12 @@ final class AgentCommandRunner: @unchecked Sendable {
             let room = max(0, outputLimit - output.count)
             output.append(chunk.prefix(room))
             if chunk.count > room { truncated = true }
+            lock.lock()
+            bytesRead += chunk.count
+            lastOutputAt = Date()
+            capturedOutput = output
+            outputTruncated = truncated
+            lock.unlock()
         }
         pipe.fileHandleForReading.closeFile()
         // WNOWAIT retains the PID until cancellation can no longer target it.

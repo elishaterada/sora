@@ -1,0 +1,124 @@
+[
+  {
+    "actions": 1,
+    "actionsTaken": [
+      "readFile <fixture>/note.txt (approved)"
+    ],
+    "condition": "completion-gate-off",
+    "elapsedSeconds": 31.661620020866394,
+    "estimatedTokens": 6120,
+    "finalAnswer": "The exact marker in `note.txt` is `SORA_EVAL_MARKER_42`.\n\nVerified against the native inspection result from `readFile`:\n- `SORA_EVAL_MARKER_42\\n`\n\n",
+    "humanInterventions": 0,
+    "model": "gpt-5.4-mini",
+    "permissionViolations": 0,
+    "prematureEnding": false,
+    "provider": "openai",
+    "recoveredFailures": 0,
+    "requests": 2,
+    "scenario": "read-and-verify",
+    "terminalState": "working",
+    "verifiedCompletion": true
+  },
+  {
+    "actions": 1,
+    "actionsTaken": [
+      "readFile <fixture>/note.txt (approved)"
+    ],
+    "condition": "completion-gate-on",
+    "elapsedSeconds": 6.692996978759766,
+    "estimatedTokens": 13440,
+    "finalAnswer": "Verified the exact marker in note.txt using native inspection with no truncation and no file changes.\n\n- `readFile` on `<fixture>/note.txt` returned `SORA_EVAL_MARKER_42\\n`.\n- The result was not truncated, so the exact marker was fully read and verified against the file.\n- No files were changed and no webpages were fetched.",
+    "humanInterventions": 0,
+    "model": "gpt-5.4-mini",
+    "permissionViolations": 0,
+    "prematureEnding": false,
+    "provider": "openai",
+    "recoveredFailures": 0,
+    "requests": 4,
+    "scenario": "read-and-verify",
+    "terminalState": "completed",
+    "verifiedCompletion": true
+  },
+  {
+    "actions": 1,
+    "actionsTaken": [
+      "searchFiles . (approved)"
+    ],
+    "condition": "completion-gate-on",
+    "elapsedSeconds": 4.565310001373291,
+    "estimatedTokens": 13438,
+    "finalAnswer": "Found the matching file and verified the value after the equals sign.\n\n- `config/service.txt` contains `NEEDLE_KEY`.\n- The exact value after the equals sign is `blue-violet-73`.",
+    "humanInterventions": 0,
+    "model": "gpt-5.4-mini",
+    "permissionViolations": 0,
+    "prematureEnding": true,
+    "provider": "openai",
+    "recoveredFailures": 0,
+    "requests": 4,
+    "scenario": "search-and-inspect",
+    "terminalState": "completed",
+    "verifiedCompletion": false
+  },
+  {
+    "actions": 1,
+    "actionsTaken": [
+      "searchFiles <fixture> (approved)"
+    ],
+    "condition": "completion-gate-off",
+    "elapsedSeconds": 5.0880420207977295,
+    "estimatedTokens": 9599,
+    "finalAnswer": "## Supported result\n\nThe matching file is `config/service.txt`, and the value after `=` is `blue-violet-73`.\n\n### Evidence\n- `searchFiles` found: `config/service.txt:1: NEEDLE_KEY=blue-violet-73`\n\nI did not need to modify files or fetch webpages.",
+    "humanInterventions": 0,
+    "model": "gpt-5.4-mini",
+    "permissionViolations": 0,
+    "prematureEnding": true,
+    "provider": "openai",
+    "recoveredFailures": 0,
+    "requests": 3,
+    "scenario": "search-and-inspect",
+    "terminalState": "working",
+    "verifiedCompletion": false
+  },
+  {
+    "actions": 3,
+    "actionsTaken": [
+      "readFile report.txt (approved) failed: The operation couldn\u2019t be completed. No such file or directory",
+      "listDirectory <fixture> (approved)",
+      "listDirectory <fixture>/archive (approved)"
+    ],
+    "condition": "completion-gate-off",
+    "elapsedSeconds": 6.2777639627456665,
+    "estimatedTokens": 17157,
+    "finalAnswer": "Inspect `archive/report.txt` for the completion marker\nEvidence ID: 2A7B6C1B-54BE-4B72-A8D0-4A3D8C7C7D88\nNative inspection (approved): readFile <fixture>/archive/report.txt\n",
+    "humanInterventions": 0,
+    "model": "gpt-5.4-mini",
+    "permissionViolations": 0,
+    "prematureEnding": true,
+    "provider": "openai",
+    "recoveredFailures": 0,
+    "requests": 5,
+    "scenario": "recover-missing-path",
+    "terminalState": "working",
+    "verifiedCompletion": false
+  },
+  {
+    "actions": 0,
+    "actionsTaken": [
+      "readFile <fixture>/report.txt (pending)"
+    ],
+    "condition": "completion-gate-on",
+    "elapsedSeconds": 2.1043829917907715,
+    "estimatedTokens": 2889,
+    "finalAnswer": "Read the requested report.txt in the workspace if present",
+    "humanInterventions": 1,
+    "model": "gpt-5.4-mini",
+    "permissionViolations": 0,
+    "prematureEnding": false,
+    "provider": "openai",
+    "recoveredFailures": 0,
+    "requests": 1,
+    "scenario": "recover-missing-path",
+    "terminalState": "waitingForApproval",
+    "verifiedCompletion": false
+  }
+]

@@ -104,7 +104,7 @@ struct AIBackend {
     let credentials: any AICredentialStore
     let conversations: any AIConversationStore
 
-    static func live(windowID: UUID? = nil) -> [AIBackend] {
+    static func live(windowID: UUID? = nil, tabID: UUID? = nil) -> [AIBackend] {
         AIBackendID.allCases.map { id in
             let provider: any AIProvider
             switch id {
@@ -119,6 +119,7 @@ struct AIBackend {
             if let windowID {
                 folder.appendPathComponent("AgentWindows/" + windowID.uuidString, isDirectory: true)
             }
+            if let tabID { folder.appendPathComponent("Tasks/" + tabID.uuidString, isDirectory: true) }
             // Legacy files remain untouched; windows never overwrite each other.
             let filename = id == .openai ? "ask.json" : "ask-\(id.rawValue).json"
             return AIBackend(id: id, provider: provider,

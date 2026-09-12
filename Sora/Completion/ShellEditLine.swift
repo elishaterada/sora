@@ -12,6 +12,9 @@ enum ShellEditLine {
     /// Preexec's original command, before the ordinary window title removes
     /// newlines. An empty result also supports the older readiness-only mark.
     static func startedCommand(title: String) -> String? {
+        if title.hasPrefix("sora-command;1;") {
+            return String(title.dropFirst("sora-command;1;".count)).removingPercentEncoding
+        }
         guard title.hasPrefix(commandStartedTitle) else { return nil }
         return decodeTransport(String(title.dropFirst(commandStartedTitle.count)))
     }
@@ -104,5 +107,43 @@ struct ShellTitleAssembler {
         let result = parts.joined()
         parts = []; expected = 0
         return result
+    }
+}
+
+/// Shell-reported display context is never interpreted as a local file URL
+/// when a remote client owns the terminal. The process check also covers SSH
+/// sessions with no integration installed on the server.
+struct ShellContextReport: Equatable {
+    static let prefix = "sora-context;"
+    let shell: String
+    let isRemote: Bool
+    let host: String
+    let path: String
+
+    static func parse(_ title: String) -> Self? {
+        guard title.hasPrefix(prefix), title.utf8.count <= 24_000 else { return nil }
+        let fields = title.split(separator: ";", maxSplits: 5, omittingEmptySubsequences: false)
+        guard fields.count == 6, fields[1] == "1", ["zsh", "bash"].contains(fields[2]),
+              ["local", "remote"].contains(fields[3]),
+              let host = String(fields[4]).removingPercentEncoding,
+              let path = String(fields[5]).removingPercentEncoding,
+              !host.isEmpty, host.utf8.count <= 255, path.hasPrefix("/"), path.utf8.count <= 16_384,
+              !host.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains),
+              !path.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains) else { return nil }
+        return Self(shell: String(fields[2]), isRemote: fields[3] == "remote", host: host, path: path)
+    }
+
+    static func isRemoteClient(_ executable: String?) -> Bool {
+        ["ssh", "mosh", "mosh-client", "telnet"].contains(executable ?? "")
+    }
+
+    static func isRemote(report: Self?, foreground: String?, reportedPID: UInt64? = nil, foregroundPID: UInt64? = nil) -> Bool {
+        let sameProcess = reportedPID == nil || foregroundPID == nil || reportedPID == foregroundPID
+        return isRemoteClient(foreground) || (sameProcess && report?.isRemote == true)
+    }
+
+    static func displayRemote(report: Self?) -> String {
+        guard let report, report.isRemote else { return "Remote terminal" }
+        return "\(report.host):\(report.path)"
     }
 }

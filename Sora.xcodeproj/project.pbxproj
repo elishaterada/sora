@@ -7,6 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		FA0290000000000000000001 /* CommandCompletion.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0290000000000000000003 /* CommandCompletion.swift */; };
+		FA0290000000000000000002 /* CommandCompletion.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0290000000000000000003 /* CommandCompletion.swift */; };
+		FA0300000000000000000001 /* CommandCompletionMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0300000000000000000002 /* CommandCompletionMenu.swift */; };
+		FA0280000000000000000001 /* SavedCommandEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0280000000000000000002 /* SavedCommandEditor.swift */; };
  NT0000000000000000000001 = {isa = PBXBuildFile; fileRef = NT0000000000000000000002; };
 		UP0000000000000000000001 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = UP0000000000000000000005 /* Sparkle */; };
 		UP0000000000000000000006 /* UpdateController.swift in Sources */ = {isa = PBXBuildFile; fileRef = UP0000000000000000000008 /* UpdateController.swift */; };
@@ -173,6 +177,44 @@
 		CH0000000000000000000012 /* CommandHistoryPopoverView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CH0000000000000000000002 /* CommandHistoryPopoverView.swift */; };
 		CH0000000000000000000013 /* CommandHistorySession.swift in Sources */ = {isa = PBXBuildFile; fileRef = CH0000000000000000000001 /* CommandHistorySession.swift */; };
 		CH0000000000000000000014 /* CommandHistorySessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CH0000000000000000000003 /* CommandHistorySessionTests.swift */; };
+		A10000000000000000000002 /* AgentGoal.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000001; };
+		A60000000000000000000002 /* CommandHistorySearch.swift in Sources */ = {isa = PBXBuildFile; fileRef = A60000000000000000000001; };
+		A50000000000000000000002 /* AgentEvaluation.swift in Sources */ = {isa = PBXBuildFile; fileRef = A50000000000000000000001; };
+		A40000000000000000000002 /* AgentTranscriptScroll.swift in Sources */ = {isa = PBXBuildFile; fileRef = A40000000000000000000001; };
+		A30000000000000000000002 /* AgentWorkspace.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000001; };
+		A20000000000000000000002 /* AgentTools.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000001; };
+		A10000000000000000000003 /* AgentGoal.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000001; };
+		A60000000000000000000003 /* CommandHistorySearch.swift in Sources */ = {isa = PBXBuildFile; fileRef = A60000000000000000000001; };
+		A50000000000000000000003 /* AgentEvaluation.swift in Sources */ = {isa = PBXBuildFile; fileRef = A50000000000000000000001; };
+		A40000000000000000000003 /* AgentTranscriptScroll.swift in Sources */ = {isa = PBXBuildFile; fileRef = A40000000000000000000001; };
+		A30000000000000000000003 /* AgentWorkspace.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000001; };
+		A20000000000000000000003 /* AgentTools.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000001; };
+		A70000000000000000000002 /* CommandHistorySearchController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A70000000000000000000001; };
+		A80000000000000000000002 /* CommandPaletteController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A80000000000000000000001; };
+		A90000000000000000000002 /* TerminalOutputAttachment.swift in Sources */ = {isa = PBXBuildFile; fileRef = A90000000000000000000001; };
+		A90000000000000000000003 /* TerminalOutputAttachment.swift in Sources */ = {isa = PBXBuildFile; fileRef = A90000000000000000000001; };
+		B10000000000000000000002 /* GlobalShortcutController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000001; };
+		FA0310000000000000000001 /* AppShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0310000000000000000003 /* AppShortcuts.swift */; };
+		FA0310000000000000000002 /* AppShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0310000000000000000003 /* AppShortcuts.swift */; };
+		FA0320000000000000000001 /* ShortcutSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0320000000000000000002 /* ShortcutSettingsView.swift */; };
+		FA0330000000000000000001 /* ProjectLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0330000000000000000003 /* ProjectLayout.swift */; };
+		FA0330000000000000000002 /* ProjectLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0330000000000000000003 /* ProjectLayout.swift */; };
+		FA0340000000000000000001 /* ProjectLayoutStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0340000000000000000003 /* ProjectLayoutStore.swift */; };
+		FA0340000000000000000002 /* ProjectLayoutStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0340000000000000000003 /* ProjectLayoutStore.swift */; };
+		FA0350000000000000000001 /* ProjectLayoutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0350000000000000000003 /* ProjectLayoutView.swift */; };
+		FA0360000000000000000001 /* ProjectLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0360000000000000000002 /* ProjectLayoutTests.swift */; };
+		FA0370000000000000000001 /* PaneLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0370000000000000000003 /* PaneLayout.swift */; };
+		FA0370000000000000000002 /* PaneLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0370000000000000000003 /* PaneLayout.swift */; };
+		FA0380000000000000000001 /* BlockBookmarkStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0380000000000000000003 /* BlockBookmarkStore.swift */; };
+		FA0380000000000000000002 /* BlockBookmarkStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0380000000000000000003 /* BlockBookmarkStore.swift */; };
+		FA0390000000000000000001 /* BlockBookmarkLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0390000000000000000003 /* BlockBookmarkLibrary.swift */; };
+		FA0400000000000000000001 /* OutputSearch.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0400000000000000000003 /* OutputSearch.swift */; };
+		FA0400000000000000000002 /* OutputSearch.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0400000000000000000003 /* OutputSearch.swift */; };
+		FA0410000000000000000001 /* TerminalFindPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0410000000000000000003 /* TerminalFindPanel.swift */; };
+		FA0420000000000000000001 /* SoraShellIntegration.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0420000000000000000003 /* SoraShellIntegration.swift */; };
+		FA0420000000000000000002 /* SoraShellIntegration.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0420000000000000000003 /* SoraShellIntegration.swift */; };
+		FA0430000000000000000001 /* ShellIntegrationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0430000000000000000003 /* ShellIntegrationView.swift */; };
+		FA0440000000000000000001 /* shell-integration in Resources */ = {isa = PBXBuildFile; fileRef = FA0440000000000000000003 /* shell-integration */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -186,6 +228,9 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		FA0290000000000000000003 /* CommandCompletion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandCompletion.swift; sourceTree = "<group>"; };
+		FA0300000000000000000002 /* CommandCompletionMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandCompletionMenu.swift; sourceTree = "<group>"; };
+		FA0280000000000000000002 /* SavedCommandEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedCommandEditor.swift; sourceTree = "<group>"; };
  NT0000000000000000000002 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalNotificationController.swift; sourceTree = "<group>"; };
 		UP0000000000000000000008 /* UpdateController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateController.swift; sourceTree = "<group>"; };
 		UP0000000000000000000009 /* UpdateCheckPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateCheckPolicy.swift; sourceTree = "<group>"; };
@@ -304,6 +349,30 @@
 		CH0000000000000000000001 /* CommandHistorySession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandHistorySession.swift; sourceTree = "<group>"; };
 		CH0000000000000000000002 /* CommandHistoryPopoverView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandHistoryPopoverView.swift; sourceTree = "<group>"; };
 		CH0000000000000000000003 /* CommandHistorySessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandHistorySessionTests.swift; sourceTree = "<group>"; };
+		A10000000000000000000001 /* AgentGoal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentGoal.swift; sourceTree = "<group>"; };
+		A60000000000000000000001 /* CommandHistorySearch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandHistorySearch.swift; sourceTree = "<group>"; };
+		A50000000000000000000001 /* AgentEvaluation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentEvaluation.swift; sourceTree = "<group>"; };
+		A40000000000000000000001 /* AgentTranscriptScroll.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentTranscriptScroll.swift; sourceTree = "<group>"; };
+		A30000000000000000000001 /* AgentWorkspace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentWorkspace.swift; sourceTree = "<group>"; };
+		A20000000000000000000001 /* AgentTools.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentTools.swift; sourceTree = "<group>"; };
+		A70000000000000000000001 /* CommandHistorySearchController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandHistorySearchController.swift; sourceTree = "<group>"; };
+		A80000000000000000000001 /* CommandPaletteController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPaletteController.swift; sourceTree = "<group>"; };
+		A90000000000000000000001 /* TerminalOutputAttachment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalOutputAttachment.swift; sourceTree = "<group>"; };
+		B10000000000000000000001 /* GlobalShortcutController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalShortcutController.swift; sourceTree = "<group>"; };
+		FA0310000000000000000003 /* AppShortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppShortcuts.swift; sourceTree = "<group>"; };
+		FA0320000000000000000002 /* ShortcutSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutSettingsView.swift; sourceTree = "<group>"; };
+		FA0330000000000000000003 /* ProjectLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectLayout.swift; sourceTree = "<group>"; };
+		FA0340000000000000000003 /* ProjectLayoutStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectLayoutStore.swift; sourceTree = "<group>"; };
+		FA0350000000000000000003 /* ProjectLayoutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectLayoutView.swift; sourceTree = "<group>"; };
+		FA0360000000000000000002 /* ProjectLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectLayoutTests.swift; sourceTree = "<group>"; };
+		FA0370000000000000000003 /* PaneLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneLayout.swift; sourceTree = "<group>"; };
+		FA0380000000000000000003 /* BlockBookmarkStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlockBookmarkStore.swift; sourceTree = "<group>"; };
+		FA0390000000000000000003 /* BlockBookmarkLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlockBookmarkLibrary.swift; sourceTree = "<group>"; };
+		FA0400000000000000000003 /* OutputSearch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutputSearch.swift; sourceTree = "<group>"; };
+		FA0410000000000000000003 /* TerminalFindPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalFindPanel.swift; sourceTree = "<group>"; };
+		FA0420000000000000000003 /* SoraShellIntegration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SoraShellIntegration.swift"; sourceTree = "<group>"; };
+		FA0430000000000000000003 /* ShellIntegrationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ShellIntegrationView.swift"; sourceTree = "<group>"; };
+		FA0440000000000000000003 /* shell-integration */ = {isa = PBXFileReference; lastKnownFileType = folder; path = "shell-integration"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -344,6 +413,12 @@
 		CC00000000000000000001F4 /* Agent */ = {
 			isa = PBXGroup;
 			children = (
+				A10000000000000000000001 /* AgentGoal.swift */,
+				A90000000000000000000001 /* TerminalOutputAttachment.swift */,
+				A50000000000000000000001 /* AgentEvaluation.swift */,
+				A40000000000000000000001 /* AgentTranscriptScroll.swift */,
+				A30000000000000000000001 /* AgentWorkspace.swift */,
+				A20000000000000000000001 /* AgentTools.swift */,
 				CC0000000000000000000064 /* AIProvider.swift */,
 				FG0000000000000000000000 /* AgentCommandProposal.swift */,
                 FA0000000000000000000000,
@@ -403,9 +478,14 @@
 				AA0000000000000000000102 /* ContentView.swift */,
 				AA0000000000000000000105 /* SoraTheme.swift */,
 				AA00000000000000000001D1 /* TerminalPreferences.swift */,
+				FA0310000000000000000003 /* AppShortcuts.swift */,
+				FA0320000000000000000002 /* ShortcutSettingsView.swift */,
+				B10000000000000000000001 /* GlobalShortcutController.swift */,
 				AA00000000000000000001D2 /* SoraSettingsView.swift */,
 				AA0000000000000000000190 /* HushLogin.swift */,
 				AA0000000000000000000191 /* SoraZshBootstrap.swift */,
+				FA0430000000000000000003 /* ShellIntegrationView.swift */,
+				FA0420000000000000000003 /* SoraShellIntegration.swift */,
 			);
 			path = Application;
 			sourceTree = "<group>";
@@ -418,6 +498,7 @@
 				AA0000000000000000000119 /* cursor-blink.ghostty */,
 				AA000000000000000000011A /* cursor-blink.glsl */,
 				AA0000000000000000000192 /* zsh */,
+				FA0440000000000000000003 /* shell-integration */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -441,6 +522,10 @@
 			isa = PBXGroup;
 			children = (
 				AA0000000000000000000120 /* WorkspaceSnapshot.swift */,
+				FA0350000000000000000003 /* ProjectLayoutView.swift */,
+				FA0340000000000000000003 /* ProjectLayoutStore.swift */,
+				FA0330000000000000000003 /* ProjectLayout.swift */,
+				FA0370000000000000000003 /* PaneLayout.swift */,
 				AA0000000000000000000121 /* WorkspaceModel.swift */,
 				AA0000000000000000000122 /* WorkspaceRestore.swift */,
 				AA0000000000000000000123 /* WorkspaceController.swift */,
@@ -459,7 +544,14 @@
 		AA0000000000000000000507 /* Commands */ = {
 			isa = PBXGroup;
 			children = (
+				FA0410000000000000000003 /* TerminalFindPanel.swift */,
+				FA0400000000000000000003 /* OutputSearch.swift */,
+				FA0390000000000000000003 /* BlockBookmarkLibrary.swift */,
 				CH0000000000000000000001 /* CommandHistorySession.swift */,
+				A60000000000000000000001 /* CommandHistorySearch.swift */,
+				A70000000000000000000001 /* CommandHistorySearchController.swift */,
+				A80000000000000000000001 /* CommandPaletteController.swift */,
+				FA0280000000000000000002 /* SavedCommandEditor.swift */,
 				CH0000000000000000000002 /* CommandHistoryPopoverView.swift */,
 				CB0000000000000000000001 /* CommandBlockInput.swift */,
 				CE0000000000000000000001 /* CommandHeaderStyle.swift */,
@@ -475,6 +567,7 @@
 		AA0000000000000000000508 /* Storage */ = {
 			isa = PBXGroup;
 			children = (
+				FA0380000000000000000003 /* BlockBookmarkStore.swift */,
 				CC0000000000000000000068 /* AICredentialStore.swift */,
 				CC0000000000000000000069 /* AIConversationStore.swift */,
 				AA0000000000000000000142 /* CommandHistoryStore.swift */,
@@ -489,6 +582,8 @@
 				AA0000000000000000000161 /* GitRepository.swift */,
 				AA0000000000000000000162 /* PathCompleter.swift */,
 				AA0000000000000000000163 /* CompletionEngine.swift */,
+				FA0290000000000000000003 /* CommandCompletion.swift */,
+				FA0300000000000000000002 /* CommandCompletionMenu.swift */,
 				AA0000000000000000000164 /* CompletionSession.swift */,
 				AA0000000000000000000165 /* GhostTextView.swift */,
 				AA0000000000000000000166 /* StickyPromptBar.swift */,
@@ -523,6 +618,7 @@
 				DD0000000000000000000110 /* TerminalImageDropTests.swift */,
 				AA0000000000000000000111 /* GhosttyClipboardTests.swift */,
 				AA0000000000000000000130 /* WorkspaceSnapshotTests.swift */,
+				FA0360000000000000000002 /* ProjectLayoutTests.swift */,
 				AA0000000000000000000131 /* WorkspaceModelTests.swift */,
 				AA0000000000000000000134 /* PathLinkParserTests.swift */,
 				AA0000000000000000000132 /* WorkspaceRestoreTests.swift */,
@@ -638,6 +734,7 @@
 				AA0000000000000000000019 /* cursor-blink.ghostty in Resources */,
 				AA000000000000000000001A /* cursor-blink.glsl in Resources */,
 				AA00000000000000000000A3 /* zsh in Resources */,
+				FA0440000000000000000001 /* shell-integration in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -664,6 +761,16 @@
 				DD00000000000000000000CA /* CodexConnection.swift in Sources */,
 				DD00000000000000000000CB /* CodexProvider.swift in Sources */,
 				DD00000000000000000000CC /* CodexLogin.swift in Sources */,
+				A10000000000000000000002 /* AgentGoal.swift in Sources */,
+				A90000000000000000000002 /* TerminalOutputAttachment.swift in Sources */,
+				A60000000000000000000002 /* CommandHistorySearch.swift in Sources */,
+				A70000000000000000000002 /* CommandHistorySearchController.swift in Sources */,
+				A80000000000000000000002 /* CommandPaletteController.swift in Sources */,
+				FA0280000000000000000001 /* SavedCommandEditor.swift in Sources */,
+				A50000000000000000000002 /* AgentEvaluation.swift in Sources */,
+				A40000000000000000000002 /* AgentTranscriptScroll.swift in Sources */,
+				A30000000000000000000002 /* AgentWorkspace.swift in Sources */,
+				A20000000000000000000002 /* AgentTools.swift in Sources */,
 				CC00000000000000000000C8 /* AIProvider.swift in Sources */,
 				FG0000000000000000000064 /* AgentCommandProposal.swift in Sources */,
                 FA0000000000000000000001,
@@ -686,9 +793,14 @@
 				AA0000000000000000000002 /* ContentView.swift in Sources */,
 				AA0000000000000000000005 /* SoraTheme.swift in Sources */,
 				AA00000000000000000000D1 /* TerminalPreferences.swift in Sources */,
+				FA0310000000000000000001 /* AppShortcuts.swift in Sources */,
+				FA0320000000000000000001 /* ShortcutSettingsView.swift in Sources */,
+				B10000000000000000000002 /* GlobalShortcutController.swift in Sources */,
 				AA00000000000000000000D2 /* SoraSettingsView.swift in Sources */,
 				AA00000000000000000000A1 /* HushLogin.swift in Sources */,
 				AA00000000000000000000A2 /* SoraZshBootstrap.swift in Sources */,
+				FA0430000000000000000001 /* ShellIntegrationView.swift in Sources */,
+				FA0420000000000000000001 /* SoraShellIntegration.swift in Sources */,
 				AA0000000000000000000003 /* GhosttyRuntime.swift in Sources */,
  NT0000000000000000000001,
 				AA0000000000000000000004 /* GhosttySurfaceView.swift in Sources */,
@@ -698,6 +810,14 @@
 				AA0000000000000000000007 /* GhosttyClipboard.swift in Sources */,
 				AA0000000000000000000017 /* GhosttyClipboardKit.swift in Sources */,
 				AA0000000000000000000020 /* WorkspaceSnapshot.swift in Sources */,
+				FA0350000000000000000001 /* ProjectLayoutView.swift in Sources */,
+				FA0340000000000000000001 /* ProjectLayoutStore.swift in Sources */,
+				FA0330000000000000000001 /* ProjectLayout.swift in Sources */,
+				FA0370000000000000000001 /* PaneLayout.swift in Sources */,
+				FA0410000000000000000001 /* TerminalFindPanel.swift in Sources */,
+				FA0400000000000000000001 /* OutputSearch.swift in Sources */,
+				FA0390000000000000000001 /* BlockBookmarkLibrary.swift in Sources */,
+				FA0380000000000000000001 /* BlockBookmarkStore.swift in Sources */,
 				AA0000000000000000000021 /* WorkspaceModel.swift in Sources */,
 				AA0000000000000000000022 /* WorkspaceRestore.swift in Sources */,
 				AA0000000000000000000023 /* WorkspaceController.swift in Sources */,
@@ -717,6 +837,8 @@
 				AA0000000000000000000061 /* GitRepository.swift in Sources */,
 				AA0000000000000000000062 /* PathCompleter.swift in Sources */,
 				AA0000000000000000000063 /* CompletionEngine.swift in Sources */,
+				FA0290000000000000000001 /* CommandCompletion.swift in Sources */,
+				FA0300000000000000000001 /* CommandCompletionMenu.swift in Sources */,
 				AA0000000000000000000064 /* CompletionSession.swift in Sources */,
 				AA0000000000000000000065 /* GhostTextView.swift in Sources */,
 				AA0000000000000000000066 /* StickyPromptBar.swift in Sources */,
@@ -746,6 +868,13 @@
 				DD000000000000000000012E /* CodexConnection.swift in Sources */,
 				DD000000000000000000012F /* CodexProvider.swift in Sources */,
 				DD0000000000000000000130 /* CodexLogin.swift in Sources */,
+				A10000000000000000000003 /* AgentGoal.swift in Sources */,
+				A90000000000000000000003 /* TerminalOutputAttachment.swift in Sources */,
+				A60000000000000000000003 /* CommandHistorySearch.swift in Sources */,
+				A50000000000000000000003 /* AgentEvaluation.swift in Sources */,
+				A40000000000000000000003 /* AgentTranscriptScroll.swift in Sources */,
+				A30000000000000000000003 /* AgentWorkspace.swift in Sources */,
+				A20000000000000000000003 /* AgentTools.swift in Sources */,
 				CC000000000000000000012C /* AIProvider.swift in Sources */,
 				FG0000000000000000000065 /* AgentCommandProposal.swift in Sources */,
                 FA0000000000000000000002,
@@ -769,6 +898,7 @@
 				AA00000000000000000000B1 /* GhostTextView.swift in Sources */,
 				AA00000000000000000000B2 /* SoraTheme.swift in Sources */,
 				AA00000000000000000000E1 /* TerminalPreferences.swift in Sources */,
+				FA0310000000000000000002 /* AppShortcuts.swift in Sources */,
 				AA0000000000000000000010 /* GhosttyInputTests.swift in Sources */,
 				DD0000000000000000000010 /* TerminalImageDropTests.swift in Sources */,
 				AA0000000000000000000011 /* GhosttyClipboardTests.swift in Sources */,
@@ -776,12 +906,18 @@
 				DD0000000000000000000014 /* TerminalImageDrop.swift in Sources */,
 				AA0000000000000000000015 /* GhosttyClipboard.swift in Sources */,
 				AA0000000000000000000030 /* WorkspaceSnapshotTests.swift in Sources */,
+				FA0360000000000000000001 /* ProjectLayoutTests.swift in Sources */,
 				AA0000000000000000000031 /* WorkspaceModelTests.swift in Sources */,
 				AA0000000000000000000038 /* PathLinkParserTests.swift in Sources */,
 				AA000000000000000000002C /* PathActions.swift in Sources */,
 				AA0000000000000000000032 /* WorkspaceRestoreTests.swift in Sources */,
 				AA0000000000000000000033 /* ForegroundWorkingDirectoryTests.swift in Sources */,
 				AA0000000000000000000034 /* WorkspaceSnapshot.swift in Sources */,
+				FA0340000000000000000002 /* ProjectLayoutStore.swift in Sources */,
+				FA0330000000000000000002 /* ProjectLayout.swift in Sources */,
+				FA0370000000000000000002 /* PaneLayout.swift in Sources */,
+				FA0400000000000000000002 /* OutputSearch.swift in Sources */,
+				FA0380000000000000000002 /* BlockBookmarkStore.swift in Sources */,
 				AA0000000000000000000035 /* WorkspaceModel.swift in Sources */,
 				AA0000000000000000000036 /* WorkspaceRestore.swift in Sources */,
 				AA0000000000000000000037 /* ForegroundWorkingDirectory.swift in Sources */,
@@ -801,6 +937,7 @@
 				AA0000000000000000000081 /* GitRepository.swift in Sources */,
 				AA0000000000000000000082 /* PathCompleter.swift in Sources */,
 				AA0000000000000000000083 /* CompletionEngine.swift in Sources */,
+				FA0290000000000000000002 /* CommandCompletion.swift in Sources */,
 				AA0000000000000000000084 /* CompletionSession.swift in Sources */,
 				AA0000000000000000000088 /* PromptLineRecovery.swift in Sources */,
 				AA0000000000000000000091 /* NextCommandEngine.swift in Sources */,
@@ -809,6 +946,7 @@
 				AA0000000000000000000087 /* StickyPromptBarModel.swift in Sources */,
 				AA00000000000000000000A4 /* HushLogin.swift in Sources */,
 				AA00000000000000000000A5 /* SoraZshBootstrap.swift in Sources */,
+				FA0420000000000000000002 /* SoraShellIntegration.swift in Sources */,
 				AA00000000000000000000A6 /* HushLoginTests.swift in Sources */,
 				AA00000000000000000000A7 /* SoraZshBootstrapTests.swift in Sources */,
 				AA00000000000000000000A8 /* ShellHighlightTests.swift in Sources */,
@@ -889,7 +1027,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 18;
+				CURRENT_PROJECT_VERSION = 19;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = NO;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -903,7 +1041,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.1.17;
+				MARKETING_VERSION = 0.2.0;
 				OTHER_LDFLAGS = (
 					"-lstdc++",
 					"-lsqlite3",
@@ -936,7 +1074,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 18;
+				CURRENT_PROJECT_VERSION = 19;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = NO;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -950,7 +1088,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.1.17;
+				MARKETING_VERSION = 0.2.0;
 				OTHER_LDFLAGS = (
 					"-lstdc++",
 					"-lsqlite3",
@@ -981,10 +1119,10 @@
 			buildSettings = {
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 18;
+				CURRENT_PROJECT_VERSION = 19;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.1.17;
+				MARKETING_VERSION = 0.2.0;
 				OTHER_LDFLAGS = (
 					"-lsqlite3",
 				);
@@ -999,10 +1137,10 @@
 			buildSettings = {
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 18;
+				CURRENT_PROJECT_VERSION = 19;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.1.17;
+				MARKETING_VERSION = 0.2.0;
 				OTHER_LDFLAGS = (
 					"-lsqlite3",
 				);

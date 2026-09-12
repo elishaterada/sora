@@ -166,3 +166,50 @@ final class ShellEditLineTests: XCTestCase {
         }
     }
 }
+
+final class ShellContextReportTests: XCTestCase {
+    func testRemoteContextNeverBecomesLocalFromClientCWD() throws {
+        let local = try XCTUnwrap(ShellContextReport.parse("sora-context;1;zsh;local;mac;/Users/me/project"))
+        let remote = try XCTUnwrap(ShellContextReport.parse("sora-context;1;bash;remote;server;/srv/a%3Bb%25c/日本語"))
+        XCTAssertEqual(remote.path, "/srv/a;b%c/日本語")
+        XCTAssertTrue(ShellContextReport.isRemote(report: local, foreground: "ssh"))
+        XCTAssertTrue(ShellContextReport.isRemote(report: nil, foreground: "mosh-client"))
+        XCTAssertTrue(ShellContextReport.isRemote(report: remote, foreground: "sh"))
+        XCTAssertFalse(ShellContextReport.isRemote(report: local, foreground: "zsh"))
+        XCTAssertFalse(ShellContextReport.isRemote(report: remote, foreground: "bash", reportedPID: 20, foregroundPID: 10))
+        XCTAssertTrue(ShellContextReport.isRemote(report: remote, foreground: "sh", reportedPID: 20, foregroundPID: 20))
+        XCTAssertEqual(ShellContextReport.displayRemote(report: remote), "server:/srv/a;b%c/日本語")
+        XCTAssertEqual(ShellContextReport.displayRemote(report: local), "Remote terminal")
+    }
+
+    func testRejectsMalformedOrUnsafeContextWithoutInterpretingIt() {
+        for value in ["sora-context;2;zsh;local;mac;/tmp", "sora-context;1;fish;local;mac;/tmp",
+                      "sora-context;1;zsh;unknown;mac;/tmp", "sora-context;1;zsh;remote;;/tmp",
+                      "sora-context;1;zsh;remote;host;relative", "sora-context;1;zsh;remote;host;/tmp/%00",
+                      "sora-context;1;zsh;remote;host;/tmp/%GG", "sora-context;1;zsh;remote;host;/tmp/%1B"] {
+            XCTAssertNil(ShellContextReport.parse(value), value)
+        }
+    }
+
+    func testZshContextReportEncodesRemoteHostAndLiteralPaths() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        process.environment = ProcessInfo.processInfo.environment.merging(["SSH_CONNECTION": "fixture", "HOST": "fixture-host", "LC_ALL": "en_US.UTF-8"]) { _, value in value }
+        process.arguments = ["-f", "-c", "source \"$1\"; PWD='/srv/日本語;a%25'; _sora_report_context", "test",
+                             root.appendingPathComponent("Sora/Resources/zsh/prompt-line.zsh").path]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        try process.run()
+        let output = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        process.waitUntilExit()
+        XCTAssertEqual(process.terminationStatus, 0)
+        var assembler = ShellTitleAssembler()
+        let reports = output.components(separatedBy: "\u{1b}]2;").dropFirst().compactMap {
+            assembler.consume(String($0.dropLast())).flatMap(ShellContextReport.parse)
+        }
+        let report = try XCTUnwrap(reports.last)
+        XCTAssertTrue(report.isRemote)
+        XCTAssertEqual(report.path, "/srv/日本語;a%25")
+    }
+}

@@ -4,7 +4,10 @@ import AppKit
 /// through this strip — it is a sibling view, not an overlay on Metal.
 final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
     /// Context, live shell input preview, and keyboard hints.
-    static let height: CGFloat = 112
+    private static var inputFont: NSFont { SoraTheme.terminalFont.withSize(max(12, TerminalPreferences.fontSize - 2)) }
+    private static var lineHeight: CGFloat { max(24, ceil(inputFont.ascender - inputFont.descender + 4)) }
+    var agentShortcut = "⇧⌘A"
+    static var height: CGFloat { (TerminalPreferences.compactSpacing ? 96 : 112) + max(0, lineHeight - 24) }
 
     var maximumHeight: CGFloat = height {
         didSet { if maximumHeight != oldValue { needsLayout = true } }
@@ -40,17 +43,25 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
     private var caretText = ""
     private var caretScalarOffset = 0
     private var caretVisible = false
+    var isPaneActive = false {
+        didSet {
+            guard isPaneActive != oldValue else { return }
+            updateFocusAppearance()
+            needsLayout = true
+        }
+    }
     private let inputSymbol = NSImageView()
     private let statusLabel = NSTextField(labelWithString: "Running")
     private let pathButton = StickyContextChipButton()
     private let branchButton = StickyContextChipButton()
     private let lineLabel = NSTextField(labelWithString: "")
     private var hintUpdate: DispatchWorkItem?
+    private var shellInputHint: String?
     private var desiredHint = "" {
         didSet {
             guard desiredHint != oldValue else { return }
             hintUpdate?.cancel()
-            let text = desiredHint
+            let text = shellInputHint ?? desiredHint
             let update = DispatchWorkItem { [weak self] in
                 guard let self else { return }
                 self.hintLabel.stringValue = text
@@ -90,11 +101,11 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
         }
         super.init(frame: frameRect)
         wantsLayer = true
-        layer?.backgroundColor = NSColor.black.withAlphaComponent(0.35).cgColor
+        layer?.backgroundColor = SoraTheme.nsInputBackground.cgColor
 
         addSubview(effectView)
         hairline.wantsLayer = true
-        hairline.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.10).cgColor
+        hairline.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.10).cgColor
         addSubview(hairline)
 
         pathButton.symbolName = "folder"
@@ -113,9 +124,9 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
         addSubview(inputSymbol)
 
         configureLabel(lineLabel, size: SoraTheme.chromeSize, color: .labelColor)
-        configureLabel(hintLabel, size: SoraTheme.chromeCaptionSize, color: NSColor.white.withAlphaComponent(0.65))
+        configureLabel(hintLabel, size: SoraTheme.chromeCaptionSize, color: NSColor.labelColor.withAlphaComponent(0.65))
         configureLabel(routeLabel, size: SoraTheme.chromeCaptionSize, color: SoraTheme.nsAccent)
-        lineLabel.font = SoraTheme.terminalFont.withSize(16)
+        lineLabel.font = Self.inputFont
         inputClip.wantsLayer = true
         inputClip.layer?.masksToBounds = true
         addSubview(inputClip)
@@ -171,6 +182,7 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
         for observer in focusObservers { NotificationCenter.default.removeObserver(observer) }
         focusObservers = []
         guard let window else { return }
+        applyAppearance()
         for name in [NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification] {
             focusObservers.append(NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
                 self?.needsLayout = true
@@ -183,13 +195,39 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
         for observer in focusObservers { NotificationCenter.default.removeObserver(observer) }
     }
 
+    func applyAppearance() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer?.backgroundColor = SoraTheme.nsInputBackground.cgColor
+            caret.layer?.backgroundColor = SoraTheme.nsAccent.cgColor
+        }
+        updateFocusAppearance()
+        lineLabel.font = Self.inputFont
+        hintLabel.textColor = .secondaryLabelColor
+        wrappedKey = nil
+        needsLayout = true
+        superview?.needsLayout = true
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        applyAppearance()
+    }
+
+    private func updateFocusAppearance() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            hairline.layer?.backgroundColor = (isPaneActive ? SoraTheme.nsAccent.withAlphaComponent(0.8) : NSColor.separatorColor).cgColor
+        }
+    }
+
     override func layout() {
         super.layout()
         effectView.frame = bounds
         hairline.frame = NSRect(x: 0, y: bounds.height - 2, width: bounds.width, height: 2)
-        let inset: CGFloat = 24
+        let inset = SoraTheme.gridPaddingX
+        let lineHeight = Self.lineHeight
+        let compact = TerminalPreferences.compactSpacing
         let chipHeight: CGFloat = 26
-        let contextY = bounds.height - 38
+        let contextY = bounds.height - (compact ? 30 : 38)
         statusLabel.frame = NSRect(x: max(inset, bounds.width - 88), y: contextY + 5, width: 72, height: 16)
         statusLabel.alignment = .right
         pathButton.sizeToFit()
@@ -213,8 +251,8 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
         }
         let lines = wrapped.lines
         let visibleLines = StickyPromptBarModel.visibleLineCount(
-            total: lines.count, maximumHeight: historyPreviewHeight ?? maximumHeight)
-        let height = historyPreviewHeight ?? (Self.height + CGFloat(visibleLines - 1) * 24)
+            total: lines.count, maximumHeight: historyPreviewHeight ?? maximumHeight, baseHeight: Self.height, lineHeight: lineHeight)
+        let height = historyPreviewHeight ?? (Self.height + CGFloat(visibleLines - 1) * lineHeight)
         if preferredHeight != height {
             preferredHeight = height
             onHeightChange?()
@@ -228,8 +266,8 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
         hitRows = Array(zip(lines, wrapped.starts).dropFirst(firstLine).prefix(visibleLines)).map { (text: $0.0, start: $0.1) }
         let visibleText = lines.dropFirst(firstLine).prefix(visibleLines).joined(separator: "\n")
         let paragraph = NSMutableParagraphStyle()
-        paragraph.minimumLineHeight = 24
-        paragraph.maximumLineHeight = 24
+        paragraph.minimumLineHeight = lineHeight
+        paragraph.maximumLineHeight = lineHeight
         paragraph.lineBreakMode = .byClipping
         lineLabel.maximumNumberOfLines = 0
         lineLabel.cell?.usesSingleLineMode = false
@@ -253,7 +291,7 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
             }
         }
         lineLabel.attributedStringValue = styled
-        inputClip.frame = NSRect(x: inset + 24, y: 42, width: max(0, bounds.width - inset * 2 - 24), height: CGFloat(visibleLines) * 24)
+        inputClip.frame = NSRect(x: inset + 24, y: compact ? 34 : 42, width: max(0, bounds.width - inset * 2 - 24), height: CGFloat(visibleLines) * lineHeight)
         let cursorX = (wrapped.cursorPrefix as NSString).size(withAttributes: [.font: font]).width
         let textWidth = lines.map { ($0 as NSString).size(withAttributes: [.font: font]).width }.max() ?? 0
         let offset = max(0, cursorX - inputClip.bounds.width + 8)
@@ -261,20 +299,20 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
         // Anchor all cues to the text field's actual baseline, including its cell
         // inset. Fixed offsets drift from the placeholder and wrapped input.
         let firstBaseline = lineLabel.frame.maxY - lineLabel.firstBaselineOffsetFromTop
-        let cursorBaseline = firstBaseline - CGFloat(wrapped.cursorRow - firstLine) * 24
+        let cursorBaseline = firstBaseline - CGFloat(wrapped.cursorRow - firstLine) * lineHeight
         caret.frame = NSRect(x: cursorX - offset, y: cursorBaseline + font.descender,
                              width: 1.5, height: font.ascender - font.descender)
         let symbolHeight = font.capHeight
         inputSymbol.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: font.pointSize, weight: .medium)
         inputSymbol.frame = NSRect(x: inset, y: inputClip.frame.minY + firstBaseline,
                                    width: 12, height: symbolHeight)
-        caret.isHidden = !caretVisible || window?.isKeyWindow != true
+        caret.isHidden = !isPaneActive || !caretVisible || window?.isKeyWindow != true
             || wrapped.cursorRow < firstLine || wrapped.cursorRow >= firstLine + visibleLines
-        hintLabel.frame = NSRect(x: inset, y: 12, width: max(0, bounds.width - 160), height: 16)
+        hintLabel.frame = NSRect(x: inset, y: compact ? 6 : 12, width: max(0, bounds.width - 160), height: 16)
         hintLabel.alignment = .left
-        routeLabel.frame = NSRect(x: max(inset, bounds.width - 130), y: 12, width: 76, height: 16)
+        routeLabel.frame = NSRect(x: max(inset, bounds.width - 130), y: compact ? 6 : 12, width: 76, height: 16)
         routeLabel.alignment = .right
-        microphoneButton.frame = NSRect(x: bounds.width - inset - 24, y: 7, width: 24, height: 26)
+        microphoneButton.frame = NSRect(x: bounds.width - inset - 24, y: compact ? 1 : 7, width: 24, height: 26)
     }
 
     override func scrollWheel(with event: NSEvent) {
@@ -303,7 +341,7 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
         currentDirectory = directory
         currentBranch = branch
         pathButton.chipTitle = path
-        pathButton.toolTip = directory.map { "\($0.path)\nClick for path actions" } ?? "\(path)\nClick for path actions"
+        pathButton.toolTip = directory.map { "\($0.path)\nClick for path actions" } ?? path
         pathButton.setAccessibilityLabel("Working directory \(path)")
         pathButton.isEnabled = directory != nil
         if let branch, !branch.isEmpty {
@@ -336,12 +374,37 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
         needsLayout = true
     }
 
-    func updateSuggestion(_ suffix: String?) {
+    func updateShellInput(mirrored: Bool, remote: Bool) {
+        shellInputHint = remote ? "Remote shell · Tab completes on the server"
+            : (mirrored ? nil : "Shell input and completion stay in the terminal")
+        hintUpdate?.cancel()
+        hintLabel.stringValue = shellInputHint ?? desiredHint
+        hintLabel.setAccessibilityLabel(shellInputHint ?? desiredHint)
+        guard remote || !mirrored else { return }
+        routeLabel.stringValue = ""
+        desiredHint = remote ? "Remote shell · Tab completes on the server" : "Shell input and completion stay in the terminal"
+        if remote && mirrored && !hasInput {
+            lineLabel.stringValue = "Type a remote command…"
+            displayText = lineLabel.stringValue
+            lineLabel.setAccessibilityLabel("Remote terminal input preview")
+        }
+        if !mirrored {
+            lineLabel.stringValue = "Type in the terminal above"
+            displayText = lineLabel.stringValue
+            lineLabel.setAccessibilityLabel("Input is in the terminal grid")
+            caretVisible = false
+        }
+        if remote { statusLabel.stringValue = "Remote"; statusLabel.setAccessibilityLabel("Remote shell") }
+        needsLayout = true
+    }
+
+    func updateSuggestion(_ suffix: String?, acceptsWord: Bool = false) {
         guard promptReady, let suffix, !suffix.isEmpty else {
             hintLabel.toolTip = nil
             return
         }
-        desiredHint = "Tab  Complete: " + suffix.replacingOccurrences(of: "\n", with: " ↵ ")
+        desiredHint = (acceptsWord ? "Tab  Complete · ⌥→  Word: " : "Tab  Complete: ")
+            + suffix.replacingOccurrences(of: "\n", with: " ↵ ")
         hintLabel.isHidden = false
         hintLabel.toolTip = suffix
         hintLabel.setAccessibilityLabel("Press Tab to complete with " + suffix)
@@ -388,12 +451,9 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
         statusLabel.stringValue = ready ? "Ready" : "Running"
         statusLabel.textColor = ready ? SoraTheme.nsAccent : .secondaryLabelColor
         statusLabel.setAccessibilityLabel(ready ? "Terminal ready for a new command" : "Terminal command running")
-        hairline.layer?.backgroundColor = (ready
-            ? SoraTheme.nsAccent.withAlphaComponent(0.8)
-            : NSColor.white.withAlphaComponent(0.25)).cgColor
         // Keep readiness legible even over a bright desktop background.
         effectView.isHidden = true
-        layer?.backgroundColor = NSColor(white: 0.065, alpha: 0.98).cgColor
+        applyAppearance()
     }
 
     func updateRoute(_ intent: PromptIntent?) {
@@ -472,7 +532,7 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
             hintLabel.setAccessibilityLabel("Command-Y reopens the agent conversation")
         } else {
             desiredHint = promptReady
-                ? (hasInput ? "Return  Run    ·    ⇧Return  New line    ·    ⌘↑  Blocks" : "↑ ↓  History    ·    ⌘↑  Blocks    ·    ⌘⇧A  Agent")
+                ? (hasInput ? "Return  Run    ·    ⇧Return  New line    ·    ⌘↑  Blocks" : "↑ ↓  History    ·    ⌘↑  Blocks    ·    \(agentShortcut)  Agent")
                 : "Control-C  Stop command"
             hintLabel.isHidden = false
             hintLabel.setAccessibilityLabel(desiredHint)
@@ -504,7 +564,7 @@ final class StickyPromptBar: NSView, NSGestureRecognizerDelegate {
 
     private func inputOffset(at point: NSPoint) -> Int? {
         guard promptReady, !showingPrediction, !hitRows.isEmpty else { return nil }
-        let row = min(hitRows.count - 1, max(0, Int((inputClip.bounds.height - point.y) / 24)))
+        let row = min(hitRows.count - 1, max(0, Int((inputClip.bounds.height - point.y) / Self.lineHeight)))
         let font = lineLabel.font ?? SoraTheme.terminalFont
         let offset = StickyPromptBarModel.hitOffset(in: hitRows[row].text, x: point.x) {
             ($0 as NSString).size(withAttributes: [.font: font]).width
@@ -663,7 +723,7 @@ private final class StickyContextChipButton: NSButton {
 
     override func mouseEntered(with event: NSEvent) {
         hovering = true
-        layer?.backgroundColor = NSColor.white.withAlphaComponent(0.08).cgColor
+        layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.08).cgColor
     }
 
     override func mouseExited(with event: NSEvent) {
@@ -672,10 +732,10 @@ private final class StickyContextChipButton: NSButton {
     }
 
     override func mouseDown(with event: NSEvent) {
-        layer?.backgroundColor = NSColor.white.withAlphaComponent(0.14).cgColor
+        layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.14).cgColor
         super.mouseDown(with: event)
         layer?.backgroundColor = hovering
-            ? NSColor.white.withAlphaComponent(0.08).cgColor
+            ? NSColor.labelColor.withAlphaComponent(0.08).cgColor
             : NSColor.clear.cgColor
     }
 

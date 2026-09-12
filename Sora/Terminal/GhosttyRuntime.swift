@@ -7,6 +7,7 @@ enum GhosttyRuntimeError: Error, LocalizedError {
     case initializeFailed
     case configFailed
     case appFailed
+    case invalidConfig(String)
 
     var errorDescription: String? {
         switch self {
@@ -16,6 +17,7 @@ enum GhosttyRuntimeError: Error, LocalizedError {
             return "ghostty_config_new failed"
         case .appFailed:
             return "ghostty_app_new failed"
+        case .invalidConfig(let message): return message
         }
     }
 }
@@ -29,10 +31,19 @@ final class GhosttyRuntime: ObservableObject {
 
     weak var activeSurface: GhosttySurfaceView?
     let notifications = TerminalNotificationController()
+    let globalShortcut = GlobalShortcutController()
+    let shortcuts = AppShortcutStore()
+    let projectLayouts = ProjectLayoutStore()
+    let bookmarks = BlockBookmarkStore()
+    lazy var bookmarkLibrary = BlockBookmarkLibrary(store: bookmarks)
     let history: CommandHistoryStore
 
     private(set) var app: ghostty_app_t!
-    private let config: ghostty_config_t
+    private var config: ghostty_config_t
+    @Published private(set) var configurationError: String?
+    private var appearanceObserver: NSObjectProtocol?
+    private var systemAppearanceObserver: NSKeyValueObservation?
+    private var appliedAppearanceConfig = ""
     let windowStore: WorkspaceWindowStore
     let initialWindowID: UUID
     private var hasOpenedRestoredWindows = false
@@ -49,37 +60,9 @@ final class GhosttyRuntime: ObservableObject {
             Self.didInit = true
         }
 
-        guard let config = ghostty_config_new() else {
-            throw GhosttyRuntimeError.configFailed
-        }
-        // Blank config plus bundled Sora theme. Do not load ~/.config/ghostty.
-        if let theme = Bundle.main.path(forResource: "sora", ofType: "ghostty") {
-            theme.withCString { path in
-                ghostty_config_load_file(config, path)
-            }
-        }
-        // Soft custom-shader blink is intentionally not loaded: a failed shader
-        // open used to leave cursor-style-blink=false with a permanently solid
-        // caret. Built-in blink in sora.ghostty is the reliable path. Override
-        // to a steady bar when Reduce Motion is on.
-        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
-           let steady = Self.writeOverlayConfig("cursor-style-blink = false\n")
-        {
-            steady.withCString { path in
-                ghostty_config_load_file(config, path)
-            }
-        }
-        ghostty_config_finalize(config)
-        let problems = ghostty_config_diagnostics_count(config)
-        if problems > 0 {
-            for index in 0..<problems {
-                let diagnostic = ghostty_config_get_diagnostic(config, index)
-                if let message = diagnostic.message {
-                    Self.logger.error("sora.ghostty diagnostic: \(String(cString: message))")
-                }
-            }
-        }
-        self.config = config
+        NSApplication.shared.appearance = TerminalPreferences.appearance.native
+        self.config = try Self.makeConfig()
+        self.appliedAppearanceConfig = Self.appearanceConfig()
         let store = WorkspaceWindowStore()
         self.windowStore = store
         self.initialWindowID = store.windows[0].id
@@ -131,32 +114,69 @@ final class GhosttyRuntime: ObservableObject {
             throw GhosttyRuntimeError.appFailed
         }
         self.app = app
+        appearanceObserver = NotificationCenter.default.addObserver(forName: TerminalPreferences.appearanceDidChange, object: nil, queue: .main) { [weak self] _ in self?.reloadAppearance() }
+        systemAppearanceObserver = NSApplication.shared.observe(\.effectiveAppearance, options: [.new]) { [weak self] _, _ in
+            DispatchQueue.main.async { self?.reloadAppearance() }
+        }
     }
 
     deinit {
         if let terminationObserver { NotificationCenter.default.removeObserver(terminationObserver) }
+        if let appearanceObserver { NotificationCenter.default.removeObserver(appearanceObserver) }
         if let app {
             ghostty_app_free(app)
         }
         ghostty_config_free(config)
     }
 
-    /// Writes a small Ghostty config snippet next to the app support dir so
-    /// Reduce Motion can override `cursor-style-blink` without a set API.
-    private static func writeOverlayConfig(_ contents: String) -> String? {
-        let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Sora", isDirectory: true)
-            .appendingPathComponent("ghostty", isDirectory: true)
+    private static func appearanceConfig() -> String {
+        var text = TerminalPreferences.ghosttyAppearanceConfig(light: TerminalPreferences.isLight,
+            family: TerminalPreferences.fontFamily, compact: TerminalPreferences.compactSpacing, size: TerminalPreferences.fontSize)
+        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion { text += "cursor-style-blink = false\n" }
+        return text
+    }
+
+    private static func makeConfig() throws -> ghostty_config_t {
+        guard let config = ghostty_config_new() else { throw GhosttyRuntimeError.configFailed }
         do {
-            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-            let file = root.appendingPathComponent("overlay.ghostty")
-            try contents.write(to: file, atomically: true, encoding: .utf8)
-            return file.path
+            if let theme = Bundle.main.path(forResource: "sora", ofType: "ghostty") {
+                theme.withCString { ghostty_config_load_file(config, $0) }
+            }
+            // A unique transient file avoids cross-process preference overlays.
+            let overlay = FileManager.default.temporaryDirectory.appendingPathComponent("sora-appearance-\(UUID().uuidString).ghostty")
+            defer { try? FileManager.default.removeItem(at: overlay) }
+            try appearanceConfig().write(to: overlay, atomically: true, encoding: .utf8)
+            overlay.path.withCString { ghostty_config_load_file(config, $0) }
+            ghostty_config_finalize(config)
+            var diagnostics: [String] = []
+            for index in 0..<ghostty_config_diagnostics_count(config) {
+                if let message = ghostty_config_get_diagnostic(config, index).message { diagnostics.append(String(cString: message)) }
+            }
+            if !diagnostics.isEmpty { throw GhosttyRuntimeError.invalidConfig(diagnostics.joined(separator: "\n")) }
+            return config
         } catch {
-            logger.error("could not write ghostty overlay: \(error.localizedDescription)")
-            return nil
+            ghostty_config_free(config)
+            throw error
         }
     }
+
+    private func reloadAppearance() {
+        let desired = Self.appearanceConfig()
+        guard desired != appliedAppearanceConfig else { return }
+        do {
+            let replacement = try Self.makeConfig()
+            ghostty_app_update_config(app, replacement)
+            ghostty_config_free(config)
+            config = replacement
+            appliedAppearanceConfig = desired
+            configurationError = nil
+            NotificationCenter.default.post(name: Self.appearanceApplied, object: self)
+        } catch {
+            configurationError = "Could not update terminal appearance: " + error.localizedDescription
+            Self.logger.error("Appearance update failed: \(error.localizedDescription)")
+        }
+    }
+    static let appearanceApplied = Notification.Name("sora.terminal.appearanceApplied")
 
     func tick() {
         ghostty_app_tick(app)
@@ -254,12 +274,19 @@ final class GhosttyRuntime: ObservableObject {
             }
             return true
         case GHOSTTY_ACTION_START_SEARCH:
-            DispatchQueue.main.async { view?.showFind() }
+            let query = action.action.start_search.needle.map { String(cString: $0) } ?? ""
+            DispatchQueue.main.async { view?.showFind(query: query.isEmpty ? nil : query) }
             return true
         case GHOSTTY_ACTION_SEARCH_TOTAL:
             let total = action.action.search_total.total
             DispatchQueue.main.async { view?.updateFindCount(total) }
             return true
+        case GHOSTTY_ACTION_SEARCH_SELECTED:
+            let index = action.action.search_selected.selected
+            DispatchQueue.main.async { view?.updateFindSelection(index) }
+            return true
+        case GHOSTTY_ACTION_END_SEARCH:
+            return true // Native panel dismissal owns focus restoration.
         case GHOSTTY_ACTION_PWD:
             if let cPwd = action.action.pwd.pwd {
                 let path = String(cString: cPwd)

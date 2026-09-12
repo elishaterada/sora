@@ -111,6 +111,23 @@ struct AgentProgramStore {
         NotificationCenter.default.post(name: Self.didChange, object: directory)
     }
 
+    /// Read the current catalog for every save so separate windows cannot save
+    /// an old in-memory list over commands added since the dialog opened.
+    @discardableResult
+    func saveCommand(name: String, summary: String, script: String, directory: URL) throws -> AgentProgram {
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let summary = summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard directory.isFileURL, directory.path.hasPrefix("/"),
+              AgentProgram.valid(name: name, summary: summary, script: script) else { throw ProgramError.invalidCommand }
+        var programs = try load()
+        guard !programs.contains(where: { $0.name.compare(name, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame })
+        else { throw ProgramError.duplicateName }
+        let program = AgentProgram(name: name, summary: summary, script: script, directory: directory.path)
+        programs.append(program)
+        try save(programs)
+        return program
+    }
+
     func restoreBackup() throws -> [AgentProgram] {
         let data = try Data(contentsOf: backup)
         let programs = try decode(data)
@@ -143,9 +160,11 @@ struct AgentProgramStore {
     }
 
     enum ProgramError: LocalizedError {
-        case invalidCatalog, catalogFull, missingDirectory, invalidArguments
+        case invalidCatalog, catalogFull, missingDirectory, invalidArguments, invalidCommand, duplicateName
         var errorDescription: String? {
             switch self {
+            case .invalidCommand: return "Enter a name (up to 100 bytes), description (up to 600 bytes), and command (up to 24 KB). Control characters other than command tabs and newlines are not allowed."
+            case .duplicateName: return "A saved command already uses that name. Choose another name."
             case .invalidArguments: return "Use up to 32 arguments, totaling at most 3000 bytes, without control characters."
             case .invalidCatalog: return "The Programs catalog is damaged or contains invalid entries. Your saved file has not been overwritten."
             case .catalogFull: return "The catalog holds up to 50 programs. Remove a program before saving another."

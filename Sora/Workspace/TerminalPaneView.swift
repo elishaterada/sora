@@ -19,6 +19,9 @@ final class TerminalPaneView: NSView {
     private var isPaneActive = false
     private var publishedTitle: String?
     private weak var ask: AskSession?
+    var onAgentBusyChange: ((UUID, Bool) -> Void)? {
+        didSet { onAgentBusyChange?(tabID, hasRunningAgent) }
+    }
     var hasRunningAgent: Bool { ask?.isSending == true || ask?.isRunningCommand == true }
     private var askObservation: AnyCancellable?
     private let voiceInput = VoiceInputController()
@@ -32,6 +35,13 @@ final class TerminalPaneView: NSView {
 
     override var isOpaque: Bool { false }
 
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer?.backgroundColor = SoraTheme.nsInputBackground.cgColor
+        }
+    }
+
     init(surface: GhosttySurfaceView, ask: AskSession, tabID: UUID) {
         self.surface = surface
         self.ask = ask
@@ -41,13 +51,12 @@ final class TerminalPaneView: NSView {
         wantsLayer = true
         // The reserved resume strip belongs to the input surface, so it must
         // not expose a contrasting wallpaper gutter when the strip is hidden.
-        layer?.backgroundColor = NSColor(srgbRed: 20.0 / 255, green: 22.0 / 255,
-                                        blue: 26.0 / 255, alpha: 1).cgColor
+        layer?.backgroundColor = SoraTheme.nsInputBackground.cgColor
         addSubview(surface)
         addSubview(stickyBar)
         welcomeDismissed = surface.historyArchiveURL.map { FileManager.default.fileExists(atPath: $0.path) } == true
             || !TerminalPreferences.showsSessionWelcome
-        welcomeHost = NSHostingView(rootView: SessionWelcomeView(onDismiss: { [weak self] in
+        welcomeHost = NSHostingView(rootView: SessionWelcomeView(shortcuts: surface.runtime.shortcuts, onDismiss: { [weak self] in
             TerminalPreferences.showsSessionWelcome = false
             self?.dismissWelcome()
             self?.window?.makeFirstResponder(self?.surface)
@@ -128,7 +137,7 @@ final class TerminalPaneView: NSView {
             self?.resumeAgentIfAvailable() ?? false
         }
         surface.onAgentPrompt = { [weak self, weak ask] question in
-            guard let self, let ask else { return }
+            guard let self, let ask, surface.allowLocalAgent() else { return }
             ask.bindTab(self.tabID)
             self.showAgent()
             ask.beginTerminalAgent(
@@ -136,10 +145,17 @@ final class TerminalPaneView: NSView {
                 directory: surface.currentWorkingDirectory() ?? surface.initialWorkingDirectory
             )
         }
+        surface.onAgentOutput = { [weak self, weak ask] attachment in
+            guard let self, let ask, surface.allowLocalAgent() else { return }
+            ask.bindTab(self.tabID)
+            ask.attachTerminalOutput(attachment)
+            self.showAgent(preservingTerminalSelection: true)
+        }
         askObservation = ask.objectWillChange
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
                 self?.refreshResumeStrip()
+                if let self { self.onAgentBusyChange?(self.tabID, self.hasRunningAgent) }
                 self?.publishActivityTitleIfActive()
             }
         refreshResumeStrip()
@@ -196,7 +212,7 @@ final class TerminalPaneView: NSView {
             session: ask, inline: true,
             onClose: { [weak self] in self?.hideAgent() },
             onRunCommand: { [weak self, weak ask] messageID in
-                guard let self, let ask else { return }
+                guard let self, let ask, self.surface.allowLocalAgent() else { return }
                 ask.configureAgent(directory: self.surface.currentWorkingDirectory() ?? self.surface.initialWorkingDirectory)
                 ask.runCommand(messageID: messageID)
             }
@@ -206,6 +222,7 @@ final class TerminalPaneView: NSView {
     func setActive(_ active: Bool, visible: Bool? = nil) {
         let changed = isPaneActive != active
         isPaneActive = active
+        stickyBar.isPaneActive = active
         isHidden = !(visible ?? active)
         if active {
             ask?.bindTab(tabID)
@@ -228,10 +245,11 @@ final class TerminalPaneView: NSView {
         needsLayout = true
     }
 
-    func showAgent() {
+    func showAgent(preservingTerminalSelection: Bool = false) {
+        guard surface.allowLocalAgent() else { return }
         dismissWelcome()
         surface.dismissCommandHistory()
-        surface.leaveCommandBlocks(focusInput: false)
+        if !preservingTerminalSelection { surface.leaveCommandBlocks(focusInput: false) }
         ask?.bindTab(tabID)
         ask?.configureAgent(directory: surface.currentWorkingDirectory() ?? surface.initialWorkingDirectory)
         if !isShowingAgent { mountAgentContent() }
@@ -359,6 +377,7 @@ final class TerminalPaneView: NSView {
 
 /// Native session guidance lives outside the PTY and never enters scrollback.
 private struct SessionWelcomeView: View {
+    @ObservedObject var shortcuts: AppShortcutStore
     let onDismiss: () -> Void
 
     var body: some View {
@@ -372,7 +391,7 @@ private struct SessionWelcomeView: View {
             VStack(alignment: .leading, spacing: 9) {
                 shortcut("↑ ↓", "Browse command history")
                 shortcut("⇧↵", "Add a new line")
-                shortcut("⌘⇧A", "Open Agent")
+                shortcut(shortcuts.binding(.openAgent).display, "Open Agent")
                 shortcut("⌘↵", "Run input as a shell command")
             }
             HStack {
@@ -386,8 +405,8 @@ private struct SessionWelcomeView: View {
         .padding(.horizontal, 24)
         .padding(.vertical, 18)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .background(Color(nsColor: NSColor(srgbRed: 20.0 / 255, green: 22.0 / 255, blue: 26.0 / 255, alpha: 1)))
-        .overlay(alignment: .top) { Rectangle().fill(.white.opacity(0.08)).frame(height: 1) }
+        .background(Color(nsColor: SoraTheme.nsInputBackground))
+        .overlay(alignment: .top) { Rectangle().fill(SoraTheme.hairline).frame(height: 1) }
     }
 
     private func shortcut(_ keys: String, _ title: String) -> some View {
@@ -395,7 +414,7 @@ private struct SessionWelcomeView: View {
             Text(keys)
                 .font(.system(size: 12, weight: .medium, design: .monospaced))
                 .frame(width: 60, height: 22)
-                .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 4))
+                .background(SoraTheme.fillSubtle, in: RoundedRectangle(cornerRadius: 4))
             Text(title)
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)

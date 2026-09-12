@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct CommandHistoryView: View {
+    @AppStorage(TerminalPreferences.appearanceKey) private var appearanceName = "dark"
     @ObservedObject var store: CommandHistoryStore
 
     var body: some View {
@@ -36,11 +37,16 @@ struct CommandHistoryView: View {
                         .labelStyle(.titleAndIcon)
                     }
                     .padding(.vertical, 4)
+                    .contextMenu {
+                        Button("Save Command…") {
+                            SavedCommandEditor.present(command: run.command, directory: run.cwd, in: NSApp.keyWindow)
+                        }
+                    }
                 }
                 .listStyle(.inset)
             }
         }
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(TerminalPreferences.Appearance(rawValue: appearanceName)?.colorScheme)
         .frame(minWidth: 420, minHeight: 240)
         .navigationTitle("History")
     }
