@@ -1,6 +1,6 @@
 # Panda (default) — https://terminalcolors.com/themes/panda/default/
 background = #14161a
-background-opacity = 0.96
+background-opacity = 0.18
 background-blur = macos-glass-regular
 foreground = #cccccc
 cursor-color = #19f9d8

@@ -38,7 +38,7 @@ final class TerminalPaneView: NSView {
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         effectiveAppearance.performAsCurrentDrawingAppearance {
-            layer?.backgroundColor = SoraTheme.nsInputBackground.cgColor
+            layer?.backgroundColor = NSColor.clear.cgColor
         }
     }
 
@@ -49,9 +49,8 @@ final class TerminalPaneView: NSView {
         super.init(frame: .zero)
         registerForDraggedTypes(TerminalImageDrop.draggedTypes)
         wantsLayer = true
-        // The reserved resume strip belongs to the input surface, so it must
-        // not expose a contrasting wallpaper gutter when the strip is hidden.
-        layer?.backgroundColor = SoraTheme.nsInputBackground.cgColor
+        // Share the full-window frost, including the reserved resume strip.
+        layer?.backgroundColor = NSColor.clear.cgColor
         addSubview(surface)
         addSubview(stickyBar)
         welcomeDismissed = surface.historyArchiveURL.map { FileManager.default.fileExists(atPath: $0.path) } == true

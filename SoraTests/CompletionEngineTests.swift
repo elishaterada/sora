@@ -348,6 +348,7 @@ final class TerminalAppearanceTests: XCTestCase {
         XCTAssertTrue(config.contains("adjust-cell-height = 4%\n"))
         XCTAssertFalse(config.contains("background =")) // Fresh bundled dark config owns its palette.
         let light = TerminalPreferences.ghosttyAppearanceConfig(light: true, family: "SF Mono", compact: false, size: 20)
+        XCTAssertTrue(light.contains("background-opacity = 0.18\n"))
         XCTAssertTrue(light.contains("font-size = 20.0\n"))
         XCTAssertTrue(light.contains("window-padding-x = 24\n"))
         XCTAssertEqual(light.components(separatedBy: "\n").filter { $0.hasPrefix("palette =") }.count, 16)

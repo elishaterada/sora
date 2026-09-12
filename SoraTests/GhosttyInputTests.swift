@@ -1,8 +1,146 @@
 import AppKit
 import CoreText
+import QuartzCore
 import XCTest
 
 final class GhosttyInputTests: XCTestCase {
+    @MainActor
+    func testImpactStrengthClampsAndScalesAllPatterns() {
+        XCTAssertEqual(TypingImpact.normalizedStrength(.nan), 1)
+        XCTAssertEqual(TypingImpact.normalizedStrength(.infinity), 1)
+        XCTAssertEqual(TypingImpact.normalizedStrength(-5), 0.25)
+        XCTAssertEqual(TypingImpact.normalizedStrength(8), 2)
+        for index in TypingImpact.patterns.indices {
+            for isReturn in [false, true] {
+                let standard = TypingImpact.poses(isReturn: isReturn, patternIndex: index)
+                for strength in [0.25, 0.5, 1.0, 2.0] {
+                    let adjusted = TypingImpact.poses(isReturn: isReturn, patternIndex: index, strength: strength)
+                    for (original, scaled) in zip(standard, adjusted) {
+                        XCTAssertEqual(scaled.angle, original.angle * strength, accuracy: 0.00001)
+                        XCTAssertEqual(scaled.x, original.x * strength, accuracy: 0.00001)
+                        XCTAssertEqual(scaled.y, original.y * strength, accuracy: 0.00001)
+                    }
+                    XCTAssertEqual(adjusted.last, TypingImpact.Pose())
+                }
+            }
+        }
+    }
+
+    @MainActor
+    func testTenTypingSoundsDecodeAndHaveDistinctBoundedWaveforms() throws {
+        XCTAssertEqual(TypingSound.allCases.count, 10)
+        XCTAssertEqual(TypingSound.resolve("unknown-old-value"), .crispClack)
+        var distinct = Set<Data>()
+        for profile in TypingSound.allCases {
+            let data = profile.waveData()
+            distinct.insert(data)
+            XCTAssertEqual(String(data: data.prefix(4), encoding: .ascii), "RIFF")
+            XCTAssertNotNil(NSSound(data: data), profile.title)
+            let bytes = Array(data.dropFirst(44))
+            let samples = stride(from: 0, to: bytes.count, by: 2).map {
+                Int(Int16(bitPattern: UInt16(bytes[$0]) | UInt16(bytes[$0 + 1]) << 8))
+            }
+            XCTAssertEqual(samples.first, 0)
+            XCTAssertEqual(samples.last, 0)
+            let peak = try XCTUnwrap(samples.map(abs).max())
+            XCTAssertGreaterThan(peak, 10000)
+            XCTAssertLessThan(peak, 27000)
+            XCTAssertNotEqual(data, profile.waveData(variant: 1))
+            let returnData = profile.waveData(isReturn: true)
+            XCTAssertGreaterThan(returnData.count, data.count)
+            XCTAssertNotNil(NSSound(data: returnData))
+        }
+        XCTAssertEqual(distinct.count, 10)
+    }
+
+    @MainActor
+    func testTypingSoundPlayerCanLoadAndSwitchEveryProfile() {
+        let player = TypingSoundPlayer()
+        for profile in TypingSound.allCases {
+            player.configure(profile: profile, volume: 0)
+            XCTAssertNil(player.errorMessage)
+        }
+        player.configure(profile: .crispClack, volume: .nan)
+        XCTAssertNil(player.errorMessage)
+        player.stop()
+    }
+
+    @MainActor
+    func testTypingImpactNeverMovesWindowAndReturnOverridesTyping() async throws {
+        let window = NSWindow(contentRect: NSRect(x: 150.25, y: 180.75, width: 980, height: 620),
+                              styleMask: [.borderless], backing: .buffered, defer: true)
+        let view = try XCTUnwrap(window.contentView)
+        let impact = TypingImpact()
+        let originalFrame = window.frame
+        for index in 0..<100 {
+            impact.strike(view: view, isReturn: false, now: Double(index))
+            XCTAssertEqual(window.frame, originalFrame)
+            XCTAssertTrue(CATransform3DIsIdentity(try XCTUnwrap(view.layer).sublayerTransform))
+        }
+        impact.strike(view: view, isReturn: true, now: 100)
+        XCTAssertEqual(view.layer?.animation(forKey: TypingImpact.animationKey)?.duration, 0.65)
+        // A following character must not swallow the bigger Return impact.
+        impact.strike(view: view, isReturn: false, now: 100.01)
+        XCTAssertEqual(view.layer?.animation(forKey: TypingImpact.animationKey)?.duration, 0.65)
+        CATransaction.flush()
+        try await Task.sleep(for: .milliseconds(750))
+        XCTAssertEqual(window.frame, originalFrame)
+        XCTAssertTrue(CATransform3DIsIdentity(try XCTUnwrap(view.layer).sublayerTransform))
+        impact.stop()
+        XCTAssertNil(view.layer?.animation(forKey: TypingImpact.animationKey))
+    }
+
+    @MainActor
+    func testEightImpactPatternsVaryWithoutRepeatsAndSettleWithoutDrift() {
+        var cycle = TypingImpact.PatternCycle()
+        let choices = (0..<32).map { _ in cycle.next() }
+        for start in stride(from: 0, to: choices.count, by: 8) {
+            XCTAssertEqual(Set(choices[start..<start + 8]).count, 8)
+        }
+        for index in 1..<choices.count { XCTAssertNotEqual(choices[index], choices[index - 1]) }
+        var trajectories = Set<[TypingImpact.Pose]>()
+        let center = CGPoint(x: 490, y: 310)
+        for index in TypingImpact.patterns.indices {
+            let normal = TypingImpact.poses(isReturn: false, patternIndex: index)
+            let strong = TypingImpact.poses(isReturn: true, patternIndex: index)
+            trajectories.insert(strong)
+            XCTAssertEqual(strong.first, TypingImpact.Pose())
+            XCTAssertEqual(strong.last, TypingImpact.Pose())
+            XCTAssertTrue(strong.contains { $0.angle > 0 })
+            XCTAssertTrue(strong.contains { $0.angle < 0 })
+            XCTAssertGreaterThan(strong.map { abs($0.angle) }.max()!, normal.map { abs($0.angle) }.max()! * 4)
+            for pose in strong {
+                let moved = center.applying(CATransform3DGetAffineTransform(TypingImpact.transform(pose: pose, center: center)))
+                XCTAssertEqual(moved.x, center.x + pose.x, accuracy: 0.00001)
+                XCTAssertEqual(moved.y, center.y + pose.y, accuracy: 0.00001)
+                XCTAssertLessThanOrEqual(abs(pose.x), 8)
+                XCTAssertLessThanOrEqual(abs(pose.y), 8)
+            }
+            let initial = TypingImpact.Pose(angle: 0.01, x: 2, y: -3)
+            let interrupted = TypingImpact.poses(isReturn: true, patternIndex: index, initial: initial)
+            XCTAssertEqual(interrupted.first, initial)
+            XCTAssertEqual(interrupted.last, TypingImpact.Pose())
+        }
+        XCTAssertEqual(trajectories.count, 8)
+    }
+
+    func testTypingEffectsIgnoreShortcutsNavigationAndRepeat() {
+        for modifiers: NSEvent.ModifierFlags in [.command, .control, [.command, .shift]] {
+            XCTAssertFalse(TerminalPreferences.isTypingFeedbackEvent(characters: "a", modifiers: modifiers, isRepeat: false))
+        }
+        for characters in ["", "\u{1b}", "\t", "\u{f700}"] {
+            XCTAssertFalse(TerminalPreferences.isTypingFeedbackEvent(characters: characters, modifiers: [], isRepeat: false))
+        }
+        XCTAssertFalse(TerminalPreferences.isTypingFeedbackEvent(characters: "a", modifiers: [], isRepeat: true))
+        XCTAssertFalse(TerminalPreferences.isTypingFeedbackEvent(characters: nil, modifiers: [], isRepeat: false))
+    }
+
+    func testTypingEffectsAcceptTextAndEditingKeys() {
+        for characters in ["a", "A", "é", "日本語", " ", "\r", "\u{3}", "\u{7f}"] {
+            XCTAssertTrue(TerminalPreferences.isTypingFeedbackEvent(characters: characters, modifiers: [.shift], isRepeat: false))
+        }
+    }
+
     func testStartupInputWaitsForPromptAndReplaysInOrderOnce() {
         var buffer = ShellStartupInputBuffer<String>()
         for input in ["press e", "release e", "paste st", "backspace", "return"] {

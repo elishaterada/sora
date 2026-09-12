@@ -66,6 +66,7 @@ struct ContentView: View {
         }
         .animation(SoraTheme.motionSidebar, value: sidebarVisible)
         .tint(SoraTheme.accent)
+        .background(TerminalEffectsRepresentable().ignoresSafeArea())
         .background(WindowFrostRepresentable().ignoresSafeArea())
         .background(
             WindowChromeRepresentable(
@@ -156,6 +157,7 @@ struct WindowFrostRepresentable: NSViewRepresentable {
 
 final class WindowFrostView: NSView {
     private var material: NSView?
+    private var accessibilityObserver: NSObjectProtocol?
     init() {
         super.init(frame: .zero)
         wantsLayer = true
@@ -172,16 +174,22 @@ final class WindowFrostView: NSView {
             material = effect
         }
         if let material { addSubview(material) }
+        accessibilityObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in MainActor.assumeIsolated { self?.applyAppearance() } }
         applyAppearance()
     }
+    deinit { if let accessibilityObserver { NSWorkspace.shared.notificationCenter.removeObserver(accessibilityObserver) } }
     required init?(coder: NSCoder) { nil }
     override func layout() { super.layout(); material?.frame = bounds }
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); applyAppearance() }
     func applyAppearance() {
-        // An opaque light base keeps chrome legible over a dark wallpaper.
-        let light = TerminalPreferences.isLight
-        material?.isHidden = light
-        layer?.backgroundColor = (light ? NSColor(calibratedWhite: 0.965, alpha: 1) : .clear).cgColor
+        // Accessibility keeps a solid base; otherwise both themes share glass.
+        let solid = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
+        material?.isHidden = solid
+        layer?.backgroundColor = (solid ? (TerminalPreferences.isLight
+            ? NSColor(calibratedWhite: 0.965, alpha: 1)
+            : NSColor(calibratedWhite: 0.10, alpha: 1)) : .clear).cgColor
         if #available(macOS 26.0, *), let glass = material as? NSGlassEffectView { glass.tintColor = SoraTheme.nsGlassTint }
     }
 }

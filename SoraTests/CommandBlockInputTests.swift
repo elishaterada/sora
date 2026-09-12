@@ -2,6 +2,17 @@ import XCTest
 import AppKit
 
 final class CommandBlockInputTests: XCTestCase {
+    func testStickyHeaderWashesAndANSIBackgroundRemainTranslucent() throws {
+        XCTAssertEqual(CommandHeaderStyle.background.alphaComponent, 38.0 / 255, accuracy: 0.001)
+        XCTAssertEqual(CommandHeaderStyle.errorBackground.alphaComponent, 58.0 / 255, accuracy: 0.001)
+        let font = NSFont.monospacedSystemFont(ofSize: 18, weight: .regular)
+        let styled = CommandHeaderStyle.attributedCommand("\u{1b}[48;2;69;169;249mblue\u{1b}[7minverse", font: font)
+        let fill = try XCTUnwrap(styled.attribute(.backgroundColor, at: 0, effectiveRange: nil) as? NSColor)
+        XCTAssertEqual(fill.alphaComponent, 209.0 / 255, accuracy: 0.001)
+        let inverse = try XCTUnwrap(styled.attribute(.backgroundColor, at: 4, effectiveRange: nil) as? NSColor)
+        XCTAssertEqual(inverse.alphaComponent, 1)
+    }
+
     func testStickyHeaderPreservesTerminalRGBAndResets() {
         let font = NSFont.monospacedSystemFont(ofSize: 18, weight: .regular)
         let styled = CommandHeaderStyle.attributedCommand("\u{1b}]10;rgb:cc/cc/cc\u{1b}\\\u{1b}[38;2;25;249;216mls\u{1b}[0m \u{1b}[38;2;255;117;181m-lah\u{1b}[0m  ", font: font)
