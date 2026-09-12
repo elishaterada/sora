@@ -19,8 +19,7 @@ struct AgentMarkdownBlock: Identifiable {
     let kind: Kind
     let text: AttributedString
 
-    /// macOS makes selectable text and tappable links mutually exclusive, so
-    /// the renderer turns selection off only for the blocks that need clicks.
+    /// Whether this block contains an explicit or detected link.
     var hasLinks: Bool {
         text.runs.contains { $0.link != nil }
     }

@@ -252,14 +252,10 @@ no Keychain sign-in.
 The UI renders assistant answers as Markdown (headings, lists, inline code,
 links) via Foundation `AttributedString`. That parser records block structure in
 `presentationIntent` without emitting newlines, so `AgentMarkdown` splits runs
-into `AgentMarkdownBlock` values and `AgentMarkdownText` lays each one out as its
-own view; rendering the string as a single `Text` ran blocks together. Inline
-code is tinted peach rather than boxed in a background fill, which kept
-identifier-dense paragraphs unreadable.
-
-Streaming answers use the same full Markdown parser with its partial-result
-policy, so complete headings, lists, quotes, links, and code blocks take shape
-as soon as they arrive while incomplete trailing syntax remains visible. Agent
+into `AgentMarkdownBlock` values. The renderer joins them with explicit paragraph
+breaks and list markers in one native `NSTextView`. Inline code is tinted peach.
+Streaming answers use inexpensive plain text and receive Markdown formatting
+when complete. Agent
 autoscroll is throttled to a steady cadence and uses a short decelerating ease
 instead of jumping on every token; Reduce Motion keeps the follow behavior but
 removes its animation.
@@ -269,10 +265,9 @@ Finder, resolved against the agent working directory. A whole code span counts
 as one token so paths containing spaces resolve, bare words like `ffmpeg` are
 left alone even when a file of that name exists, and the target must exist so a
 link never dead-ends. Fenced blocks are skipped: they hold commands to read and
-copy, not references. macOS makes a selectable `Text` and a tappable link
-mutually exclusive, so only blocks that contain links drop
-`textSelection(.enabled)`; code blocks and link-free prose stay selectable, and
-every message keeps its Copy button.
+copy, not references. The native text surface supports partial selection across paragraphs and links
+while keeping web links clickable and file links revealable in Finder. Unchanged
+content updates preserve selection. Every message also keeps its Copy button.
 
 Envelope handling is deliberately tolerant, because the raw `<SORA_COMMAND>`
 wire format used to reach the transcript whenever a model deviated from the

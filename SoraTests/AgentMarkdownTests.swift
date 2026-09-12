@@ -1,7 +1,32 @@
+import AppKit
+import SwiftUI
 import Foundation
 import XCTest
 
 final class AgentMarkdownTests: XCTestCase {
+    @MainActor
+    func testResponseSupportsPartialSelectionAcrossLinksAndParagraphs() throws {
+        let host = NSHostingView(rootView: AgentMarkdownText(
+            text: "Before [example](https://example.com) after.\n\nSecond paragraph."
+        ))
+        host.frame = NSRect(x: 0, y: 0, width: 320, height: 200)
+        host.layoutSubtreeIfNeeded()
+        func findText(in view: NSView) -> NSTextView? {
+            if let text = view as? NSTextView { return text }
+            return view.subviews.lazy.compactMap { findText(in: $0) }.first
+        }
+        let view = try XCTUnwrap(findText(in: host))
+        XCTAssertTrue(view.isSelectable)
+        XCTAssertFalse(view.isEditable)
+        XCTAssertEqual(view.string, "Before example after.\n\nSecond paragraph.")
+        let range = (view.string as NSString).range(of: "example after.\n\nSecond")
+        view.setSelectedRange(range)
+        XCTAssertEqual(view.selectedRange(), range)
+        XCTAssertEqual(view.textStorage?.attribute(.link, at: range.location, effectiveRange: nil) as? URL,
+                       URL(string: "https://example.com"))
+        XCTAssertGreaterThan(view.layoutManager!.usedRect(for: view.textContainer!).height, 0)
+    }
+
     func testInstructionsAskForMarkdownInNormalAnswers() {
         XCTAssertTrue(AIRequest.instructions.contains("GitHub-flavored Markdown"))
         XCTAssertTrue(AIRequest.instructions.contains("`inline code`"))
