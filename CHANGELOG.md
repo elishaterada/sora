@@ -4,6 +4,12 @@ Human-readable highlights for each Sora release live here. Add the newest
 version before creating its `vX.Y.Z` tag; the release workflow requires a
 matching section and publishes it to GitHub.
 
+## 0.4.2 — 2026-09-13
+
+### What’s new
+
+- A new moonlit icon brings a larger full-body cat to the Dock, with indigo and lavender colors and proportions that match Luna.
+
 ## 0.4.1 — 2026-09-12
 
 ### Fixes
