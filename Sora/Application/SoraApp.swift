@@ -45,7 +45,7 @@ struct SoraApp: App {
             SidebarCommands(shortcuts: runtime.shortcuts)
             HistoryCommands(runtime: runtime)
             AskCommands(shortcuts: runtime.shortcuts)
-            UpdateCommands(updates: updates)
+            AppInfoCommands(updates: updates)
             // Standard Edit commands follow the first responder, including
             // SecureField and the Ask composer. GhosttySurfaceView implements
             // the same copy/paste/selectAll actions for terminal focus.
@@ -71,7 +71,7 @@ struct SoraApp: App {
     }
 }
 
-private struct UpdateCommands: Commands {
+private struct AppInfoCommands: Commands {
     let updates: UpdateController
 
     var body: some Commands {
@@ -79,6 +79,7 @@ private struct UpdateCommands: Commands {
             Button("Check for Updates…") {
                 updates.checkForUpdates()
             }
+            Link("Buy Me a Coffee…", destination: URL(string: "https://buymeacoffee.com/elishaterada")!)
         }
     }
 }

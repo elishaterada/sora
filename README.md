@@ -246,6 +246,19 @@ For implementation details, see:
 
 ## Licensing
 
-No license for Sora's original source code has been published yet. Third-party
-components retain their own licenses; see [ThirdPartyNotices.txt](ThirdPartyNotices.txt)
-and [docs/licensing.md](docs/licensing.md).
+Sora's original source code is available under the [MIT License](LICENSE),
+copyright © 2026 Elisha Terada. Third-party components, bundled resources, and
+upstream code represented in patches retain their own licenses; see
+[ThirdPartyNotices.txt](ThirdPartyNotices.txt) and
+[docs/licensing.md](docs/licensing.md).
+
+## Support development
+
+Sora is free to use. Optional contributions will help cover Apple Developer
+membership and AI-assisted maintenance costs for Sora. Support is
+voluntary and does not unlock features or include priority support. External
+AI providers may charge separately for their services.
+
+[![Buy me a coffee](docs/assets/support-button.svg)](https://buymeacoffee.com/elishaterada)
+
+You can also choose **Sora → Buy Me a Coffee…** from the app menu.

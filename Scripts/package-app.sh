@@ -80,6 +80,7 @@ Working name; not a public release. Feedback welcome.
 EOF
 
 cp "${ROOT}/docs/licensing.md" "${STAGE}/LICENSING.md"
+cp "${ROOT}/LICENSE" "${STAGE}/LICENSE"
 if [[ -f "${ROOT}/ThirdPartyNotices.txt" ]]; then
   cp "${ROOT}/ThirdPartyNotices.txt" "${STAGE}/ThirdPartyNotices.txt"
 fi

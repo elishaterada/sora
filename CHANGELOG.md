@@ -4,11 +4,18 @@ Human-readable highlights for each Sora release live here. Add the newest
 version before creating its `vX.Y.Z` tag; the release workflow requires a
 matching section and publishes it to GitHub.
 
+## 0.4.3 — 2026-09-14
+
+### What’s new
+
+- Sora's original source code is now available under the MIT License, so you can use, modify, and share it under those terms. Third-party components keep their own licenses.
+- Support ongoing Sora maintenance through an optional Buy Me a Coffee link in the README and Sora menu. Sora remains free to use.
+
 ## 0.4.2 — 2026-09-13
 
 ### What’s new
 
-- A new moonlit icon brings a larger full-body cat to the Dock, with indigo and lavender colors and proportions that match Luna.
+- A new moonlit icon brings a larger full-body cat to the Dock, with indigo and lavender colors.
 
 ## 0.4.1 — 2026-09-12
 

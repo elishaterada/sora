@@ -2,6 +2,44 @@
 
 This file records preliminary engineering guidance, not legal advice.
 
+## Sora original code — MIT (2026-09-14)
+
+The owner authorized publishing Sora's original code under the standard
+[MIT License](../LICENSE), copyright (c) 2026 Elisha Terada. License text:
+[Open Source Initiative](https://opensource.org/license/mit).
+
+The available Git history identifies `elishaterada` and `Elisha Terada` as
+authors and committers, with Cursor coauthor trailers. The repository remote
+is `elishaterada/sora`, and its earliest commits date to 2026. No other human
+contributors were found in the available history. This attribution is based
+on that evidence and the owner's explicit statement of ownership; it is not
+a claim of a comprehensive source-comparison audit.
+
+MIT applies to original Sora code only. It does not replace the licenses of
+Ghostty, Sparkle, fonts, shell scripts, other bundled dependencies, or upstream
+code included as context in `patches/`. Preserve their notices and source
+distribution requirements. Inspection of the history, source attribution,
+dependency configuration, and notices found no evidence of copied Warp
+implementation; feature inspiration alone is not treated as code reuse.
+
+The release packager includes Sora's `LICENSE` alongside the existing
+third-party notices. This change does not certify completion of the separate
+binary dependency audit described below.
+
+### Voluntary maintenance support
+
+Sora remains free to use. Optional support is intended to cover Apple Developer
+membership and AI-assisted maintenance of Sora, with no feature gates
+or priority-support promises. Provider usage charges remain separate.
+The owner confirmed [Buy Me a Coffee](https://buymeacoffee.com/elishaterada)
+on 2026-09-14 as the support destination for Sora. Sora's
+README button and **Sora → Buy Me a Coffee…** menu link use that exact URL.
+The menu opens the external page only when selected; no payment SDK, account,
+or background request was added.
+
+Future proprietary Pro additions remain a possible separate decision; this
+change introduces no Pro functionality or change to the MIT grant for this code.
+
 ## Ghostty / GhosttyKit
 
 Inspected source: [`ghostty-org/ghostty`](https://github.com/ghostty-org/ghostty)
