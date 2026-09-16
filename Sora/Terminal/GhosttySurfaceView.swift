@@ -332,6 +332,14 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         guard event.type == .keyDown else { return false }
+        // Handle even an unavailable number: a disabled menu item otherwise
+        // falls through to Ghostty's Command-9 "last tab" binding.
+        if let number = AppKeyBinding(event: event).tabNumber,
+           window?.isKeyWindow == true, !isHiddenOrHasHiddenAncestor,
+           window?.attachedSheet == nil {
+            requestGotoTab(Int32(number))
+            return true
+        }
         if runtime.shortcuts.matches(event) { return false }
         let chars = event.charactersIgnoringModifiers ?? ""
         // App-owned command entry points must precede terminal key forwarding.

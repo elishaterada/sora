@@ -110,7 +110,7 @@ struct WorkspaceCommands: Commands {
                     workspace?.gotoTab(Int32(number))
                 }
                 .keyboardShortcut(KeyEquivalent(Character("\(number)")), modifiers: .command)
-                .disabled(workspace == nil)
+                .disabled(workspace == nil || number > (workspace?.tabs.count ?? 0))
             }
         }
     }

@@ -4,6 +4,19 @@ Human-readable highlights for each Sora release live here. Add the newest
 version before creating its `vX.Y.Z` tag; the release workflow requires a
 matching section and publishes it to GitHub.
 
+## 0.5.0 — 2026-09-16
+
+### What’s new
+
+- Hold Command for one second to reveal numbered tab shortcuts in the sidebar. Press Command–1 through Command–9 to jump to that tab, including while writing to Agent.
+- Shortcut numbers follow your tab order, so the labels stay useful after rearranging sessions.
+
+### Fixes
+
+- Switch tabs immediately with a click, without waiting for the double-click delay. Double-click still renames a tab, and background terminal output stays current.
+- Keep completed command flags ready for entering a value without adding unwanted quotes.
+- Keep numbered shortcuts consistent: Command–9 selects the ninth tab, and a number with no matching tab leaves your current session in place.
+
 ## 0.4.3 — 2026-09-14
 
 ### What’s new

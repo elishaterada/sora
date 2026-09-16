@@ -15,6 +15,11 @@ struct AppKeyBinding: Codable, Equatable {
         self.init(arrow ?? event.characters(byApplyingModifiers: []) ?? event.charactersIgnoringModifiers ?? "", event.modifierFlags)
     }
     var nativeModifiers: NSEvent.ModifierFlags { NSEvent.ModifierFlags(rawValue: modifiers) }
+    var tabNumber: Int? {
+        guard nativeModifiers == .command, key.count == 1,
+              let number = Int(key), (1...9).contains(number) else { return nil }
+        return number
+    }
     var isValid: Bool {
         key.count == 1 && key.unicodeScalars.allSatisfy {
             CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789[];,./'-=\\`\u{F700}\u{F701}\u{F702}\u{F703}").contains($0)
@@ -34,6 +39,25 @@ struct AppKeyBinding: Codable, Equatable {
         let symbol = ["\u{F700}": "↑", "\u{F701}": "↓", "\u{F702}": "←", "\u{F703}": "→"][key] ?? key.uppercased()
         return (nativeModifiers.contains(.control) ? "⌃" : "") + (nativeModifiers.contains(.option) ? "⌥" : "")
             + (nativeModifiers.contains(.shift) ? "⇧" : "") + (nativeModifiers.contains(.command) ? "⌘" : "") + symbol
+    }
+}
+
+/// Time is supplied by the caller so hold/release behavior is deterministic.
+struct CommandHoldHintState {
+    private(set) var startedAt: TimeInterval?
+    private var commandOnly = false
+
+    mutating func update(_ modifiers: NSEvent.ModifierFlags, at time: TimeInterval) {
+        let held = modifiers.intersection([.command, .control, .option, .shift]) == .command
+        guard held != commandOnly else { return }
+        commandOnly = held
+        startedAt = held ? time : nil
+    }
+
+    mutating func cancel() { startedAt = nil }
+    mutating func reset() { self = Self() }
+    func isVisible(at time: TimeInterval) -> Bool {
+        startedAt.map { time - $0 >= 1 } ?? false
     }
 }
 

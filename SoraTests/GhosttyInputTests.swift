@@ -4,6 +4,44 @@ import QuartzCore
 import XCTest
 
 final class GhosttyInputTests: XCTestCase {
+    func testTabNumbersRequireCommandOnlyAndOneThroughNine() {
+        for number in 1...9 {
+            XCTAssertEqual(AppKeyBinding(String(number), .command).tabNumber, number)
+        }
+        for key in ["0", "10", "a"] { XCTAssertNil(AppKeyBinding(key).tabNumber) }
+        for modifiers: NSEvent.ModifierFlags in [[], .shift, [.command, .shift], [.command, .control], [.command, .option]] {
+            XCTAssertNil(AppKeyBinding("1", modifiers).tabNumber)
+        }
+    }
+
+    func testCommandHoldHintsWaitOneSecondAndHideOnRelease() {
+        var state = CommandHoldHintState()
+        state.update(.command, at: 10)
+        XCTAssertFalse(state.isVisible(at: 10.999))
+        state.update(.command, at: 10.5)
+        XCTAssertTrue(state.isVisible(at: 11))
+        state.update([], at: 11.1)
+        XCTAssertFalse(state.isVisible(at: 12))
+    }
+
+    func testCommandHoldHintsCancelForShortcutsOtherModifiersAndFocusLoss() {
+        var state = CommandHoldHintState()
+        state.update(.command, at: 0)
+        state.cancel()
+        state.update(.command, at: 0.5)
+        XCTAssertFalse(state.isVisible(at: 2))
+        state.update([], at: 2)
+        state.update(.command, at: 3)
+        XCTAssertTrue(state.isVisible(at: 4))
+        state.update([.command, .shift], at: 4)
+        XCTAssertFalse(state.isVisible(at: 5))
+        state.update(.command, at: 5)
+        state.reset()
+        XCTAssertFalse(state.isVisible(at: 7))
+        state.update(.command, at: 8)
+        XCTAssertTrue(state.isVisible(at: 9))
+    }
+
     @MainActor
     func testImpactStrengthClampsAndScalesAllPatterns() {
         XCTAssertEqual(TypingImpact.normalizedStrength(.nan), 1)

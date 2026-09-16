@@ -110,6 +110,21 @@ final class WorkspaceModelTests: XCTestCase {
         XCTAssertEqual(model.selectedIndex, 0)
     }
 
+    func testNumberedTabsFollowCurrentSidebarOrder() {
+        let model = WorkspaceModel(snapshot: WorkspaceSnapshot(
+            directories: (1...10).map { "/tab\($0)" }, selectedIndex: 0
+        ))
+        let last = model.tabs[9].id
+        model.move(last, to: model.tabs[0].id)
+        model.gotoTab(1)
+        XCTAssertEqual(model.selectedID, last)
+        for number in 1...9 {
+            model.gotoTab(Int32(number))
+            XCTAssertEqual(model.selectedID, model.tabs[number - 1].id)
+        }
+        XCTAssertNotEqual(model.selectedID, model.tabs.last?.id)
+    }
+
     func testCloseOtherAndRight() {
         let model = WorkspaceModel(snapshot: WorkspaceSnapshot(
             directories: ["/a", "/b", "/c"],

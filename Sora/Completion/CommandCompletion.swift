@@ -38,7 +38,7 @@ struct CommandCompletionChoice: Equatable {
 
     func inserting(into request: CommandCompletionRequest) -> String {
         let safe = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_./-=")
-        let token = value.unicodeScalars.allSatisfy(safe.contains) ? value
+        let token = value.unicodeScalars.allSatisfy { safe.contains($0) } ? value
             : "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
         return request.head + token + (value.hasSuffix("=") ? "" : " ")
     }
