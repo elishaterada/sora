@@ -208,7 +208,7 @@ final class TerminalPaneView: NSView {
     private func mountAgentContent() {
         guard let ask else { return }
         agentHost.rootView = AnyView(AskView(
-            session: ask, inline: true,
+            session: ask, terminalRuntime: surface.runtime, inline: true,
             onClose: { [weak self] in self?.hideAgent() },
             onRunCommand: { [weak self, weak ask] messageID in
                 guard let self, let ask, self.surface.allowLocalAgent() else { return }

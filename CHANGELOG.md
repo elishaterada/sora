@@ -4,6 +4,19 @@ Human-readable highlights for each Sora release live here. Add the newest
 version before creating its `vX.Y.Z` tag; the release workflow requires a
 matching section and publishes it to GitHub.
 
+## 0.6.0 — 2026-09-23
+
+### What’s new
+
+- Answer interactive Agent commands directly in a real terminal. Confirmation, password, and selection prompts automatically bring the terminal into focus, without an extra button or response field.
+- Use normal terminal keys, including Backspace, Enter, and Escape. Password prompts control whether your typing is visible.
+- Take the time you need to respond: Agent pauses its active command timer while you interact, then continues when the command finishes.
+
+### Fixes
+
+- Stop interactive commands with Control-C without accidentally restarting Agent work.
+- Keep commands waiting for input available instead of leaving Agent stuck without a way to respond.
+
 ## 0.5.0 — 2026-09-16
 
 ### What’s new

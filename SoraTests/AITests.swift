@@ -1187,6 +1187,218 @@ final class AskSessionTests: XCTestCase {
         XCTAssertEqual(AgentPermissionMode.stored(in: UserDefaults(suiteName: "sora-perm-\(UUID())")!), .askForApproval)
     }
 
+    func testCommandTranscriptRemovesDisplayControlsAndErasedTyping() {
+        XCTAssertEqual(AgentCommandRunner.plainOutput("\u{1b}[32mChoice:\u{1b}[0m x\u{08} \u{08}2\r\n"), "Choice: 2\n")
+        XCTAssertTrue(AgentCommandRunner.looksLikePrompt("\u{1b}[?1049hMenu"))
+        XCTAssertFalse(AgentCommandRunner.looksLikePrompt("\u{1b}[?1049hMenu\u{1b}[?1049lDone"))
+    }
+
+    func testNativeTerminalTransportHandlesEditingKeysAndResize() async throws {
+        let runner = AgentCommandRunner(searchPath: "/usr/bin:/bin")
+        let work = Task {
+            try await runner.run(command: "printf 'Choose a letter: '; read answer; printf 'answer:%s\\n' \"$answer\"; stty size",
+                                 directory: URL(fileURLWithPath: "/private/tmp"), timeout: 5)
+        }
+        defer { runner.cancel() }
+        await waitFor { runner.snapshot()?.awaitingInput == true }
+        let path = try XCTUnwrap(runner.terminalSocketPath)
+        runner.resizeTerminal(columns: 91, rows: 17)
+        let terminal = Process()
+        terminal.executableURL = URL(fileURLWithPath: "/usr/bin/nc")
+        terminal.arguments = ["-U", path]
+        let input = Pipe()
+        terminal.standardInput = input
+        terminal.standardOutput = FileHandle.nullDevice
+        terminal.standardError = FileHandle.nullDevice
+        try terminal.run()
+        defer {
+            if terminal.isRunning { terminal.terminate() }
+            try? input.fileHandleForWriting.close()
+        }
+        // Exactly the bytes a terminal sends: type x, Backspace, type y, Enter.
+        try input.fileHandleForWriting.write(contentsOf: Data("x\u{7f}y\r".utf8))
+        let result = try await work.value
+        XCTAssertEqual(result.exitCode, 0)
+        XCTAssertTrue(result.output.contains("answer:y"), result.output)
+        XCTAssertTrue(result.output.contains("17 91"), result.output)
+        XCTAssertFalse(result.interrupted)
+        await waitFor { !FileManager.default.fileExists(atPath: path) }
+    }
+
+    func testUnfamiliarPromptHandsOffAfterQuietPeriodButProgressDoesNot() async throws {
+        XCTAssertTrue(AgentCommandRunner.looksLikeSettledPrompt("Account code: "))
+        XCTAssertFalse(AgentCommandRunner.looksLikeSettledPrompt("Downloading 45%"))
+        XCTAssertFalse(AgentCommandRunner.looksLikeSettledPrompt("Build started:\n"))
+        let runner = AgentCommandRunner(searchPath: "/usr/bin:/bin")
+        let work = Task {
+            try await runner.run(command: "printf 'Account code: '; read answer",
+                                 directory: URL(fileURLWithPath: "/private/tmp"), timeout: 5)
+        }
+        defer { runner.cancel() }
+        for _ in 0..<250 {
+            if runner.snapshot()?.awaitingInput == true { break }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        XCTAssertTrue(runner.snapshot()?.awaitingInput == true)
+        try runner.sendInput("test-code\n")
+        let result = try await work.value
+        XCTAssertEqual(result.exitCode, 0)
+    }
+
+    func testColoredChoicePromptAutomaticallyHandsControlToUser() async throws {
+        let runner = AgentCommandRunner(searchPath: "/usr/bin:/bin")
+        let work = Task {
+            try await runner.run(command: "printf '\\033[32mChoose a number [1-3]:\\033[0m '; read answer",
+                                 directory: URL(fileURLWithPath: "/private/tmp"), timeout: 2)
+        }
+        for _ in 0..<100 {
+            if runner.snapshot()?.awaitingInput == true { break }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        XCTAssertTrue(runner.snapshot()?.awaitingInput == true,
+                      "Colored selection prompts must open interaction without a button")
+        runner.cancel()
+        _ = try await work.value
+    }
+
+    func testRunnerKeepsInteractivePromptAliveForHumanInput() async throws {
+        let runner = AgentCommandRunner(searchPath: "/usr/bin:/bin")
+        let work = Task {
+            try await runner.run(command: "test -t 0 && printf 'Proceed [y/n]? ' && read answer && printf 'accepted:%s' \"$answer\"",
+                                 directory: URL(fileURLWithPath: "/private/tmp"), timeout: 5)
+        }
+        for _ in 0..<100 {
+            if runner.snapshot()?.output.contains("Proceed [y/n]?") == true { break }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        XCTAssertTrue(runner.snapshot()?.running == true, "An interactive prompt must remain available for a human response")
+        XCTAssertTrue(runner.snapshot()?.output.contains("Proceed [y/n]?") == true)
+        XCTAssertTrue(runner.snapshot()?.awaitingInput == true)
+        try runner.sendInput("y\n")
+        let result = try await work.value
+        XCTAssertEqual(result.exitCode, 0)
+        XCTAssertTrue(result.output.contains("accepted:y"))
+        XCTAssertFalse(result.interrupted)
+        XCTAssertThrowsError(try runner.sendInput("n\n"))
+    }
+
+    func testHumanInputUsesControllingTerminalWithoutEchoingResponse() async throws {
+        let runner = AgentCommandRunner(searchPath: "/usr/bin:/bin")
+        let work = Task {
+            try await runner.run(command: "stty -echo; printf 'Password:'; read answer </dev/tty; test \"$answer\" = private-fixture && printf accepted",
+                                 directory: URL(fileURLWithPath: "/private/tmp"), timeout: 0.2)
+        }
+        await waitFor { runner.snapshot()?.awaitingInput == true }
+        // Human thinking time must not consume the command's active deadline.
+        try await Task.sleep(nanoseconds: 350_000_000)
+        XCTAssertTrue(runner.snapshot()?.running == true)
+        XCTAssertThrowsError(try runner.sendInput(String(repeating: "x", count: 513)))
+        try runner.sendInput("private-fixture\n")
+        let result = try await work.value
+        XCTAssertEqual(result.exitCode, 0)
+        XCTAssertFalse(result.interrupted)
+        XCTAssertFalse(result.output.contains("private-fixture"))
+        XCTAssertEqual(result.output, "Password:accepted")
+    }
+
+    func testManualControlAndReturnRestoreCommandDeadline() async throws {
+        let runner = AgentCommandRunner(searchPath: "/usr/bin:/bin")
+        let work = Task {
+            try await runner.run(command: "printf ready; sleep 30 | cat",
+                                 directory: URL(fileURLWithPath: "/private/tmp"), timeout: 0.2)
+        }
+        await waitFor { runner.snapshot()?.output == "ready" }
+        XCTAssertThrowsError(try runner.sendInput("y\n"))
+        XCTAssertTrue(runner.takeControl())
+        try await Task.sleep(nanoseconds: 350_000_000)
+        XCTAssertTrue(runner.snapshot()?.running == true)
+        runner.returnControl()
+        let result = try await work.value
+        XCTAssertTrue(result.interrupted)
+        XCTAssertFalse(runner.takeControl())
+    }
+
+    func testInteractiveCommandHandsBackToAgentExactlyOnce() async throws {
+        let provider = ControlledProvider()
+        let session = makeSession(provider)
+        session.enabled = true
+        session.permissionMode = .fullAccess
+        session.configureAgent(directory: URL(fileURLWithPath: "/private/tmp"))
+        session.draft = "Run a confirmation fixture"
+        session.send()
+        await waitFor { provider.requests.count == 1 }
+        provider.emit(.text(#"<SORA_COMMAND>{"summary":"Confirmation fixture","command":"printf 'Proceed [y/n]? '; read answer; printf 'finished'"}</SORA_COMMAND>"#))
+        provider.emit(.completed); provider.finish()
+        await waitFor { session.commandInputMessageID != nil }
+        let messageID = try XCTUnwrap(session.commandInputMessageID)
+        XCTAssertEqual(provider.requests.count, 1)
+        XCTAssertFalse(session.sendCommandInput("n\n", messageID: UUID()))
+        XCTAssertTrue(session.sendCommandInput("y\n", messageID: messageID))
+        await waitFor { provider.requests.count == 2 }
+        XCTAssertNil(session.commandInputMessageID)
+        XCTAssertEqual(session.messages.compactMap(\.commandResult).first?.exitCode, 0)
+        XCTAssertTrue(session.messages.compactMap(\.commandResult).first?.output.contains("finished") == true)
+        XCTAssertTrue(provider.requests[1].messages.contains { $0.text.contains("finished") })
+        session.stop()
+    }
+
+    func testControlCInCommandTerminalStopsWithoutAgentContinuation() async throws {
+        let provider = ControlledProvider()
+        let session = makeSession(provider)
+        session.enabled = true
+        session.permissionMode = .fullAccess
+        session.configureAgent(directory: URL(fileURLWithPath: "/private/tmp"))
+        session.draft = "Run a confirmation fixture"
+        session.send()
+        await waitFor { provider.requests.count == 1 }
+        provider.emit(.text(#"<SORA_COMMAND>{"summary":"Confirmation fixture","command":"printf 'Continue? '; read answer"}</SORA_COMMAND>"#))
+        provider.emit(.completed); provider.finish()
+        await waitFor { session.commandInputMessageID != nil }
+        let id = try XCTUnwrap(session.commandInputMessageID)
+        XCTAssertTrue(session.sendCommandInput("\u{03}", messageID: id))
+        await waitFor { !session.isRunningCommand }
+        XCTAssertEqual(provider.requests.count, 1)
+        XCTAssertEqual(session.goal?.state, .stopped)
+        XCTAssertEqual(session.messages.compactMap(\.commandResult).first?.userInterrupted, true)
+    }
+
+    func testStopDuringHumanControlDoesNotResumeAgent() async throws {
+        let provider = ControlledProvider()
+        let session = makeSession(provider)
+        session.enabled = true
+        session.permissionMode = .fullAccess
+        session.configureAgent(directory: URL(fileURLWithPath: "/private/tmp"))
+        session.draft = "Run a confirmation fixture"
+        session.send()
+        await waitFor { provider.requests.count == 1 }
+        provider.emit(.text(#"<SORA_COMMAND>{"summary":"Confirmation fixture","command":"printf 'Proceed [y/n]? '; read answer"}</SORA_COMMAND>"#))
+        provider.emit(.completed); provider.finish()
+        await waitFor { session.commandInputMessageID != nil }
+        session.stop()
+        await waitFor { !session.isRunningCommand }
+        XCTAssertNil(session.commandInputMessageID)
+        XCTAssertEqual(provider.requests.count, 1)
+        XCTAssertEqual(session.messages.compactMap(\.commandResult).first?.interrupted, true)
+    }
+
+    func testPromptRecognitionAndRecentOutputAfterTruncation() async throws {
+        for prompt in ["Proceed [y/n]? ", "Continue? (Y/n):", "Password:", "Press RETURN/ENTER to continue or any other key to abort:"] {
+            XCTAssertTrue(AgentCommandRunner.looksLikePrompt(prompt), prompt)
+        }
+        XCTAssertFalse(AgentCommandRunner.looksLikePrompt("Downloading files..."))
+        XCTAssertFalse(AgentCommandRunner.looksLikePrompt("Continue?\nCompleted"))
+        let runner = AgentCommandRunner(searchPath: "/usr/bin:/bin")
+        let work = Task {
+            try await runner.run(command: "printf '%40000s' x; printf 'Proceed [y/n]? '; read answer; printf done",
+                                 directory: URL(fileURLWithPath: "/private/tmp"), timeout: 5)
+        }
+        await waitFor { runner.snapshot()?.awaitingInput == true }
+        XCTAssertTrue(runner.snapshot()?.truncated == true)
+        XCTAssertTrue(runner.snapshot()?.output.hasSuffix("Proceed [y/n]? ") == true)
+        try runner.sendInput("y\n")
+        _ = try await work.value
+    }
+
     func testRunnerCapturesFailuresBoundsOutputAndStopsPipelines() async throws {
         let directory = URL(fileURLWithPath: "/private/tmp")
         let failed = try await AgentCommandRunner().run(command: "printf failure >&2; exit 7", directory: directory)
@@ -2229,7 +2441,7 @@ final class AgentToolTests: XCTestCase {
         call.approvedPath = call.resolvedURL(directory: directory).path
         let diff = try await AgentToolRegistry.run(call, directory: directory)
         XCTAssertFalse(diff.failed)
-        XCTAssertTrue(diff.output.contains("+after"))
+        XCTAssertTrue(diff.output.contains("+after"), diff.output)
         XCTAssertFalse(FileManager.default.fileExists(atPath: directory.appendingPathComponent("SHOULD_NOT_RUN").path))
     }
 

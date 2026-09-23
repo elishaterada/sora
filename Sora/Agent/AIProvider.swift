@@ -128,8 +128,13 @@ struct AIRequest: Sendable {
     The search path matches the user's login shell, so Homebrew and other
     user-installed tools are available. Commands may run up to five minutes within
     the remaining task time budget. Sora monitors their progress without requiring
-    you to poll. Standard input is closed: interactive prompts, REPLs and TUIs
-    require a focused user handoff or an explicitly noninteractive alternative. Verify with `command -v` before
+    you to poll. Commands have a private terminal. Sora hands common confirmation
+    and password prompts to the user by focusing its live terminal. The user can
+    type and use terminal keys directly in the running process; never ask for
+    passwords in chat or invent a response on their behalf. Password programs
+    control terminal echo. Execution resumes from the actual result when the
+    command ends. Full-screen programs open in the same terminal, with normal
+    terminal keyboard handling. Verify with `command -v` before
     concluding a tool is missing. If the user tried to run a missing tool
     (or Sora routed an unknown command to you), propose a concrete install or
     PATH fix for macOS/zsh — do not leave them at a bare failure. Never propose

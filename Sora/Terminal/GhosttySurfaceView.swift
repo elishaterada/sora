@@ -18,6 +18,10 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     private static let inputLog = OSLog(subsystem: "dev.sora.app", category: .pointsOfInterest)
     let runtime: GhosttyRuntime
     let initialWorkingDirectory: URL?
+    /// A private command terminal bypasses shell routing and command history.
+    private let hostedCommand: String?
+    var isAgentTerminal: Bool { hostedCommand != nil }
+    var onTerminalResize: ((UInt16, UInt16) -> Void)?
     weak var delegate: GhosttySurfaceDelegate?
     private(set) var surface: ghostty_surface_t?
     private var hasCreatedSurface = false
@@ -85,10 +89,11 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     override var acceptsFirstResponder: Bool { true }
     override var isFlipped: Bool { false }
 
-    init(runtime: GhosttyRuntime, tabID: UUID = UUID(), workingDirectory: URL? = nil) {
+    init(runtime: GhosttyRuntime, tabID: UUID = UUID(), workingDirectory: URL? = nil, hostedCommand: String? = nil) {
         self.runtime = runtime
         self.tabID = tabID
         self.initialWorkingDirectory = workingDirectory
+        self.hostedCommand = hostedCommand
         super.init(frame: NSRect(x: 0, y: 0, width: 800, height: 600))
         // Do not set wantsLayer or install a CAMetalLayer. libghostty assigns the layer.
         ghostText.isHidden = true
@@ -167,6 +172,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     override func becomeFirstResponder() -> Bool {
         let became = super.becomeFirstResponder()
         if became { onFocus?() }
+        if became, hostedCommand != nil { runtime.activeSurface = self }
         if became, let surface {
             ghostty_surface_set_focus(surface, true)
             runtime.setFocus(true)
@@ -196,6 +202,10 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     // MARK: - Input
 
     override func keyDown(with event: NSEvent) {
+        if hostedCommand != nil {
+            sendKey(event, action: event.isARepeat ? GHOSTTY_ACTION_REPEAT : GHOSTTY_ACTION_PRESS)
+            return
+        }
         let interval = OSSignpostID(log: Self.inputLog)
         os_signpost(.begin, log: Self.inputLog, name: "Terminal keyDown", signpostID: interval)
         defer { os_signpost(.end, log: Self.inputLog, name: "Terminal keyDown", signpostID: interval) }
@@ -332,9 +342,15 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         guard event.type == .keyDown else { return false }
+        if hostedCommand != nil, window?.firstResponder === self,
+           event.keyCode == PromptEvent.escape {
+            // Escape belongs to the running program, not the Agent Back button.
+            keyDown(with: event)
+            return true
+        }
         // Handle even an unavailable number: a disabled menu item otherwise
         // falls through to Ghostty's Command-9 "last tab" binding.
-        if let number = AppKeyBinding(event: event).tabNumber,
+        if hostedCommand == nil, let number = AppKeyBinding(event: event).tabNumber,
            window?.isKeyWindow == true, !isHiddenOrHasHiddenAncestor,
            window?.attachedSheet == nil {
             requestGotoTab(Int32(number))
@@ -763,7 +779,15 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         config.context = GHOSTTY_SURFACE_CONTEXT_TAB
 
         let zdotdir = SoraZshBootstrap.defaultDirectory().path
-        let created: ghostty_surface_t? = "ZDOTDIR".withCString { keyPtr in
+        let created: ghostty_surface_t?
+        if let hostedCommand {
+            created = hostedCommand.withCString { pointer in
+                config.command = pointer
+                config.wait_after_command = true
+                return ghostty_surface_new(runtime.app, &config)
+            }
+        } else {
+        created = "ZDOTDIR".withCString { keyPtr in
             zdotdir.withCString { valuePtr in
                 "SORA_RESTORE_HISTORY".withCString { historyKey in
                     (historyArchiveURL?.path ?? "").withCString { historyValue in
@@ -785,15 +809,17 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
             }
         }
 
+        }
         guard let created else {
             assertionFailure("ghostty_surface_new failed")
             return
         }
         surface = created
+        if hostedCommand != nil { finishStartupInput() }
         // Surface creation starts the shell asynchronously. Until its first
         // edit-line report, PTY echo can print input above the real prompt.
         isShellPromptReady = false
-        runtime.activeSurface = self
+        if hostedCommand == nil { runtime.activeSurface = self }
         runtime.tick()
         updateSurfaceMetrics()
         ghostty_surface_set_focus(created, true)
@@ -1070,6 +1096,10 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         guard let surface, bounds.width > 0, bounds.height > 0 else { return }
         let backing = convertToBacking(bounds)
         ghostty_surface_set_size(surface, UInt32(backing.width), UInt32(backing.height))
+        if let onTerminalResize {
+            let size = ghostty_surface_size(surface)
+            onTerminalResize(size.columns, size.rows)
+        }
         if let window {
             let scale = Double(window.backingScaleFactor)
             ghostty_surface_set_content_scale(surface, scale, scale)

@@ -18,8 +18,12 @@ macOS Application
     └── PTY and shell process
 ```
 
-PTY and shell ownership is confirmed: `ghostty_surface_new` creates the PTY and
-launches the default shell. Sora does not open a PTY or exec `zsh` itself.
+For terminal tabs, `ghostty_surface_new` creates the PTY and launches the default
+shell. Agent commands use a separate private terminal owned by the macOS `script`
+utility. A private Unix-socket relay connects the running command to a hosted
+libghostty surface in the Agent card, with automatic prompt handoff and bounded
+text capture; see [interactive commands](agent-interaction.md). Full terminal
+rendering and key encoding remain owned by libghostty.
 
 This uses Ghostty's internal embedder API (`include/ghostty.h`, imported as
 `GhosttyKit`), not `libghostty-vt`. See

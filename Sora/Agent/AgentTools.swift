@@ -131,7 +131,7 @@ enum AgentToolRegistry {
         guard call.approvedPath == target.path else { throw failure("The resolved target changed after approval. Review the new target before reading.") }
         if call.tool == .gitStatus || call.tool == .gitDiff {
             let arguments = call.tool == .gitStatus ? "status --short --branch --untracked-files=normal" : "diff --no-ext-diff --no-textconv --"
-            let command = "/usr/bin/git --no-pager --no-optional-locks -c core.fsmonitor=false -c core.hooksPath=/dev/null " + arguments
+            let command = "/usr/bin/git --no-pager --no-optional-locks -c color.ui=false -c color.diff=false -c color.status=false -c core.fsmonitor=false -c core.hooksPath=/dev/null " + arguments
             let result = try await AgentCommandRunner().run(command: command, directory: target, timeout: 30)
             return AgentToolResult(tool: call.tool, path: target.path, output: String(decoding: result.output.utf8.prefix(call.maxBytes), as: UTF8.self),
                                    failed: result.exitCode != 0, truncated: result.truncated || result.output.utf8.count > call.maxBytes)

@@ -8,6 +8,7 @@ struct AgentCommandResult: Codable, Equatable, Sendable {
     let exitCode: Int32
     let interrupted: Bool
     let truncated: Bool
+    var userInterrupted: Bool? = nil
 }
 
 struct AgentProcessSnapshot: Codable, Equatable, Sendable, Identifiable {
@@ -19,9 +20,11 @@ struct AgentProcessSnapshot: Codable, Equatable, Sendable, Identifiable {
     let output: String
     let truncated: Bool
     let running: Bool
+    var awaitingInput: Bool? = nil
     var elapsed: Int { max(0, Int(observedAt.timeIntervalSince(startedAt))) }
     var status: String {
         if !running { return "Process ended" }
+        if awaitingInput == true { return "Your turn · agent is waiting" }
         if bytesRead == 0 { return "Running · \(elapsed)s · waiting for output" }
         return "Running · \(elapsed)s · \(bytesRead) bytes received" + (truncated ? " · excerpt retained" : "")
     }
@@ -208,13 +211,15 @@ enum LoginShellPath {
     }
 }
 
-/// A separate noninteractive shell: output belongs to the agent, never to the
-/// user's PTY. A process group lets Stop terminate pipelines as well as zsh.
+/// A private terminal for the approved command. Apple's script utility owns the
+/// controlling PTY; Sora supplies input and captures bounded output, without
+/// borrowing the user's shell or implementing a terminal emulator.
 final class AgentCommandRunner: @unchecked Sendable {
     private let lock = NSLock()
     private var pid: pid_t = 0
     private var cancelled = false
     private var interrupted = false
+    private var terminalInterruptRequested = false
     private let outputLimit = 32_768
     private let searchPath: String
     private let handleID = UUID()
@@ -223,13 +228,155 @@ final class AgentCommandRunner: @unchecked Sendable {
     private var bytesRead = 0
     private var capturedOutput = Data()
     private var outputTruncated = false
+    private var inputHandle: FileHandle?
+    private var terminalRelay: AgentTerminalRelay?
+    private var humanControl = false
+    private var humanControlStarted: TimeInterval?
+    private var activeSeconds: TimeInterval = 0
+    private var lastTick = ProcessInfo.processInfo.systemUptime
+    private var promptHandledAtByte = -1
+
+    /// Only the native user interaction controls call this; providers cannot type.
+    @discardableResult
+    func takeControl() -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        guard pid > 0, !cancelled else { return false }
+        if !humanControl { humanControlStarted = ProcessInfo.processInfo.systemUptime }
+        humanControl = true
+        return true
+    }
+
+    func returnControl() {
+        lock.lock(); defer { lock.unlock() }
+        humanControl = false
+        humanControlStarted = nil
+        promptHandledAtByte = bytesRead
+        lastTick = ProcessInfo.processInfo.systemUptime
+    }
+
+    func sendInput(_ text: String) throws {
+        lock.lock(); defer { lock.unlock() }
+        guard humanControl, pid > 0, !cancelled, let inputHandle else {
+            throw POSIXError(.ESRCH)
+        }
+        // Keep writes below PIPE_BUF, nonblocking, and reject oversized pastes.
+        let data = Data(text.utf8)
+        guard data.count <= 512 else { throw POSIXError(.E2BIG) }
+        let count = data.withUnsafeBytes { Darwin.write(inputHandle.fileDescriptor, $0.baseAddress, $0.count) }
+        guard count == data.count else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        if data.contains(3) { terminalInterruptRequested = true }
+    }
+
+    var terminalSocketPath: String? {
+        lock.lock(); defer { lock.unlock() }
+        return pid > 0 ? terminalRelay?.socketPath : nil
+    }
+
+    func resizeTerminal(columns: UInt16, rows: UInt16) {
+        lock.lock(); let relay = terminalRelay; lock.unlock()
+        relay?.resize(columns: columns, rows: rows)
+    }
+
+    /// Raw terminal bytes never pass through a text field or a provider schema.
+    private func writeTerminalInput(_ data: Data) -> Int {
+        lock.lock(); defer { lock.unlock() }
+        guard pid > 0, !cancelled, let inputHandle else { return -1 }
+        let count = data.withUnsafeBytes { Darwin.write(inputHandle.fileDescriptor, $0.baseAddress, $0.count) }
+        if count < 0 && (errno == EAGAIN || errno == EINTR) { return 0 }
+        if count > 0, data.prefix(count).contains(3) { terminalInterruptRequested = true }
+        return count
+    }
+
+    /// Plain-text excerpts for the model/transcript. Ghostty receives the
+    /// original bytes; this only removes display controls from the saved log.
+    static func plainOutput(_ output: String) -> String {
+        let stripped = output
+            .replacingOccurrences(of: #"\x1B\][^\x07]*(?:\x07|\x1B\\)"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"\x1B\[[0-?]*[ -/]*[@-~]"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: "\r\n", with: "\n")
+        var scalars: [Unicode.Scalar] = []
+        scalars.reserveCapacity(stripped.unicodeScalars.count)
+        for scalar in stripped.unicodeScalars {
+            if scalar.value == 8 || scalar.value == 127 {
+                if scalars.last != "\n", !scalars.isEmpty { scalars.removeLast() }
+            } else if scalar == "\r" {
+                scalars.append("\n")
+            } else if scalar == "\n" || scalar == "\t" || scalar.value >= 32 {
+                scalars.append(scalar)
+            }
+        }
+        return String(String.UnicodeScalarView(scalars))
+    }
+
+    static func plainPrompt(_ output: String) -> String {
+        plainOutput(String(output.suffix(2048)))
+    }
+
+    static func looksLikePrompt(_ output: String) -> Bool {
+        // A full-screen application owns the terminal until it exits. Hand it
+        // over immediately rather than trying to classify its screen contents.
+        if let entered = output.range(of: "\u{1b}[?1049h", options: .backwards),
+           output.range(of: "\u{1b}[?1049l", range: entered.upperBound..<output.endIndex) == nil { return true }
+        let tail = plainPrompt(output).trimmingCharacters(in: .whitespacesAndNewlines)
+        let line = String(tail.split(whereSeparator: { $0.isNewline }).last ?? "")
+        let patterns = [
+            #"(?i)(\[[yn]/[yn]\]|\([yn]/[yn]\)|\[yes/no\]|password:|passphrase[^\n]*:|press (?:return|enter|any key)[^\n]*|(?:proceed|continue)[^\n]*\?)\s*[:?]?\s*$"#,
+            #"(?i)\b(?:enter|choose|select|type|pick|input|confirm|provide)\b[^\n]*[:?>]\s*$"#,
+            #"(?i)\b(?:do you|would you|are you|is this|should|which|what)\b[^\n]*\?\s*(?:\[[^\]]*\])?\s*$"#,
+            #"(?i)(?:\[[^\]]*(?:/|default|[0-9]-[0-9])[^\]]*\]|\((?:yes/no|y/n)[^)]*\))\s*[:?>]?\s*$"#
+        ]
+        return patterns.contains { line.range(of: $0, options: .regularExpression) != nil }
+    }
+
+    /// An unfamiliar unfinished prompt gets a bounded quiet period. A complete
+    /// log line, progress percentage or ordinary silent job does not take focus.
+    static func looksLikeSettledPrompt(_ output: String) -> Bool {
+        let plain = plainPrompt(output)
+        guard !plain.hasSuffix("\n"), !plain.hasSuffix("\r") else { return false }
+        let line = String(plain.split(whereSeparator: { $0.isNewline }).last ?? "")
+            .trimmingCharacters(in: .whitespaces)
+        guard !line.isEmpty, line.count < 300 else { return false }
+        return line.hasSuffix(":") || line.hasSuffix("?") || line.hasSuffix(">")
+    }
+
+    /// script creates a separate terminal session. Stop its descendants as well
+    /// as the launcher group, including children that hold the output pipe open.
+    private func killTree(_ process: pid_t) {
+        let size = proc_listchildpids(process, nil, 0)
+        if size > 0 {
+            var children = [pid_t](repeating: 0, count: Int(size) / MemoryLayout<pid_t>.size + 16)
+            let capacity = Int32(children.count * MemoryLayout<pid_t>.size)
+            let read = children.withUnsafeMutableBytes { proc_listchildpids(process, $0.baseAddress, capacity) }
+            for child in children.prefix(max(0, Int(read)) / MemoryLayout<pid_t>.size) where child > 0 {
+                killTree(child)
+            }
+        }
+        kill(-process, SIGKILL)
+        kill(process, SIGKILL)
+    }
+
+    private func tick(timeout: TimeInterval) {
+        lock.lock()
+        let now = ProcessInfo.processInfo.systemUptime
+        if !humanControl, bytesRead != promptHandledAtByte,
+           let lastOutputAt, Date().timeIntervalSince(lastOutputAt) >= 1.5,
+           Self.looksLikeSettledPrompt(String(decoding: capturedOutput, as: UTF8.self)) {
+            humanControl = true
+            humanControlStarted = now
+        }
+        if !humanControl { activeSeconds += now - lastTick }
+        lastTick = now
+        let expired = activeSeconds >= timeout || humanControlStarted.map { now - $0 >= 600 } == true
+        lock.unlock()
+        if expired { cancel() }
+    }
 
     func snapshot() -> AgentProcessSnapshot? {
         lock.lock(); defer { lock.unlock() }
         guard let startedAt else { return nil }
         return AgentProcessSnapshot(id: handleID, startedAt: startedAt, observedAt: Date(),
             lastOutputAt: lastOutputAt, bytesRead: bytesRead,
-            output: String(decoding: capturedOutput, as: UTF8.self), truncated: outputTruncated, running: pid > 0)
+            output: Self.plainOutput(String(decoding: capturedOutput, as: UTF8.self)), truncated: outputTruncated, running: pid > 0, awaitingInput: humanControl)
     }
 
     init(searchPath: String = LoginShellPath.value) {
@@ -241,7 +388,7 @@ final class AgentCommandRunner: @unchecked Sendable {
         cancelled = true
         if pid > 0 {
             interrupted = true
-            kill(-pid, SIGKILL)
+            killTree(pid)
         }
         lock.unlock()
     }
@@ -258,7 +405,17 @@ final class AgentCommandRunner: @unchecked Sendable {
     }
 
     private func execute(_ command: String, directory: URL, timeout: TimeInterval) throws -> AgentCommandResult {
+        let relay = try AgentTerminalRelay { [weak self] in self?.writeTerminalInput($0) ?? -1 }
+        defer { relay.close() }
         let pipe = Pipe()
+        let input = Pipe()
+        defer {
+            try? input.fileHandleForReading.close()
+            try? input.fileHandleForWriting.close()
+        }
+        let inputFD = input.fileHandleForWriting.fileDescriptor
+        _ = fcntl(inputFD, F_SETFL, O_NONBLOCK)
+        _ = fcntl(inputFD, F_SETNOSIGPIPE, 1)
         var actions: posix_spawn_file_actions_t?
         var attributes: posix_spawnattr_t?
         posix_spawn_file_actions_init(&actions)
@@ -267,18 +424,32 @@ final class AgentCommandRunner: @unchecked Sendable {
             posix_spawn_file_actions_destroy(&actions)
             posix_spawnattr_destroy(&attributes)
         }
-        posix_spawn_file_actions_addopen(&actions, STDIN_FILENO, "/dev/null", O_RDONLY, 0)
+        posix_spawn_file_actions_adddup2(&actions, input.fileHandleForReading.fileDescriptor, STDIN_FILENO)
+        posix_spawn_file_actions_addclose(&actions, input.fileHandleForWriting.fileDescriptor)
+        posix_spawn_file_actions_addclose(&actions, input.fileHandleForReading.fileDescriptor)
         posix_spawn_file_actions_adddup2(&actions, pipe.fileHandleForWriting.fileDescriptor, STDOUT_FILENO)
         posix_spawn_file_actions_adddup2(&actions, pipe.fileHandleForWriting.fileDescriptor, STDERR_FILENO)
         posix_spawn_file_actions_addclose(&actions, pipe.fileHandleForReading.fileDescriptor)
         posix_spawn_file_actions_addclose(&actions, pipe.fileHandleForWriting.fileDescriptor)
         posix_spawn_file_actions_addchdir_np(&actions, directory.path)
-        posix_spawnattr_setflags(&attributes, Int16(POSIX_SPAWN_SETPGROUP))
+        // GUI/test hosts can ignore or block SIGINT. An independent terminal
+        // must restore normal child signal behavior so Control-C reaches it.
+        var defaults = sigset_t()
+        sigemptyset(&defaults)
+        for signal in [SIGINT, SIGQUIT, SIGHUP, SIGTERM, SIGPIPE] { sigaddset(&defaults, signal) }
+        posix_spawnattr_setsigdefault(&attributes, &defaults)
+        var mask = sigset_t()
+        sigemptyset(&mask)
+        posix_spawnattr_setsigmask(&attributes, &mask)
+        posix_spawnattr_setflags(&attributes, Int16(POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_SETSIGDEF | POSIX_SPAWN_SETSIGMASK))
         posix_spawnattr_setpgroup(&attributes, 0)
-        let arguments = ["/bin/zsh", "-f", "-o", "pipefail", "-c", command].map { value in value.withCString { strdup($0) } }
+        let arguments = ["/usr/bin/script", "-q", "/dev/null", "/bin/sh", "-c",
+                         "stty echo onlcr cols 100 rows 24 || exit; /usr/bin/tty > \"$SORA_AGENT_TTY_PATH\"; unset SORA_AGENT_TTY_PATH; exec \"$@\"", "sora-agent", "/bin/zsh", "-f", "-o", "pipefail", "-c", command].map { value in value.withCString { strdup($0) } }
         var values = ProcessInfo.processInfo.environment
         values["PATH"] = searchPath
         values["ZDOTDIR"] = "/dev/null"
+        values["TERM"] = "xterm-256color"
+        values["SORA_AGENT_TTY_PATH"] = relay.ttyPathFile
         let environment = values.map { pair in "\(pair.key)=\(pair.value)".withCString { strdup($0) } }
         defer { (arguments + environment).forEach { free($0) } }
         var argv = arguments + [nil]
@@ -286,10 +457,13 @@ final class AgentCommandRunner: @unchecked Sendable {
         lock.lock()
         if cancelled { lock.unlock(); throw CancellationError() }
         var child: pid_t = 0
-        let error = posix_spawn(&child, "/bin/zsh", &actions, &attributes, &argv, &envp)
+        let error = posix_spawn(&child, "/usr/bin/script", &actions, &attributes, &argv, &envp)
         if error == 0 {
             pid = child
             startedAt = Date()
+            inputHandle = input.fileHandleForWriting
+            terminalRelay = relay
+            lastTick = ProcessInfo.processInfo.systemUptime
             // Stop may have arrived while spawn held the lock; kill before unlocking.
             if cancelled {
                 interrupted = true
@@ -300,21 +474,30 @@ final class AgentCommandRunner: @unchecked Sendable {
         guard error == 0 else { throw POSIXError(POSIXErrorCode(rawValue: error) ?? .EIO) }
         pipe.fileHandleForWriting.closeFile()
         // Drain concurrently with the timeout; retain only a bounded excerpt.
-        let deadline = DispatchWorkItem { [weak self] in self?.cancel() }
-        DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: deadline)
+        let deadline = DispatchSource.makeTimerSource(queue: .global())
+        deadline.schedule(deadline: .now(), repeating: .milliseconds(100))
+        deadline.setEventHandler { [weak self] in self?.tick(timeout: timeout) }
+        deadline.resume()
         var output = Data()
         var truncated = false
         while true {
             let chunk = pipe.fileHandleForReading.availableData
             if chunk.isEmpty { break }
+            relay.append(chunk)
             let room = max(0, outputLimit - output.count)
             output.append(chunk.prefix(room))
             if chunk.count > room { truncated = true }
             lock.lock()
             bytesRead += chunk.count
             lastOutputAt = Date()
-            capturedOutput = output
+            capturedOutput.append(chunk)
+            if capturedOutput.count > outputLimit { capturedOutput.removeFirst(capturedOutput.count - outputLimit) }
             outputTruncated = truncated
+            if bytesRead != promptHandledAtByte,
+               Self.looksLikePrompt(String(decoding: capturedOutput, as: UTF8.self)) {
+                if !humanControl { humanControlStarted = ProcessInfo.processInfo.systemUptime }
+                humanControl = true
+            }
             lock.unlock()
         }
         pipe.fileHandleForReading.closeFile()
@@ -323,7 +506,10 @@ final class AgentCommandRunner: @unchecked Sendable {
         while waitid(P_PID, id_t(child), &info, WEXITED | WNOWAIT) != 0 && errno == EINTR {}
         lock.lock()
         pid = 0
-        let wasInterrupted = interrupted
+        inputHandle = nil
+        humanControl = false
+        let userInterrupted = terminalInterruptRequested
+        let wasInterrupted = interrupted || userInterrupted
         var status: Int32 = 0
         while waitpid(child, &status, 0) == -1 && errno == EINTR {}
         lock.unlock()
@@ -331,7 +517,7 @@ final class AgentCommandRunner: @unchecked Sendable {
         let signal = status & 0x7f
         let code = signal == 0 ? (status >> 8) & 0xff : 128 + signal
         return AgentCommandResult(command: command, directory: directory.path,
-                                  output: String(decoding: output, as: UTF8.self), exitCode: code,
-                                  interrupted: wasInterrupted, truncated: truncated)
+                                  output: Self.plainOutput(String(decoding: output, as: UTF8.self)), exitCode: code,
+                                  interrupted: wasInterrupted, truncated: truncated, userInterrupted: userInterrupted)
     }
 }

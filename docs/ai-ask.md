@@ -91,8 +91,12 @@ back to Control-C and no rule is drawn.
 
 Agent mode stays visible until **ESC for terminal**. Each command starts in the
 active tab's directory captured when its proposal was generated. Commands use a
-separate noninteractive zsh, not the user's PTY; interactive input, shell aliases,
-and persistent cd/environment changes are unsupported. The runner still skips
+fresh zsh in a private terminal supplied by macOS `script`, separate from the
+user's PTY. The command card contains a live libghostty terminal. Confirmation,
+password and selection prompts automatically focus it; users type directly at
+the prompt, with echo controlled by the program. Completion
+returns the actual output and exit code to the agent. Shell aliases and persistent
+cd/environment changes remain unsupported. See [interactive commands](agent-interaction.md). The runner still skips
 every zsh startup file (`zsh -f` with `ZDOTDIR=/dev/null`), so no alias or
 function from the user's dotfiles can change what a proposed command means.
 
@@ -285,7 +289,8 @@ The system prompt asks for scannable
 GitHub-flavored Markdown on normal replies; command and webpage envelopes stay
 plain. Command output remains monospace plain text with path links. There is one
 conversation per provider and no transcript browser. General terminal scrollback
-attachments and interactive agent commands remain future work.
+attachments were future work at this milestone. Interactive agent commands now
+use a live libghostty terminal with automatic prompt handoff and raw keyboard input.
 Grok connects directly to `https://api.x.ai/v1/chat/completions` using Bearer
 authentication. This supported legacy endpoint reuses the existing stateless
 Chat Completions transport for this text-only slice. xAI recommends Responses
@@ -360,8 +365,10 @@ Natural-language requests send only catalog names, descriptions, IDs and working
 directories to the selected provider, allowing it to suggest reuse. They still
 cost a request; using the catalog directly avoids that request entirely.
 
-Programs run noninteractively with `/bin/zsh -f` in their original working directory,
-with the same output capture, cancellation, and 60-second limit as agent commands.
+Programs run with `/bin/zsh -f` in their original working directory and use the
+same private-terminal input handoff, output capture and cancellation as agent
+commands. Local program runs have a 60-second active limit; human interaction
+pauses that timer, with a separate ten-minute limit per handoff.
 Run approval is always explicit. Review side effects and prerequisites. Scripts
 must not contain credentials; use environment variables for secrets. This first
 slice has no named parameter schema, scheduling, background jobs, or automatic migration

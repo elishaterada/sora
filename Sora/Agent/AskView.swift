@@ -4,6 +4,7 @@ import SwiftUI
 struct AskView: View {
     @AppStorage(TerminalPreferences.appearanceKey) private var appearanceName = "dark"
     @ObservedObject var session: AskSession
+    var terminalRuntime: GhosttyRuntime?
     var inline = false
     var onClose: (() -> Void)?
     var onRunCommand: ((UUID) -> Void)?
@@ -97,6 +98,7 @@ struct AskView: View {
             #if DEBUG
             Task { @MainActor in
                 await Task.yield()
+                session.startCommandInputTest()
                 session.startTranscriptStressTest()
             }
             #endif
@@ -191,7 +193,7 @@ struct AskView: View {
                     } label: {
                         HStack(spacing: SoraTheme.space1) {
                             Image(systemName: "chevron.left")
-                            Text("ESC for terminal")
+                            Text(session.commandInputMessageID == nil ? "ESC for terminal" : "Back to terminal")
                         }
                         .font(SoraTheme.agentCaption.weight(.semibold))
                         .foregroundStyle(SoraTheme.accent)
@@ -683,7 +685,7 @@ struct AskView: View {
                     )
                 }
             }
-            if session.isRunningCommand, message.id == session.messages.last?.id {
+            if session.isRunningCommand, session.commandInputMessageID != message.id, message.id == session.messages.last?.id {
                 InlineProgressLabel(
                     title: message.commandState == "stopped" ? "Stopping…"
                     : message.commandState == "fetching" ? "Fetching webpage…"
@@ -848,6 +850,7 @@ struct AskView: View {
         let routine = AgentCommandPermission.allowsAutomatically(proposal.command)
         let message = session.messages.first { $0.id == messageID }
         let executionTitle: String = {
+            if session.commandInputMessageID == messageID { return "Waiting for your input" }
             if let result = message?.commandResult {
                 if result.interrupted { return "Command stopped" }
                 return result.exitCode == 0 ? "Command finished" : "Command failed (exit \(result.exitCode))"
@@ -897,15 +900,6 @@ struct AskView: View {
                         .foregroundStyle(SoraTheme.warning)
                 }
             }
-            if let progress = message?.processProgress, message?.commandResult == nil {
-                Text(message?.commandState == "stopped" ? "Stopped · captured output retained" : progress.status)
-                    .font(.caption).foregroundStyle(.secondary)
-                if !progress.output.isEmpty {
-                    DisclosureGroup("Live output") {
-                        Text(progress.output).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
-                    }
-                }
-            }
             Text(proposal.command)
                 .font(SoraTheme.agentMono)
                 .textSelection(.enabled)
@@ -917,6 +911,37 @@ struct AskView: View {
                     Button("Copy Command") { PathActions.copy(proposal.command) }
                 }
                 .accessibilityLabel("Command: \(proposal.command)")
+            if let progress = message?.processProgress, message?.commandResult == nil {
+                Text(message?.commandState == "stopped" ? "Stopped · captured output retained" : progress.status)
+                    .font(.caption).foregroundStyle(.secondary)
+                if !progress.output.isEmpty, terminalRuntime == nil {
+                    DisclosureGroup("Live output") {
+                        Text(progress.output).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
+                    }
+                }
+            }
+            if message?.commandState == "running", let terminalRuntime,
+               let path = session.commandTerminalPath(messageID: messageID) {
+                VStack(alignment: .leading, spacing: SoraTheme.space2) {
+                    if session.commandInputMessageID == messageID {
+                        HStack {
+                            Label("Your turn", systemImage: "keyboard")
+                                .font(SoraTheme.agentBodySemibold)
+                            Spacer()
+                            Button("Return control to agent") { session.returnCommandControl(messageID: messageID) }
+                                .buttonStyle(.borderless)
+                        }
+                        Text("Type directly in the terminal. The agent continues when the command finishes.")
+                            .font(SoraTheme.agentCaption).foregroundStyle(.secondary)
+                    }
+                    AgentCommandTerminalView(runtime: terminalRuntime, session: session,
+                                             messageID: messageID, socketPath: path,
+                                             hasControl: session.commandInputMessageID == messageID)
+                        .frame(height: 260)
+                        .clipShape(RoundedRectangle(cornerRadius: SoraTheme.radiusMedium))
+                        .accessibilityLabel("Running command terminal")
+                }
+            }
         }
         .padding(SoraTheme.space3)
         .background(SoraTheme.fillCard, in: RoundedRectangle(cornerRadius: SoraTheme.radiusLarge))
@@ -1134,5 +1159,56 @@ private struct ProgramDirectoryPicker: View {
             Text("Changes the folder for this run; the saved program stays in your catalog.")
                 .font(.caption).foregroundStyle(.secondary)
         }
+    }
+}
+
+/// Ghostty owns rendering, key encoding, selection, paste and IME. The local
+/// relay attaches this surface to the already-running command, never a rerun.
+private struct AgentCommandTerminalView: NSViewRepresentable {
+    let runtime: GhosttyRuntime
+    let session: AskSession
+    let messageID: UUID
+    let socketPath: String
+    let hasControl: Bool
+
+    final class Coordinator {
+        var hadControl = false
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeNSView(context: Context) -> GhosttySurfaceView {
+        // The socket path is generated by Sora from a UUID, with no shell input.
+        let command = "/bin/sh -c 'stty raw -echo; exec /usr/bin/nc -U \"" + socketPath + "\"'"
+        let view = GhosttySurfaceView(runtime: runtime, hostedCommand: command)
+        view.onFocus = { [weak session] in session?.takeCommandControl(messageID: messageID) }
+        view.onTerminalResize = { [weak session] columns, rows in
+            session?.resizeCommandTerminal(messageID: messageID, columns: columns, rows: rows)
+        }
+        return view
+    }
+
+    func updateNSView(_ view: GhosttySurfaceView, context: Context) {
+        if hasControl && !context.coordinator.hadControl {
+            // Mounting the surface and making it first responder must happen
+            // after SwiftUI attaches the NSView to its window.
+            let coordinator = context.coordinator
+            DispatchQueue.main.async { [weak view, weak session] in
+                guard session?.commandInputMessageID == messageID else { return }
+                guard let view, let window = view.window, !view.isHiddenOrHasHiddenAncestor,
+                      window.attachedSheet == nil else { coordinator.hadControl = false; return }
+                window.makeFirstResponder(view)
+                view.reassertTerminalFocus()
+            }
+        } else if !hasControl && context.coordinator.hadControl, view.window?.firstResponder === view {
+            view.window?.makeFirstResponder(nil)
+        }
+        context.coordinator.hadControl = hasControl
+    }
+
+    static func dismantleNSView(_ view: GhosttySurfaceView, coordinator: Coordinator) {
+        view.onFocus = nil
+        view.onTerminalResize = nil
+        view.closeSession()
     }
 }

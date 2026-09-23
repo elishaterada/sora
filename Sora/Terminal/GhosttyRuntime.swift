@@ -403,7 +403,7 @@ final class GhosttyRuntime: ObservableObject {
         location: ghostty_clipboard_e,
         state: UnsafeMutableRawPointer?
     ) -> ghostty_clipboard_read_result_e {
-        guard let view = surfaceView(from: userdata),
+        guard let view = surfaceView(from: userdata), !view.isAgentTerminal,
               let surface = view.surface else {
             return GHOSTTY_CLIPBOARD_READ_UNAVAILABLE
         }
@@ -439,6 +439,9 @@ final class GhosttyRuntime: ObservableObject {
         content: UnsafePointer<ghostty_clipboard_content_s>?,
         len: Int
     ) {
+        // Agent output cannot read or replace the clipboard through OSC 52.
+        // Explicit Copy/Paste uses the surface view's native actions instead.
+        guard surfaceView(from: userdata)?.isAgentTerminal != true else { return }
         if let text = GhosttyClipboard.firstPlainText(content: content, count: len),
            surfaceView(from: userdata)?.captureHistoryExport(text) == true { return }
         let pasteboard = GhosttyClipboard.pasteboard(for: location)

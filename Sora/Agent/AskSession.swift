@@ -180,6 +180,8 @@ final class AskSession: ObservableObject {
     @Published private(set) var messages: [AIMessage] = []
     @Published private(set) var isSending = false
     @Published private(set) var isRunningCommand = false
+    @Published private(set) var commandInputMessageID: UUID?
+    @Published private(set) var commandInputError: String?
     @Published private(set) var agentDirectory: URL?
     private var commandRunner: AgentCommandRunner?
     private var commandTask: Task<Void, Never>?
@@ -569,7 +571,7 @@ final class AskSession: ObservableObject {
 
     private func send(continuation: String?) {
         #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("--sora-transcript-stress-test") { return }
+        if ProcessInfo.processInfo.arguments.contains("--sora-transcript-stress-test") || ProcessInfo.processInfo.arguments.contains("--sora-command-input-test") { return }
         #endif
         load()
         guard !isSending, !isRunningCommand, !isUpdatingKey else { return }
@@ -723,6 +725,20 @@ final class AskSession: ObservableObject {
     #if DEBUG
     private var stressTestStarted = false
 
+    /// Local, opt-in interaction fixture: no provider request or transcript writes.
+    func startCommandInputTest() {
+        guard ProcessInfo.processInfo.arguments.contains("--sora-command-input-test"), !stressTestStarted else { return }
+        stressTestStarted = true
+        goal = nil
+        errorMessage = nil
+        let message = AIMessage(role: .assistant, text: "Interactive command check",
+            commandProposal: AgentCommandProposal(summary: "Ask for confirmation without changing files",
+                command: "printf '\\033[32mChoose a number [1-3]:\\033[0m '; read answer; stty -echo; printf '\\nPassword: '; read secret; stty echo; printf '\\nConfirmed choice %s. Command finished.' \"$answer\""),
+            commandDirectory: "/private/tmp")
+        messages = [message]
+        runCommand(messageID: message.id, continueWithAgent: false)
+    }
+
     /// Opt-in UI stress fixture. Uses no provider, credentials, or persistence.
     func startTranscriptStressTest() {
         guard ProcessInfo.processInfo.arguments.contains("--sora-transcript-stress-test"), !isSending, !stressTestStarted else { return }
@@ -810,6 +826,12 @@ final class AskSession: ObservableObject {
         proposal.status = .approved
         var updated = messages
         updated[index].commandProposal = proposal
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--sora-command-input-test") {
+            messages = updated
+            return proposal
+        }
+        #endif
         do {
             try conversations.save(updated)
             messages = updated
@@ -1178,6 +1200,8 @@ final class AskSession: ObservableObject {
         finishBudgetWork()
         commandStopRequested = false
         isRunningCommand = false
+        commandInputMessageID = nil
+        commandInputError = nil
         commandRunner = nil
         commandTask = nil
         commandGeneration = nil
@@ -1221,6 +1245,11 @@ final class AskSession: ObservableObject {
             do {
                 let result = try await runner.run(command: proposal.command, directory: directory, timeout: timeout)
                 guard let self, self.commandGeneration == token else { return }
+                if result.userInterrupted == true {
+                    self.commandStopRequested = true
+                    self.goal?.state = .stopped
+                    self.goal?.detail = "Interrupted by you in the command terminal."
+                }
                 let stoppedByUser = self.commandStopRequested
                 self.finishCommand(token: token, messageID: messageID, result: result, error: nil)
                 guard self.errorMessage == nil else { return }
@@ -1261,6 +1290,53 @@ final class AskSession: ObservableObject {
         }
     }
 
+    func commandTerminalPath(messageID: UUID) -> String? {
+        guard runningMessageID == messageID, isRunningCommand else { return nil }
+        return commandRunner?.terminalSocketPath
+    }
+
+    func resizeCommandTerminal(messageID: UUID, columns: UInt16, rows: UInt16) {
+        guard runningMessageID == messageID else { return }
+        commandRunner?.resizeTerminal(columns: columns, rows: rows)
+    }
+
+    func takeCommandControl(messageID: UUID) {
+        guard runningMessageID == messageID, commandRunner?.takeControl() == true else { return }
+        updateCommandControl(true, messageID: messageID)
+    }
+
+    @discardableResult
+    func sendCommandInput(_ text: String, messageID: UUID) -> Bool {
+        guard commandInputMessageID == messageID, runningMessageID == messageID,
+              let commandRunner else { return false }
+        do {
+            try commandRunner.sendInput(text)
+            commandInputError = nil
+            return true
+        } catch {
+            commandInputError = "Could not send the response. The command may have ended, or the response is too long (maximum 511 bytes)."
+            return false
+        }
+    }
+
+    func returnCommandControl(messageID: UUID) {
+        guard commandInputMessageID == messageID, runningMessageID == messageID else { return }
+        commandRunner?.returnControl()
+        updateCommandControl(false, messageID: messageID)
+    }
+
+    private func updateCommandControl(_ human: Bool, messageID: UUID) {
+        if human, commandInputMessageID != messageID {
+            finishBudgetWork()
+            commandInputMessageID = messageID
+            goal?.detail = "Your turn: respond to the command below. The agent continues when it finishes or you return control."
+        } else if !human, commandInputMessageID == messageID {
+            commandInputMessageID = nil
+            commandInputError = nil
+            beginBudgetWork()
+        }
+    }
+
     private func monitorProcess(_ runner: AgentCommandRunner, token: UUID, messageID: UUID) {
         processMonitor?.cancel()
         processMonitor = Task { [weak self] in
@@ -1271,11 +1347,12 @@ final class AskSession: ObservableObject {
                       let index = self.messages.firstIndex(where: { $0.id == messageID }) else { return }
                 if let progress = runner.snapshot() {
                     self.messages[index].processProgress = progress
+                    if progress.running { self.updateCommandControl(progress.awaitingInput == true, messageID: messageID) }
                     if progress.running { self.goal?.detail = progress.status }
                     self.persist()
                     if self.errorMessage != nil { self.stop(); return }
                 }
-                delay = min(delay * 2, 4_000_000_000)
+                delay = min(delay * 2, 500_000_000)
             }
         }
     }
@@ -1291,6 +1368,8 @@ final class AskSession: ObservableObject {
         let stoppedByUser = commandStopRequested
         commandStopRequested = false
         isRunningCommand = false
+        commandInputMessageID = nil
+        commandInputError = nil
         commandRunner = nil
         commandTask = nil
         commandGeneration = nil
@@ -1313,7 +1392,7 @@ final class AskSession: ObservableObject {
     private func persist() {
         guard !loadFailed else { return }
         #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("--sora-transcript-stress-test") { return }
+        if ProcessInfo.processInfo.arguments.contains("--sora-transcript-stress-test") || ProcessInfo.processInfo.arguments.contains("--sora-command-input-test") { return }
         #endif
         for index in messages.indices.dropLast() { messages[index].goalSnapshot = nil }
         if let index = messages.indices.last {

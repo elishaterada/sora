@@ -102,9 +102,10 @@
   30-second command was still running: saw `SORA_MONITOR`, elapsed time and bytes.
   Pressed Stop; the UI showed **Stopped**, exit 137, captured output and unchanged
   model-request count. The task did not resume itself.
-- Interactive input remains unsupported by this noninteractive runner. Its
-  capability description now says so explicitly; full REPL/TUI control remains
-  outside this slice.
+- At this milestone interactive input was unsupported. The subsequent
+  [interactive command slice](agent-interaction.md) adds private-terminal input
+  and human handoff. Its September 23 follow-up embeds a live libghostty surface
+  with automatic prompt focus and terminal key handling.
 
 ## H7 / U01 — 2026-09-12
 
