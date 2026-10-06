@@ -4,6 +4,18 @@ Human-readable highlights for each Sora release live here. Add the newest
 version before creating its `vX.Y.Z` tag; the release workflow requires a
 matching section and publishes it to GitHub.
 
+## 0.6.1 — 2026-10-06
+
+### What’s new
+
+- See the latest command or Agent task on each tab’s first line, with its Git branch always below it.
+- Use the tab’s three-dot menu to copy its branch, title, or folder; open its folder; rename or reorder it; or close it.
+
+### Fixes
+
+- Keep tab rows steady as command activity changes, including when several tabs share a branch.
+- Give the menu and close buttons subtle hover feedback with even spacing on all sides.
+
 ## 0.6.0 — 2026-09-23
 
 ### What’s new

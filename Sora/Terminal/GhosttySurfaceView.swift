@@ -63,7 +63,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
     private var promptIntent: PromptIntent?
     var onSessionUsed: (() -> Void)?
     var onFocus: (() -> Void)?
-    var onCommandStarted: (() -> Void)?
+    var onCommandStarted: ((String) -> Void)?
     var onCommandFinished: ((Int16) -> Void)?
     let notificationID = UUID()
     let tabID: UUID
@@ -930,7 +930,7 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
             dismissCompletionMenu()
             onSessionUsed?()
             if !isRemoteSession { runningCommand = command.isEmpty ? nil : command }
-            if !command.isEmpty { onCommandStarted?() }
+            if !command.isEmpty { onCommandStarted?(command) }
             dismissCommandHistory()
             leaveCommandBlocks(focusInput: false)
             isShellPromptReady = false

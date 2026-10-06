@@ -47,6 +47,14 @@ final class WorkspaceModel {
             }
             return "Tab"
         }
+
+        /// The sidebar follows the latest command unless the user named the tab
+        /// or an agent task supplies its own title. Commands stay transient.
+        func sidebarTitle(recentCommand: String?) -> String {
+            if customName?.isEmpty == false || activityTitle?.isEmpty == false { return displayTitle }
+            let command = recentCommand?.split(whereSeparator: \.isWhitespace).joined(separator: " ") ?? ""
+            return command.isEmpty ? displayTitle : command
+        }
     }
 
     /// Ghostty `goto_tab` special values from `ghostty_action_goto_tab_e`.

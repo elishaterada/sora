@@ -7,15 +7,13 @@ struct WorkspaceTabBar: View {
     var titlebarHeight: CGFloat
     var trafficLightWidth: CGFloat
     @State private var hoveredTab: UUID?
+    @State private var hoveredMenuTab: UUID?
+    @State private var hoveredCloseTab: UUID?
     @State private var dropTarget: UUID?
     @State private var draggedTab: UUID?
     @State private var rowBounds: [UUID: CGRect] = [:]
     @State private var viewportSize: CGSize = .zero
     @State private var showsTabShortcuts = false
-
-    private var selectedBranch: String? {
-        GitRepository.branchName(containing: workspace.selected.workingDirectory)
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -82,7 +80,6 @@ struct WorkspaceTabBar: View {
         let selected = tab.id == workspace.selectedID
         let number = workspace.tabs.firstIndex(where: { $0.id == tab.id }).map { $0 + 1 }
         let branch = GitRepository.branchName(containing: tab.workingDirectory)
-        let showBranch = branch != nil && branch != selectedBranch
         let activity = workspace.activities[tab.id]
         let agentBusy = workspace.busyAgents.contains(tab.id)
         let status = agentBusy ? "Agent running" : activity?.label ?? workspace.attention[tab.id]
@@ -94,12 +91,24 @@ struct WorkspaceTabBar: View {
                         .foregroundStyle(status == nil ? SoraTheme.muted : color)
                         .frame(width: 16)
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(tab.displayTitle).font(SoraTheme.chromeBody).foregroundStyle(SoraTheme.text).lineLimit(1)
-                        if let status { Text(status).font(SoraTheme.chromeCaption).foregroundStyle(color) }
-                        if showBranch, let branch {
-                            Text(branch).font(SoraTheme.chromeCaption).foregroundStyle(.tertiary).lineLimit(1)
+                        HStack(spacing: 0) {
+                            Text(tab.sidebarTitle(recentCommand: workspace.recentCommands[tab.id]))
+                                .font(SoraTheme.chromeBody)
+                                .foregroundStyle(SoraTheme.text)
+                                .lineLimit(1)
+                            Spacer(minLength: 0)
+                            Color.clear.frame(width: 64, height: 1)
+                        }
+                        if let branch {
+                            Label(branch, systemImage: "arrow.triangle.branch")
+                                .font(SoraTheme.chromeCaption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                                .help("Branch: " + branch)
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     Spacer(minLength: 0)
                 }
                 .padding(.leading, SoraTheme.space2)
@@ -112,7 +121,7 @@ struct WorkspaceTabBar: View {
             .accessibilityElement(children: .ignore)
             .accessibilityAddTraits(.isButton)
             .accessibilityAction { workspace.select(tab.id) }
-            .accessibilityLabel(tab.displayTitle + (status.map { ", " + $0 } ?? ""))
+            .accessibilityLabel(tab.sidebarTitle(recentCommand: workspace.recentCommands[tab.id]) + (status.map { ", " + $0 } ?? "") + (branch.map { ", branch " + $0 } ?? ""))
             .accessibilityAddTraits(selected ? .isSelected : [])
             .simultaneousGesture(DragGesture(minimumDistance: 6, coordinateSpace: .named("session-list"))
                 .onChanged { value in
@@ -126,6 +135,10 @@ struct WorkspaceTabBar: View {
                     draggedTab = nil
                     dropTarget = nil
                 })
+        }
+        .background(RoundedRectangle(cornerRadius: SoraTheme.radiusSmall).fill(selected ? SoraTheme.fillSubtle : Color.clear))
+        .overlay(RoundedRectangle(cornerRadius: SoraTheme.radiusSmall).stroke(dropTarget == tab.id ? SoraTheme.accent : .clear, lineWidth: 1))
+        .overlay(alignment: .topTrailing) {
             if showsTabShortcuts, let number, number <= 9 {
                 Text("⌘\(number)")
                     .font(SoraTheme.chromeBody.monospacedDigit())
@@ -133,32 +146,100 @@ struct WorkspaceTabBar: View {
                     .frame(width: 26, height: 26)
                     .accessibilityLabel("Switch to tab: Command \(number)")
                     .allowsHitTesting(false)
-            } else {
-                Button { workspace.closeTab(id: tab.id) } label: {
-                    Image(systemName: "xmark").font(.system(size: 10, weight: .semibold)).frame(width: 26, height: 26)
+                    .padding(4)
+            } else if hoveredTab == tab.id {
+                HStack(spacing: 0) {
+                    Menu {
+                        tabActions(for: tab, branch: branch)
+                    } label: {
+                        Color.clear.frame(width: 24, height: 20)
+                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .frame(width: 24, height: 20)
+                    .overlay {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(hoveredMenuTab == tab.id ? Color.primary.opacity(0.13) : .clear)
+                            VStack(spacing: 1.6) {
+                                ForEach(0..<3, id: \.self) { _ in
+                                    Circle()
+                                        .fill(SoraTheme.text)
+                                        .frame(width: 1.6, height: 1.6)
+                                }
+                            }
+                        }
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                    }
+                    .onHover { inside in
+                        if inside { hoveredMenuTab = tab.id }
+                        else if hoveredMenuTab == tab.id { hoveredMenuTab = nil }
+                    }
+                    .animation(SoraTheme.motionFeedback, value: hoveredMenuTab == tab.id)
+                    .help("Tab Actions")
+                    .accessibilityLabel("Tab Actions for " + tab.displayTitle)
+
+                    Button { workspace.closeTab(id: tab.id) } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 10, weight: .semibold))
+                            .frame(width: 24, height: 20)
+                    }
+                    .buttonStyle(.plain)
+                    .background(hoveredCloseTab == tab.id ? Color.primary.opacity(0.13) : .clear, in: RoundedRectangle(cornerRadius: 4))
+                    .onHover { inside in
+                        if inside { hoveredCloseTab = tab.id }
+                        else if hoveredCloseTab == tab.id { hoveredCloseTab = nil }
+                    }
+                    .animation(SoraTheme.motionFeedback, value: hoveredCloseTab == tab.id)
+                    .help("Close Tab (" + workspace.runtime.shortcuts.binding(.closeTab).display + ")")
+                    .accessibilityLabel("Close " + tab.displayTitle)
                 }
-                .buttonStyle(.plain)
-                .opacity(hoveredTab == tab.id || selected ? 1 : 0)
-                .help("Close Tab (" + workspace.runtime.shortcuts.binding(.closeTab).display + ")")
-                .accessibilityLabel("Close " + tab.displayTitle)
+                .padding(2)
+                .foregroundStyle(SoraTheme.text)
+                .background(SoraTheme.fillPanel, in: RoundedRectangle(cornerRadius: SoraTheme.radiusSmall))
+                .overlay(RoundedRectangle(cornerRadius: SoraTheme.radiusSmall).stroke(SoraTheme.hairlineStrong, lineWidth: 1))
+                .padding(.trailing, 4)
             }
         }
-        .background(RoundedRectangle(cornerRadius: SoraTheme.radiusSmall).fill(selected ? SoraTheme.fillSubtle : Color.clear))
-        .overlay(RoundedRectangle(cornerRadius: SoraTheme.radiusSmall).stroke(dropTarget == tab.id ? SoraTheme.accent : .clear, lineWidth: 1))
         .onHover { inside in
-            if inside { hoveredTab = tab.id } else if hoveredTab == tab.id { hoveredTab = nil }
+            if inside {
+                hoveredTab = tab.id
+            } else if hoveredTab == tab.id {
+                hoveredTab = nil
+                if hoveredMenuTab == tab.id { hoveredMenuTab = nil }
+                if hoveredCloseTab == tab.id { hoveredCloseTab = nil }
+            }
         }
         .opacity(draggedTab == tab.id ? 0.7 : 1)
         .background(GeometryReader { geometry in
             Color.clear.preference(key: SessionRowBounds.self, value: [tab.id: geometry.frame(in: .named("session-list"))])
         })
         .contextMenu {
-            Button("Rename Tab…") { workspace.renameTab(tab.id) }
-            Button("Move Up") { workspace.moveTab(tab.id, by: -1) }.disabled(workspace.tabs.first?.id == tab.id)
-            Button("Move Down") { workspace.moveTab(tab.id, by: 1) }.disabled(workspace.tabs.last?.id == tab.id)
-            Divider()
-            Button("Close Tab", role: .destructive) { workspace.closeTab(id: tab.id) }
+            tabActions(for: tab, branch: branch)
         }
+    }
+
+    @ViewBuilder
+    private func tabActions(for tab: WorkspaceModel.Tab, branch: String?) -> some View {
+        if let branch {
+            Button("Copy Branch") { PathActions.copy(branch) }
+        }
+        Button("Copy Tab Title") {
+            PathActions.copy(tab.sidebarTitle(recentCommand: workspace.recentCommands[tab.id]))
+        }
+        if let directory = tab.workingDirectory {
+            Button("Copy Working Directory") { PathActions.copyPath(directory) }
+            Button("Open Working Directory") { PathActions.reveal(directory) }
+        }
+        Divider()
+        Button("Rename Tab…") { workspace.renameTab(tab.id) }
+        Button("Move Up") { workspace.moveTab(tab.id, by: -1) }
+            .disabled(workspace.tabs.first?.id == tab.id)
+        Button("Move Down") { workspace.moveTab(tab.id, by: 1) }
+            .disabled(workspace.tabs.last?.id == tab.id)
+        Divider()
+        Button("Close Tab", role: .destructive) { workspace.closeTab(id: tab.id) }
     }
 }
 

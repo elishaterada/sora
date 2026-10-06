@@ -33,6 +33,7 @@ final class WorkspaceController: ObservableObject {
         hasSelectedSplit && !isPaneMaximized ? paneLayout! : .leaf(selectedID)
     }
     @Published private(set) var activities: [UUID: WorkspaceModel.TerminalActivity] = [:]
+    @Published private(set) var recentCommands: [UUID: String] = [:]
     @Published private(set) var busyAgents: Set<UUID> = []
     @Published private(set) var attention: [UUID: String] = [:]
     var canReopenTab: Bool { model.canReopenTab }
@@ -101,8 +102,9 @@ final class WorkspaceController: ObservableObject {
             guard let self, self.selectedID != id else { return }
             self.select(id)
         }
-        view.onCommandStarted = { [weak self] in
+        view.onCommandStarted = { [weak self] command in
             self?.activities[id] = .running
+            self?.recentCommands[id] = command
             self?.attention[id] = nil
         }
         view.onCommandFinished = { [weak self] code in
@@ -350,6 +352,7 @@ final class WorkspaceController: ObservableObject {
 
     private func retireSurface(id: UUID) {
         activities[id] = nil
+        recentCommands[id] = nil
         attention[id] = nil
         busyAgents.remove(id)
         guard let view = surfaces.removeValue(forKey: id) else { return }

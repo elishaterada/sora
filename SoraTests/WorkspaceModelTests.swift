@@ -178,6 +178,21 @@ final class WorkspaceModelTests: XCTestCase {
         XCTAssertEqual(tab.displayTitle, "sora")
     }
 
+    func testSidebarTitleUsesRecentCommandButPreservesNamedTabsAndAgentTasks() {
+        var tab = WorkspaceModel.Tab(
+            id: UUID(), title: "Sora", activityTitle: nil,
+            workingDirectory: URL(fileURLWithPath: "/Users/example/repos/sora")
+        )
+        XCTAssertEqual(tab.sidebarTitle(recentCommand: nil), "sora")
+        XCTAssertEqual(tab.sidebarTitle(recentCommand: "npm  run\n dev"), "npm run dev")
+        XCTAssertEqual(tab.sidebarTitle(recentCommand: " \n "), "sora")
+
+        tab.activityTitle = "Fix the build"
+        XCTAssertEqual(tab.sidebarTitle(recentCommand: "npm run dev"), "Fix the build")
+        tab.customName = "Build logs"
+        XCTAssertEqual(tab.sidebarTitle(recentCommand: "npm run dev"), "Build logs")
+    }
+
     func testUpdateActivityTitleStoresTrimmedLabel() {
         let model = WorkspaceModel(snapshot: .empty)
         let id = model.selectedID
