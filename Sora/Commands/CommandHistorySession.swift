@@ -67,18 +67,6 @@ final class CommandHistorySession {
         onChange?()
     }
 
-    /// Apply the first deletion to the preview before handing it to ZLE. The
-    /// selected row is display-only until acceptance; stage the edited text
-    /// once instead of staging one string and sending a separate deletion.
-    func acceptSelection(deletingBackward: Bool = false) -> String? {
-        var command = selected?.command
-        dismiss()
-        if deletingBackward, command?.isEmpty == false {
-            command?.removeLast()
-        }
-        return command
-    }
-
     func dismiss() {
         guard isPresented else { return }
         requestID = UUID()

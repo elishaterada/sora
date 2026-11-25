@@ -25,14 +25,18 @@ without sending it. Debug build and all 266 tests passed.
 
 ## Editing a history preview
 
-Up/Down history previews do not change ZLE until accepted. When Backspace is
-the first edit, Sora removes the final character from the selected preview and
-stages that edited command once. The Backspace event is consumed rather than
-forwarded alongside the asynchronous shell-buffer replacement. The stored
-history entry and the original draft remain unchanged. Tab still stages the
-full command for normal shell editing.
+Up/Down history previews do not change ZLE until accepted. Sora uses its
+`Ctrl+X Ctrl+R` widget to replace the shell buffer before pasting the selected
+command. zsh completion startup can restore that shortcut to `_read_comp`,
+which opens a completion reader and consumes later editing keys instead.
 
-Regression coverage in `CommandHistorySessionTests` includes the reported
-`docker start postgres17.5` command, Tab acceptance, and multiline Unicode
-input. Manual verification should cover running a command, running `clear`,
-recalling the command with Up, then deleting `.5` and typing a replacement.
+The reuse widget and its emacs/vi bindings now install at the first prompt,
+after startup configuration has finished, like Sora's accept-line wrapper.
+The installer removes its own prompt hook after running. Existing shells need
+a new session to load the corrected integration.
+
+Regression coverage in `SoraZshBootstrapTests` simulates the conflicting
+completion binding and checks all three keymaps after prompt initialization.
+Manual verification should cover running a command, running `clear`, recalling
+the command with Up, then deleting `.5` and typing a replacement, both directly
+from the preview and after accepting it with Tab.

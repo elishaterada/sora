@@ -122,11 +122,19 @@ _sora_prepare_reuse() {
   BUFFER=''
   CURSOR=0
 }
-if [[ -o interactive ]]; then
+_sora_prepare_reuse_install() {
+  builtin emulate -L zsh
   zle -N _sora_prepare_reuse
   bindkey -M emacs '^X^R' _sora_prepare_reuse
   bindkey -M viins '^X^R' _sora_prepare_reuse
   bindkey -M vicmd '^X^R' _sora_prepare_reuse
+  precmd_functions=(${precmd_functions:#_sora_prepare_reuse_install})
+}
+if [[ -o interactive ]]; then
+  # Startup completion configuration, including a cached compinit dump, can
+  # rebind ^X^R to _read_comp after .zshenv. Install after startup so native
+  # history acceptance replaces BUFFER instead of opening a completion reader.
+  precmd_functions+=(_sora_prepare_reuse_install)
 fi
 
 # Ignore an empty primary prompt in ZLE itself, where BUFFER is authoritative.
