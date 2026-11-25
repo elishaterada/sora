@@ -48,6 +48,44 @@ final class CommandHistorySessionTests: XCTestCase {
         XCTAssertNil(session.selected)
     }
 
+    func testBackspaceAcceptsEditedHistoryWithoutChangingStoredEntryOrDraft() {
+        let session = CommandHistorySession()
+        let command = "docker start postgres17.5"
+        let entry = CommandHistoryEntry(command: command, lastUsed: Date())
+        let loaded = expectation(description: "history loaded")
+        session.onChange = { if !session.isLoading { loaded.fulfill() } }
+        session.open(draft: "") { _ in [entry] }
+        wait(for: [loaded], timeout: 5)
+        session.onChange = nil
+
+        XCTAssertEqual(session.acceptSelection(deletingBackward: true), "docker start postgres17.")
+        XCTAssertFalse(session.isPresented)
+        XCTAssertNil(session.selected)
+        XCTAssertEqual(session.draft, "")
+        XCTAssertEqual(entry.command, command)
+        XCTAssertNil(session.acceptSelection(deletingBackward: true))
+    }
+
+    func testTabAcceptanceKeepsFullHistoryCommand() {
+        let session = loadedSession(draft: "git ")
+        XCTAssertEqual(session.acceptSelection(), "git status")
+        XCTAssertFalse(session.isPresented)
+        XCTAssertEqual(session.draft, "git ")
+    }
+
+    func testBackspaceAcceptanceRemovesWholeUnicodeCharacterFromMultilineHistory() {
+        let session = CommandHistorySession()
+        let loaded = expectation(description: "Unicode history loaded")
+        session.onChange = { if !session.isLoading { loaded.fulfill() } }
+        session.open(draft: "echo") { _ in [
+            CommandHistoryEntry(command: "echo one\necho 👩‍💻", lastUsed: Date())
+        ] }
+        wait(for: [loaded], timeout: 5)
+        session.onChange = nil
+        XCTAssertEqual(session.acceptSelection(deletingBackward: true), "echo one\necho ")
+        XCTAssertEqual(session.draft, "echo")
+    }
+
     func testSlowLookupKeepsArrowNavigationResponsive() {
         let worker = DispatchQueue(label: "sora.history-tests.slow")
         let gate = DispatchSemaphore(value: 0)

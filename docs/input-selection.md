@@ -22,3 +22,17 @@ area. This lets content views receive drags for selection rather than moving
 the window. Manually verified partial selection in terminal input, terminal
 output, and the Agent composer after relaunch. The Agent test draft was cleared
 without sending it. Debug build and all 266 tests passed.
+
+## Editing a history preview
+
+Up/Down history previews do not change ZLE until accepted. When Backspace is
+the first edit, Sora removes the final character from the selected preview and
+stages that edited command once. The Backspace event is consumed rather than
+forwarded alongside the asynchronous shell-buffer replacement. The stored
+history entry and the original draft remain unchanged. Tab still stages the
+full command for normal shell editing.
+
+Regression coverage in `CommandHistorySessionTests` includes the reported
+`docker start postgres17.5` command, Tab acceptance, and multiline Unicode
+input. Manual verification should cover running a command, running `clear`,
+recalling the command with Up, then deleting `.5` and typing a replacement.

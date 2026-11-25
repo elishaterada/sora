@@ -1363,6 +1363,8 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
                     dismissCommandHistory()
                 case PromptEvent.tab:
                     acceptCommandHistory()
+                case PromptEvent.delete where commandHistory.selected != nil:
+                    acceptCommandHistory(deletingBackward: true)
                 case PromptEvent.returnKey, PromptEvent.keypadEnter:
                     // A recalled command is explicitly a shell command. Do not
                     // route it through the optional conversational classifier.
@@ -1436,10 +1438,9 @@ final class GhosttySurfaceView: NSView, NSMenuItemValidation {
         picker.present(in: window)
     }
 
-    private func acceptCommandHistory() {
+    private func acceptCommandHistory(deletingBackward: Bool = false) {
         guard commandHistory.isPresented else { return }
-        let command = commandHistory.selected?.command
-        commandHistory.dismiss()
+        let command = commandHistory.acceptSelection(deletingBackward: deletingBackward)
         guard isShellPromptReady, let command else { return }
         stageShellCommand(command)
     }
