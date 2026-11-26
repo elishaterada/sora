@@ -1,6 +1,42 @@
 import XCTest
 
 final class SoraZshBootstrapTests: XCTestCase {
+    func testHistoryReuseBindingInstallsAfterConflictingStartupCompletionBindings() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        process.arguments = ["-d", "-f", "-i", "-c", """
+            source "$1"
+            # Cached completion startup can restore this binding after .zshenv.
+            zle -C _read_comp .complete-word _read_comp
+            for keymap in emacs viins vicmd; do
+              bindkey -M "$keymap" '^X^R' _read_comp
+            done
+            for hook in "${precmd_functions[@]}"; do
+              [[ $hook == _sora_prepare_reuse_install ]] && "$hook"
+            done
+            for keymap in emacs viins vicmd; do
+              bindkey -M "$keymap" '^X^R'
+            done
+            print -r -- ${precmd_functions[(I)_sora_prepare_reuse_install]}
+            """, "sora-history-binding", root.appendingPathComponent("Sora/Resources/zsh/command-blocks.zsh").path]
+        let stdout = Pipe()
+        let stderr = Pipe()
+        process.standardOutput = stdout
+        process.standardError = stderr
+        try process.run()
+        let output = stdout.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        XCTAssertEqual(process.terminationStatus, 0,
+                       String(decoding: stderr.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self))
+        XCTAssertEqual(String(decoding: output, as: UTF8.self).split(whereSeparator: \.isNewline).map(String.init), [
+            "\"^X^R\" _sora_prepare_reuse",
+            "\"^X^R\" _sora_prepare_reuse",
+            "\"^X^R\" _sora_prepare_reuse",
+            "0"
+        ])
+    }
+
     func testInstallsDotZshenvFromSource() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("sora-zsh-\(UUID().uuidString)", isDirectory: true)
