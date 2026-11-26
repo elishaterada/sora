@@ -36,14 +36,18 @@ jobs:
           xcodebuild -version
           sw_vers
 
-      - name: Install Zig 0.16
+      - name: Install Zig 0.16.0
         run: |
-          brew install zig
-          zig version
-          case "$(zig version)" in
-            0.16.*) ;;
-            *) echo "error: need Zig 0.16.x" >&2; exit 1 ;;
-          esac
+          set -euo pipefail
+          DIST="zig-aarch64-macos-0.16.0"
+          ARCHIVE="${DIST}.tar.xz"
+          cd "${RUNNER_TEMP}"
+          curl --fail --show-error --silent --location --retry 3 \
+            --output "${ARCHIVE}" "https://ziglang.org/download/0.16.0/${ARCHIVE}"
+          printf '%s  %s\n' 'b23d70deaa879b5c2d486ed3316f7eaa53e84acf6fc9cc747de152450d401489' "${ARCHIVE}" | shasum -a 256 -c -
+          tar -xf "${ARCHIVE}"
+          test "$("./${DIST}/zig" version)" = 0.16.0
+          echo "${RUNNER_TEMP}/${DIST}" >> "${GITHUB_PATH}"
 
       - name: Ensure Metal Toolchain
         run: |

@@ -55,7 +55,11 @@ Release artifacts are currently ad-hoc signed and not Apple-notarized. Keep the
 first-open Gatekeeper guidance on the release page until distribution moves to
 Developer ID signing and notarization.
 
-## Build cache
+## Build toolchain and cache
+
+The release workflow downloads Zig 0.16.0 for Apple Silicon and checks the
+archive against a pinned SHA-256 digest. Update the Zig version and digest
+together when the pinned Ghostty revision changes its compiler requirement.
 
 The Ghostty cache includes a checkout with Sora's renderer patch already applied.
 Its key must include both the build script and patch hashes. Do not restore an
