@@ -4,6 +4,12 @@ Human-readable highlights for each Sora release live here. Add the newest
 version before creating its `vX.Y.Z` tag; the release workflow requires a
 matching section and publishes it to GitHub.
 
+## 0.6.2 — 2026-11-26
+
+### Fixes
+
+- Edit commands recalled with the Up Arrow even when zsh completion is enabled. Open a new terminal tab after updating to pick up the fix.
+
 ## 0.6.1 — 2026-10-06
 
 ### What’s new
